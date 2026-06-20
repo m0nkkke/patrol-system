@@ -1,0 +1,130 @@
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Ip,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  BindRoutePointNfcDto,
+  CreatePatrolEventDto,
+  StartRouteSetupDto,
+  SyncPatrolEventsDto,
+  SyncPatrolEventsResultDto,
+} from '@patrol/shared';
+
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { MobileService } from './mobile.service';
+
+@ApiBearerAuth()
+@ApiTags('mobile')
+@Controller('mobile')
+@UseGuards(JwtAuthGuard)
+export class MobileController {
+  constructor(private readonly mobileService: MobileService) {}
+
+  @Get('me')
+  @ApiOkResponse({ description: 'Current mobile user profile' })
+  me(@CurrentUser() user: AuthenticatedUser): ReturnType<MobileService['getProfile']> {
+    return this.mobileService.getProfile(user);
+  }
+
+  @Post('shops/:shopId/route-setup/start')
+  @HttpCode(200)
+  @Roles('admin', 'manager')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Mobile route setup started' })
+  startRouteSetup(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: StartRouteSetupDto,
+  ): ReturnType<MobileService['startRouteSetup']> {
+    return this.mobileService.startRouteSetup(shopId, dto);
+  }
+
+  @Get('shops/:shopId/route-setup')
+  @Roles('admin', 'manager')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Mobile route setup state' })
+  getRouteSetup(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ): ReturnType<MobileService['getRouteSetup']> {
+    return this.mobileService.getRouteSetup(shopId);
+  }
+
+  @Post('shops/:shopId/route-setup/scan')
+  @HttpCode(200)
+  @Roles('admin', 'manager')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'NFC UID bound to next route point' })
+  scanNextRoutePoint(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Body() dto: BindRoutePointNfcDto,
+  ): ReturnType<MobileService['scanNextRoutePoint']> {
+    return this.mobileService.scanNextRoutePoint(shopId, dto);
+  }
+
+  @Get('route')
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Current employee shop route' })
+  getRoute(@CurrentUser() user: AuthenticatedUser): ReturnType<MobileService['getRoute']> {
+    return this.mobileService.getRoute(user);
+  }
+
+  @Get('patrols/active')
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Current employee active patrol' })
+  getActivePatrol(
+    @CurrentUser() user: AuthenticatedUser,
+  ): ReturnType<MobileService['getActivePatrol']> {
+    return this.mobileService.getActivePatrol(user);
+  }
+
+  @Post('patrols/start')
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiCreatedResponse({ description: 'Mobile patrol started' })
+  startPatrol(@CurrentUser() user: AuthenticatedUser): ReturnType<MobileService['startPatrol']> {
+    return this.mobileService.startPatrol(user);
+  }
+
+  @Post('patrols/:id/events')
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiCreatedResponse({ description: 'Mobile patrol NFC event recorded' })
+  recordPatrolEvent(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePatrolEventDto,
+    @Ip() ipAddress: string,
+  ): ReturnType<MobileService['recordPatrolEvent']> {
+    return this.mobileService.recordPatrolEvent(user, id, dto, ipAddress);
+  }
+
+  @Post('patrols/:id/events/sync')
+  @HttpCode(200)
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({
+    description: 'Offline patrol NFC events synchronized',
+    type: SyncPatrolEventsResultDto,
+  })
+  syncPatrolEvents(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SyncPatrolEventsDto,
+    @Ip() ipAddress: string,
+  ): ReturnType<MobileService['syncPatrolEvents']> {
+    return this.mobileService.syncPatrolEvents(user, id, dto, ipAddress);
+  }
+}

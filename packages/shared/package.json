@@ -1,0 +1,20 @@
+{
+  "name": "@patrol/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/swagger": "^11.4.4",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.1.26",
+    "typescript": "^5.5.4"
+  }
+}

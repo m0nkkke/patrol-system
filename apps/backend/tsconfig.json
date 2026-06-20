@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "incremental": false,
+    "outDir": "dist",
+    "paths": {
+      "@patrol/shared": [
+        "packages/shared/dist"
+      ],
+      "@patrol/shared/*": [
+        "packages/shared/dist/*"
+      ]
+    },
+    "rootDir": "src",
+    "types": [
+      "jest",
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "test"
+  ]
+}
