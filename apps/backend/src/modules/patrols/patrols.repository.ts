@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PatrolIncidentType, PatrolStatus } from '@patrol/shared';
-import { Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
@@ -116,7 +116,7 @@ export class PatrolsRepository {
 
   findById(id: string): Promise<PatrolEntity | null> {
     return this.patrols.findOne({
-      relations: { employee: true, events: true, shop: true },
+      relations: { employee: true, events: true, schedule: true, shop: true },
       where: { id },
     });
   }
@@ -134,8 +134,8 @@ export class PatrolsRepository {
   findActiveByEmployee(employeeId: string): Promise<PatrolEntity | null> {
     return this.patrols.findOne({
       order: { startedAt: 'DESC' },
-      relations: { employee: true, events: true, shop: true },
-      where: { employeeId, status: 'in_progress' },
+      relations: { employee: true, events: true, schedule: true, shop: true },
+      where: { employeeId, status: In(['in_progress', 'overdue']) },
     });
   }
 
@@ -219,5 +219,17 @@ export class PatrolsRepository {
 
   async updateScanProgress(id: string, scannedPoints: number, status: PatrolStatus): Promise<void> {
     await this.patrols.update(id, { scannedPoints, status });
+  }
+
+  async markOverdue(now: Date): Promise<number> {
+    const result = await this.patrols.update(
+      {
+        dueAt: LessThan(now),
+        status: In(['pending', 'in_progress']),
+      },
+      { status: 'overdue' },
+    );
+
+    return result.affected ?? 0;
   }
 }

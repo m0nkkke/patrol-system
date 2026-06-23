@@ -25,6 +25,7 @@ import {
   BindRoutePointNfcDto,
   CreatePatrolEventDto,
   LoginDto,
+  StartMobilePatrolDto,
   SyncPatrolEventsDto,
   SyncPatrolEventsResultDto,
   SyncPatrolEventStatus,
@@ -191,6 +192,29 @@ Content-Type: application/json
 - `ROUTE_SETUP_ALREADY_COMPLETE` — все точки уже зарегистрированы;
 - `NFC_TAG_ALREADY_ASSIGNED` — UID уже привязан к другой активной точке.
 
+## Управление расписаниями в мобильной админке
+
+Роль: `admin` или `manager`. Менеджер может управлять расписаниями только своего магазина.
+
+Основные запросы:
+
+- `POST /api/v1/patrol-schedules` — создать расписание;
+- `GET /api/v1/patrol-schedules/shop/:shopId` — получить расписания магазина;
+- `PATCH /api/v1/patrol-schedules/:id` — изменить окно или активность;
+- `DELETE /api/v1/patrol-schedules/:id` — деактивировать расписание.
+
+```json
+{
+  "shopId": "00000000-0000-4000-8000-0000000000aa",
+  "name": "Вечерний обход",
+  "weekdays": [1, 2, 3, 4, 5, 6, 7],
+  "startTime": "20:00",
+  "endTime": "21:00"
+}
+```
+
+Дни недели нумеруются от `1` (понедельник) до `7` (воскресенье). Время вводится в локальной таймзоне магазина. Активные расписания с общими днями недели не должны пересекаться; backend вернёт `PATROL_SCHEDULE_OVERLAP`.
+
 ## Прохождение обхода
 
 Роль: `employee`.
@@ -199,9 +223,10 @@ Content-Type: application/json
 
 1. Получить маршрут магазина.
 2. Проверить активный обход.
-3. Если активного обхода нет, стартовать новый.
-4. При каждом NFC-скане сначала записать событие локально.
-5. Если сеть доступна, отправить online-событие или пачку offline sync.
+3. Если активного обхода нет, получить доступные сейчас расписания.
+4. Стартовать плановый обход с `scheduleId` или внеплановый без него.
+5. При каждом NFC-скане сначала записать событие локально.
+6. Если сеть доступна, отправить online-событие или пачку offline sync.
 
 Получить маршрут:
 
@@ -217,12 +242,34 @@ GET /api/v1/mobile/patrols/active
 Authorization: Bearer <accessToken>
 ```
 
-Стартовать обход:
+Получить расписания, доступные в текущий момент по таймзоне магазина:
+
+```http
+GET /api/v1/mobile/patrol-schedules/available
+Authorization: Bearer <accessToken>
+```
+
+Ответ содержит только активные окна текущего дня, в которых `startTime <= текущее время < endTime`. Поле `dueAt` возвращается в UTC и должно отображаться пользователю в локальном времени устройства.
+
+После дедлайна backend переводит обход в `overdue`, но он остаётся активным: приложение должно продолжить маршрут и отправлять NFC-события как обычно. `GET /mobile/patrols/active` также возвращает просроченный незавершённый обход.
+
+Стартовать плановый обход:
 
 ```http
 POST /api/v1/mobile/patrols/start
 Authorization: Bearer <accessToken>
+Content-Type: application/json
 ```
+
+```json
+{
+  "scheduleId": "33333333-3333-4333-8333-333333333333"
+}
+```
+
+Backend повторно проверяет окно при старте и сам записывает `dueAt`. Не рассчитывайте дедлайн на устройстве.
+
+Для внепланового обхода отправьте пустой объект `{}`. Такой обход будет иметь `scheduleId = null` и `dueAt = null`.
 
 Online-скан:
 
@@ -248,6 +295,9 @@ Content-Type: application/json
 
 - `PATROL_ROUTE_NOT_READY` — маршрут магазина ещё не готов;
 - `PATROL_ROUTE_EMPTY` — у магазина нет активных точек;
+- `PATROL_SCHEDULE_OUTSIDE_WINDOW` — выбранное окно уже не доступно по локальному времени магазина;
+- `PATROL_SCHEDULE_INACTIVE` — расписание отключено администратором;
+- `PATROL_SCHEDULE_WRONG_SHOP` — расписание относится к другому магазину;
 - `MOBILE_PATROL_FORBIDDEN` — обход принадлежит другому пользователю;
 - `NFC_TAG_NOT_ACTIVE` — UID не зарегистрирован или метка неактивна;
 - `NFC_TAG_MISMATCH` — UID не соответствует выбранной точке;
@@ -362,7 +412,7 @@ Content-Type: application/json
 4. Экран логина.
 5. `GET /mobile/me` и выбор режима UI.
 6. Экран регистрации маршрута для `admin`/`manager`.
-7. Экран маршрута и активного обхода для `employee`.
+7. Экран выбора доступного расписания, маршрута и активного обхода для `employee`.
 8. NFC scan handler.
 9. WatermelonDB-таблица локальных событий.
 10. Фоновый sync worker.

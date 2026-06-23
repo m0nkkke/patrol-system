@@ -3,6 +3,7 @@ import {
   BindRoutePointNfcDto,
   CreatePatrolEventDto,
   StartRouteSetupDto,
+  StartMobilePatrolDto,
   SyncPatrolEventsDto,
   SyncPatrolEventsResultDto,
 } from '@patrol/shared';
@@ -12,6 +13,7 @@ import { DomainValidationError } from '../../common/errors/domain-validation.err
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolEventEntity } from '../patrols/entities/patrol-event.entity';
 import { PatrolEntity } from '../patrols/entities/patrol.entity';
+import { PatrolSchedulesService } from '../patrols/patrol-schedules.service';
 import { PatrolEventRecordStatus, PatrolsService } from '../patrols/patrols.service';
 import { ShopsService } from '../shops/shops.service';
 
@@ -35,6 +37,7 @@ type SyncPatrolEventsResult = SyncPatrolEventsResultDto;
 export class MobileService {
   constructor(
     private readonly patrolPointsService: PatrolPointsService,
+    private readonly patrolSchedulesService: PatrolSchedulesService,
     private readonly patrolsService: PatrolsService,
     private readonly shopsService: ShopsService,
   ) {}
@@ -67,11 +70,20 @@ export class MobileService {
     return this.patrolsService.findActiveByEmployee(user.id);
   }
 
-  startPatrol(user: AuthenticatedUser): Promise<PatrolEntity> {
+  getAvailablePatrolSchedules(
+    user: AuthenticatedUser,
+  ): ReturnType<PatrolSchedulesService['findAvailableByShop']> {
+    const shopId = requireUserShopId(user);
+
+    return this.patrolSchedulesService.findAvailableByShop(shopId, user);
+  }
+
+  startPatrol(user: AuthenticatedUser, dto: StartMobilePatrolDto): Promise<PatrolEntity> {
     const shopId = requireUserShopId(user);
 
     return this.patrolsService.start({
       employeeId: user.id,
+      scheduleId: dto.scheduleId,
       shopId,
     });
   }

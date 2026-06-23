@@ -7,6 +7,7 @@ import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
 import { PatrolEntity } from './entities/patrol.entity';
+import { PatrolSchedulesService } from './patrol-schedules.service';
 import { PatrolsRepository } from './patrols.repository';
 import { PatrolsService } from './patrols.service';
 
@@ -26,6 +27,7 @@ type PatrolsRepositoryMock = Pick<
   | 'findPreviousEventByRouteOrder'
   | 'findRouteInterval'
   | 'markCompleted'
+  | 'markOverdue'
   | 'updateScanProgress'
 >;
 
@@ -35,9 +37,11 @@ type PatrolPointsServiceMock = Pick<
 >;
 
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
+type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'resolveDueAt'>;
 
 describe('PatrolsService', () => {
   let patrolPointsService: jest.Mocked<PatrolPointsServiceMock>;
+  let patrolSchedulesService: jest.Mocked<PatrolSchedulesServiceMock>;
   let patrolsRepository: jest.Mocked<PatrolsRepositoryMock>;
   let service: PatrolsService;
   let shopsService: jest.Mocked<ShopsServiceMock>;
@@ -48,6 +52,9 @@ describe('PatrolsService', () => {
       findActiveTagByUid: jest.fn(),
       findOne: jest.fn(),
       findRegisteredTagByUid: jest.fn(),
+    };
+    patrolSchedulesService = {
+      resolveDueAt: jest.fn(),
     };
     patrolsRepository = {
       countRouteIntervalsByShop: jest.fn(),
@@ -64,6 +71,7 @@ describe('PatrolsService', () => {
       findPreviousEventByRouteOrder: jest.fn(),
       findRouteInterval: jest.fn(),
       markCompleted: jest.fn(),
+      markOverdue: jest.fn(),
       updateScanProgress: jest.fn(),
     };
     shopsService = {
@@ -71,6 +79,7 @@ describe('PatrolsService', () => {
     };
     service = new PatrolsService(
       patrolPointsService as unknown as PatrolPointsService,
+      patrolSchedulesService as unknown as PatrolSchedulesService,
       patrolsRepository as unknown as PatrolsRepository,
       shopsService as unknown as ShopsService,
     );
@@ -156,6 +165,30 @@ describe('PatrolsService', () => {
     });
     expect(result.total).toBe(1);
     expect(result.items).toHaveLength(1);
+  });
+
+  it('uses server-calculated deadline for scheduled patrol', async () => {
+    const dueAt = new Date('2026-06-22T04:00:00.000Z');
+    shopsService.findOne.mockResolvedValue({ routeStatus: 'ready' } as Awaited<
+      ReturnType<ShopsService['findOne']>
+    >);
+    patrolPointsService.countActiveByShop.mockResolvedValue(3);
+    patrolSchedulesService.resolveDueAt.mockResolvedValue(dueAt);
+    patrolsRepository.createPatrol.mockResolvedValue(createPatrol({ dueAt }));
+
+    await service.start({
+      employeeId: 'employee-id',
+      scheduleId: 'schedule-id',
+      shopId: 'shop-id',
+    });
+
+    expect(patrolSchedulesService.resolveDueAt).toHaveBeenCalledWith('schedule-id', 'shop-id');
+    expect(patrolsRepository.createPatrol).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dueAt,
+        scheduleId: 'schedule-id',
+      }),
+    );
   });
 
   it('returns existing event for repeated offline localId', async () => {
@@ -295,6 +328,31 @@ describe('PatrolsService', () => {
       }),
     );
     expect(patrolsRepository.updateScanProgress).not.toHaveBeenCalled();
+  });
+
+  it('allows overdue patrol to continue and preserves overdue status', async () => {
+    const patrol = createPatrol({ status: 'overdue' });
+    const event = createEvent({ patrolPointId: 'point-2' });
+    patrolsRepository.findById.mockResolvedValue(patrol);
+    patrolPointsService.findOne.mockResolvedValue(
+      createPatrolPoint({ id: 'point-2', nfcTagId: 'tag-2', sortOrder: 2 }),
+    );
+    patrolPointsService.findActiveTagByUid.mockResolvedValue({
+      id: 'tag-2',
+      isActive: true,
+      uid: '04tag2',
+    } as Awaited<ReturnType<PatrolPointsService['findActiveTagByUid']>>);
+    patrolsRepository.createPatrolEvent.mockResolvedValue(event);
+    patrolsRepository.findPreviousEventByRouteOrder.mockResolvedValue(null);
+
+    await service.recordEvent(patrol.id, {
+      deviceId: 'device-1',
+      nfcUid: '04TAG2',
+      patrolPointId: 'point-2',
+      scannedAt: '2026-06-19T10:05:00.000Z',
+    });
+
+    expect(patrolsRepository.updateScanProgress).toHaveBeenCalledWith(patrol.id, 2, 'overdue');
   });
 });
 

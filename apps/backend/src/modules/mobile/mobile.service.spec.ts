@@ -1,11 +1,13 @@
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
+import { PatrolSchedulesService } from '../patrols/patrol-schedules.service';
 import { PatrolsService } from '../patrols/patrols.service';
 import { ShopsService } from '../shops/shops.service';
 import { MobileService } from './mobile.service';
 
 type PatrolPointsServiceMock = Pick<PatrolPointsService, 'findByShop'>;
+type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'findAvailableByShop'>;
 type PatrolsServiceMock = Pick<
   PatrolsService,
   'findActiveByEmployee' | 'findOne' | 'recordEvent' | 'recordEventWithStatus' | 'start'
@@ -17,6 +19,7 @@ type ShopsServiceMock = Pick<
 
 describe('MobileService', () => {
   let patrolPointsService: jest.Mocked<PatrolPointsServiceMock>;
+  let patrolSchedulesService: jest.Mocked<PatrolSchedulesServiceMock>;
   let patrolsService: jest.Mocked<PatrolsServiceMock>;
   let service: MobileService;
   let shopsService: jest.Mocked<ShopsServiceMock>;
@@ -24,6 +27,9 @@ describe('MobileService', () => {
   beforeEach(() => {
     patrolPointsService = {
       findByShop: jest.fn(),
+    };
+    patrolSchedulesService = {
+      findAvailableByShop: jest.fn(),
     };
     patrolsService = {
       findActiveByEmployee: jest.fn(),
@@ -39,6 +45,7 @@ describe('MobileService', () => {
     };
     service = new MobileService(
       patrolPointsService as unknown as PatrolPointsService,
+      patrolSchedulesService as unknown as PatrolSchedulesService,
       patrolsService as unknown as PatrolsService,
       shopsService as unknown as ShopsService,
     );

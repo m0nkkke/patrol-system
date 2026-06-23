@@ -15,6 +15,7 @@
 - [Auth](modules/auth.md)
 - [Mobile API backend-модуль](modules/mobile-api.md)
 - [Patrols](modules/patrols.md)
+- [Patrol Schedules](modules/patrol-schedules.md)
 - [Patrol Points](modules/patrol-points.md)
 - [Shops](modules/shops.md)
 - [Users](modules/users.md)

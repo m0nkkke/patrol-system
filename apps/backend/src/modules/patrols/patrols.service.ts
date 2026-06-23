@@ -16,6 +16,7 @@ import { ShopsService } from '../shops/shops.service';
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolEntity } from './entities/patrol.entity';
+import { PatrolSchedulesService } from './patrol-schedules.service';
 import { PatrolsRepository } from './patrols.repository';
 
 const MIN_INTERVAL_FACTOR = 0.5;
@@ -46,6 +47,7 @@ export type PatrolEventRecordResult = {
 export class PatrolsService {
   constructor(
     private readonly patrolPointsService: PatrolPointsService,
+    private readonly patrolSchedulesService: PatrolSchedulesService,
     private readonly patrolsRepository: PatrolsRepository,
     private readonly shopsService: ShopsService,
   ) {}
@@ -69,8 +71,22 @@ export class PatrolsService {
       );
     }
 
+    if (dto.scheduleId !== undefined && dto.dueAt !== undefined) {
+      throw new DomainValidationError(
+        'PATROL_SCHEDULE_DUE_AT_MANAGED',
+        'Scheduled patrol dueAt is calculated by the server',
+      );
+    }
+
+    const dueAt =
+      dto.scheduleId === undefined
+        ? dto.dueAt === undefined
+          ? undefined
+          : new Date(dto.dueAt)
+        : await this.patrolSchedulesService.resolveDueAt(dto.scheduleId, dto.shopId);
+
     return this.patrolsRepository.createPatrol({
-      dueAt: dto.dueAt === undefined ? undefined : new Date(dto.dueAt),
+      dueAt,
       employeeId: dto.employeeId,
       notes: dto.notes,
       scheduleId: dto.scheduleId,
@@ -166,9 +182,10 @@ export class PatrolsService {
     }
 
     const patrol = await this.findOne(patrolId);
-    const lateSync = options.clientLocalId !== undefined && patrol.status !== 'in_progress';
+    const patrolIsActive = patrol.status === 'in_progress' || patrol.status === 'overdue';
+    const lateSync = options.clientLocalId !== undefined && !patrolIsActive;
 
-    if (patrol.status !== 'in_progress' && !lateSync) {
+    if (!patrolIsActive && !lateSync) {
       throw new DomainValidationError('PATROL_NOT_IN_PROGRESS', 'Patrol is not in progress');
     }
 
@@ -218,7 +235,7 @@ export class PatrolsService {
     await this.analyzeTimingIncident(patrol, event, point.sortOrder);
 
     const nextScannedPoints = patrol.scannedPoints + 1;
-    const nextStatus = nextScannedPoints >= patrol.totalPoints ? 'completed' : 'in_progress';
+    const nextStatus = nextScannedPoints >= patrol.totalPoints ? 'completed' : patrol.status;
     await this.patrolsRepository.updateScanProgress(patrol.id, nextScannedPoints, nextStatus);
 
     if (nextStatus === 'completed') {
@@ -232,7 +249,7 @@ export class PatrolsService {
   async complete(id: string): Promise<PatrolEntity> {
     const patrol = await this.findOne(id);
 
-    if (patrol.status !== 'in_progress') {
+    if (patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
       throw new DomainValidationError('PATROL_NOT_IN_PROGRESS', 'Patrol is not in progress');
     }
 

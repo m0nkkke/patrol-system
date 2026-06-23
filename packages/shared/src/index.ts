@@ -7,6 +7,7 @@ export * from './dto/create-shop.dto';
 export * from './dto/create-user.dto';
 export * from './dto/find-patrol-incidents.dto';
 export * from './dto/pagination.dto';
+export * from './dto/patrol-schedule.dto';
 export * from './dto/replace-nfc-tag.dto';
 export * from './dto/start-route-setup.dto';
 export * from './dto/start-patrol.dto';

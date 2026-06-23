@@ -12,8 +12,10 @@ import {
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   BindRoutePointNfcDto,
+  AvailablePatrolScheduleDto,
   CreatePatrolEventDto,
   StartRouteSetupDto,
+  StartMobilePatrolDto,
   SyncPatrolEventsDto,
   SyncPatrolEventsResultDto,
 } from '@patrol/shared';
@@ -90,12 +92,28 @@ export class MobileController {
     return this.mobileService.getActivePatrol(user);
   }
 
+  @Get('patrol-schedules/available')
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({
+    description: 'Patrol schedules available at current shop time',
+    type: [AvailablePatrolScheduleDto],
+  })
+  getAvailablePatrolSchedules(
+    @CurrentUser() user: AuthenticatedUser,
+  ): ReturnType<MobileService['getAvailablePatrolSchedules']> {
+    return this.mobileService.getAvailablePatrolSchedules(user);
+  }
+
   @Post('patrols/start')
   @Roles('employee')
   @UseGuards(RolesGuard)
   @ApiCreatedResponse({ description: 'Mobile patrol started' })
-  startPatrol(@CurrentUser() user: AuthenticatedUser): ReturnType<MobileService['startPatrol']> {
-    return this.mobileService.startPatrol(user);
+  startPatrol(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: StartMobilePatrolDto,
+  ): ReturnType<MobileService['startPatrol']> {
+    return this.mobileService.startPatrol(user, dto);
   }
 
   @Post('patrols/:id/events')

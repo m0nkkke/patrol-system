@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { appConfig, validationSchema } from './config/app.config';
@@ -22,6 +23,7 @@ import { UsersModule } from './modules/users/users.module';
       validationSchema,
     }),
     TypeOrmModule.forRootAsync(databaseConfig),
+    ScheduleModule.forRoot(),
     HealthModule,
     ShopsModule,
     UsersModule,
