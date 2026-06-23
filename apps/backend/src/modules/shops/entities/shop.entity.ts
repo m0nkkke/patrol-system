@@ -5,6 +5,7 @@ import {
   Entity,
   Index,
   JoinColumn,
+  ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -58,6 +59,9 @@ export class ShopEntity {
 
   @OneToMany(() => UserEntity, (user) => user.shop)
   users?: UserEntity[];
+
+  @ManyToMany(() => UserEntity, (user) => user.shops)
+  assignedUsers?: UserEntity[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date = new Date();

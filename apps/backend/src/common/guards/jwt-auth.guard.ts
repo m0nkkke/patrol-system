@@ -37,7 +37,9 @@ export class JwtAuthGuard implements CanActivate {
       id: user.id,
       role: user.role,
       shop: user.shop,
-      shopId: user.shopId,
+      shopId: user.shopId ?? undefined,
+      shopIds: user.shops?.map((shop) => shop.id) ?? (user.shopId == null ? [] : [user.shopId]),
+      shops: user.shops,
       username: user.username,
     };
 

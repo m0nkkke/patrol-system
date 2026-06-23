@@ -103,7 +103,7 @@ CREATE TABLE users (
 );
 
 COMMENT ON TABLE users IS 'Пользователи системы: обходчики, руководители, администраторы';
-COMMENT ON COLUMN users.shop_id IS 'NULL для admin — они не привязаны к конкретному магазину';
+COMMENT ON COLUMN users.shop_id IS 'Основной магазин для текущего mobile-сценария; полный список хранится в user_shop_assignments';
 COMMENT ON COLUMN users.username IS 'Внутренний уникальный идентификатор пользователя; не используется для входа в мобильное приложение';
 COMMENT ON COLUMN users.password_hash IS 'Legacy-поле. Для входа используется постоянный access_key/access_key_hash';
 COMMENT ON COLUMN users.access_key IS 'Постоянный человекочитаемый ключ входа, доступный администратору';
@@ -115,6 +115,19 @@ CREATE INDEX idx_users_is_active ON users(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_users_deleted_at ON users(deleted_at) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX uq_users_access_key ON users(access_key) WHERE access_key IS NOT NULL;
 CREATE UNIQUE INDEX uq_users_access_key_hash ON users(access_key_hash) WHERE access_key_hash IS NOT NULL;
+
+-- Назначения пользователя на магазины. Один пользователь может обслуживать несколько магазинов.
+CREATE TABLE user_shop_assignments (
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  shop_id    UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT pk_user_shop_assignments PRIMARY KEY (user_id, shop_id)
+);
+
+COMMENT ON TABLE user_shop_assignments IS 'Все магазины, доступные пользователю';
+
+CREATE INDEX idx_user_shop_assignments_shop_id ON user_shop_assignments(shop_id);
 
 -- Refresh-токены (основное хранение в Redis, здесь — аудит)
 CREATE TABLE refresh_tokens (

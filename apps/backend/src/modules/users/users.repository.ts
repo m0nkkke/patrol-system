@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import { UserRole } from '@patrol/shared';
 
+import { ShopEntity } from '../shops/entities/shop.entity';
 import { UserEntity } from './entities/user.entity';
 
 type CreateUserRecord = {
@@ -14,6 +15,7 @@ type CreateUserRecord = {
   passwordHash: string;
   role: UserRole;
   shopId?: string;
+  shops: ShopEntity[];
   username: string;
 };
 
@@ -31,7 +33,7 @@ export class UsersRepository {
   findActive(page: number, limit: number): Promise<[UserEntity[], number]> {
     return this.repo.findAndCount({
       order: { createdAt: 'DESC' },
-      relations: { shop: true },
+      relations: { shop: true, shops: true },
       skip: (page - 1) * limit,
       take: limit,
       where: { isActive: true },
@@ -39,18 +41,22 @@ export class UsersRepository {
   }
 
   findById(id: string): Promise<UserEntity | null> {
-    return this.repo.findOne({ relations: { shop: true }, where: { id } });
+    return this.repo.findOne({ relations: { shop: true, shops: true }, where: { id } });
   }
 
   findByUsername(username: string): Promise<UserEntity | null> {
-    return this.repo.findOne({ where: { username } });
+    return this.repo.findOne({ relations: { shop: true, shops: true }, where: { username } });
   }
 
   findByAccessKeyHash(accessKeyHash: string): Promise<UserEntity | null> {
-    return this.repo.findOne({ where: { accessKeyHash } });
+    return this.repo.findOne({ relations: { shop: true, shops: true }, where: { accessKeyHash } });
   }
 
   async updateLastLogin(id: string, date: Date): Promise<void> {
     await this.repo.update(id, { lastLoginAt: date });
+  }
+
+  async assignShops(userId: string, shops: ShopEntity[], primaryShopId?: string): Promise<void> {
+    await this.repo.save({ id: userId, shopId: primaryShopId ?? null, shops });
   }
 }

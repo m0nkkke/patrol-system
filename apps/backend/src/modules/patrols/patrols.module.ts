@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { PatrolPointsModule } from '../patrol-points/patrol-points.module';
 import { ShopsModule } from '../shops/shops.module';
+import { UsersModule } from '../users/users.module';
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
@@ -22,6 +23,7 @@ import { PatrolsService } from './patrols.service';
   imports: [
     PatrolPointsModule,
     ShopsModule,
+    UsersModule,
     TypeOrmModule.forFeature([
       PatrolEntity,
       PatrolEventEntity,

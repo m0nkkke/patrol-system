@@ -198,7 +198,26 @@ async function findOrCreateUsers(
     username: 'mobile.employee',
   });
 
+  for (const user of [manager, employee, mobileEmployee]) {
+    await ensureUserShopAssignment(repository, user.id, shopId);
+  }
+
   return { admin, employee, manager, mobileAdmin, mobileEmployee };
+}
+
+async function ensureUserShopAssignment(
+  repository: Repository<UserEntity>,
+  userId: string,
+  shopId: string,
+): Promise<void> {
+  await repository.query(
+    `
+      INSERT INTO user_shop_assignments (user_id, shop_id)
+      VALUES ($1, $2)
+      ON CONFLICT DO NOTHING
+    `,
+    [userId, shopId],
+  );
 }
 
 async function findOrCreateUser(

@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { CreateUserDto, PaginationDto } from '@patrol/shared';
+import { AssignUserShopsDto, CreateUserDto, PaginationDto } from '@patrol/shared';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -31,5 +31,14 @@ export class UsersController {
   @ApiOkResponse({ description: 'User details' })
   findOne(@Param('id', ParseUUIDPipe) id: string): ReturnType<UsersService['findOne']> {
     return this.usersService.findOne(id);
+  }
+
+  @Put(':id/shops')
+  @ApiOkResponse({ description: 'User shop assignments replaced' })
+  assignShops(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AssignUserShopsDto,
+  ): ReturnType<UsersService['assignShops']> {
+    return this.usersService.assignShops(id, dto);
   }
 }

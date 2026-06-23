@@ -1,5 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 import { USER_ROLES, UserRole } from '../enums/user-role';
 
@@ -21,13 +31,33 @@ export class CreateUserDto {
   @IsIn(USER_ROLES)
   role: UserRole = 'employee';
 
-  @ApiPropertyOptional({ format: 'uuid' })
+  @ApiPropertyOptional({ description: 'Primary shop used by the current mobile flow.', format: 'uuid' })
   @IsOptional()
   @IsUUID()
   shopId?: string;
+
+  @ApiPropertyOptional({ description: 'All shops assigned to the user.', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  shopIds?: string[];
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+}
+
+export class AssignUserShopsDto {
+  @ApiPropertyOptional({ description: 'Primary shop used by the current mobile flow.', format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  primaryShopId?: string;
+
+  @ApiProperty({ description: 'Full replacement list of assigned shops.', type: [String] })
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  shopIds: string[] = [];
 }

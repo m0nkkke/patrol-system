@@ -3,6 +3,7 @@ import { PatrolIncidentType } from '@patrol/shared';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
 import { ShopsService } from '../shops/shops.service';
+import { UsersService } from '../users/users.service';
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
@@ -19,6 +20,7 @@ type PatrolsRepositoryMock = Pick<
   | 'createPatrolIncident'
   | 'createPatrolRouteInterval'
   | 'findById'
+  | 'findByEmployee'
   | 'findByShop'
   | 'findEventsByPatrolOrdered'
   | 'findEventByClientLocalId'
@@ -38,6 +40,7 @@ type PatrolPointsServiceMock = Pick<
 
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
 type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'resolveDueAt'>;
+type UsersServiceMock = Pick<UsersService, 'assertAssignedToShop' | 'findOne'>;
 
 describe('PatrolsService', () => {
   let patrolPointsService: jest.Mocked<PatrolPointsServiceMock>;
@@ -45,6 +48,7 @@ describe('PatrolsService', () => {
   let patrolsRepository: jest.Mocked<PatrolsRepositoryMock>;
   let service: PatrolsService;
   let shopsService: jest.Mocked<ShopsServiceMock>;
+  let usersService: jest.Mocked<UsersServiceMock>;
 
   beforeEach(() => {
     patrolPointsService = {
@@ -63,6 +67,7 @@ describe('PatrolsService', () => {
       createPatrolIncident: jest.fn(),
       createPatrolRouteInterval: jest.fn(),
       findById: jest.fn(),
+      findByEmployee: jest.fn(),
       findByShop: jest.fn(),
       findEventsByPatrolOrdered: jest.fn(),
       findEventByClientLocalId: jest.fn(),
@@ -77,11 +82,16 @@ describe('PatrolsService', () => {
     shopsService = {
       findOne: jest.fn(),
     };
+    usersService = {
+      assertAssignedToShop: jest.fn(),
+      findOne: jest.fn(),
+    };
     service = new PatrolsService(
       patrolPointsService as unknown as PatrolPointsService,
       patrolSchedulesService as unknown as PatrolSchedulesService,
       patrolsRepository as unknown as PatrolsRepository,
       shopsService as unknown as ShopsService,
+      usersService as unknown as UsersService,
     );
     patrolsRepository.findEventByClientLocalId.mockResolvedValue(null);
     patrolsRepository.findEventByPatrolAndPoint.mockResolvedValue(null);
@@ -183,12 +193,40 @@ describe('PatrolsService', () => {
     });
 
     expect(patrolSchedulesService.resolveDueAt).toHaveBeenCalledWith('schedule-id', 'shop-id');
+    expect(usersService.assertAssignedToShop).toHaveBeenCalledWith('employee-id', 'shop-id');
     expect(patrolsRepository.createPatrol).toHaveBeenCalledWith(
       expect.objectContaining({
         dueAt,
         scheduleId: 'schedule-id',
       }),
     );
+  });
+
+  it('limits employee history to manager shop', async () => {
+    usersService.findOne.mockResolvedValue({ id: 'employee-id' } as Awaited<
+      ReturnType<UsersService['findOne']>
+    >);
+    patrolsRepository.findByEmployee.mockResolvedValue([[createPatrol()], 1]);
+
+    const result = await service.findByEmployee(
+      'employee-id',
+      { limit: 20, page: 1 },
+      {
+        fullName: 'Manager',
+        id: 'manager-id',
+        role: 'manager',
+        shopId: 'shop-id',
+        username: 'manager',
+      },
+    );
+
+    expect(patrolsRepository.findByEmployee).toHaveBeenCalledWith(
+      'employee-id',
+      1,
+      20,
+      ['shop-id'],
+    );
+    expect(result.total).toBe(1);
   });
 
   it('returns existing event for repeated offline localId', async () => {

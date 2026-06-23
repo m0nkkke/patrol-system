@@ -195,7 +195,7 @@ function assertCanManageShop(actor: AuthenticatedUser, shopId: string): void {
     return;
   }
 
-  if (actor.role !== 'manager' || actor.shopId !== shopId) {
+  if (actor.role !== 'manager' || !actorHasShop(actor, shopId)) {
     throw new DomainValidationError(
       'PATROL_SCHEDULE_FORBIDDEN',
       'User cannot manage patrol schedules for this shop',
@@ -204,12 +204,16 @@ function assertCanManageShop(actor: AuthenticatedUser, shopId: string): void {
 }
 
 function assertCanAccessShop(actor: AuthenticatedUser, shopId: string): void {
-  if (actor.role !== 'admin' && actor.shopId !== shopId) {
+  if (actor.role !== 'admin' && !actorHasShop(actor, shopId)) {
     throw new DomainValidationError(
       'PATROL_SCHEDULE_FORBIDDEN',
       'User cannot access patrol schedules for this shop',
     );
   }
+}
+
+function actorHasShop(actor: AuthenticatedUser, shopId: string): boolean {
+  return actor.shopId === shopId || actor.shopIds?.includes(shopId) === true;
 }
 
 function validateTimeWindow(startTime: string, endTime: string): void {

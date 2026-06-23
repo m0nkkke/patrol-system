@@ -5,7 +5,9 @@ import {
   DeleteDateColumn,
   Entity,
   Index,
+  JoinTable,
   JoinColumn,
+  ManyToMany,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -21,11 +23,19 @@ export class UserEntity {
 
   @Index('idx_users_shop_id')
   @Column({ name: 'shop_id', nullable: true, type: 'uuid' })
-  shopId?: string;
+  shopId?: string | null;
 
   @ManyToOne(() => ShopEntity, (shop) => shop.users, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'shop_id' })
   shop?: ShopEntity;
+
+  @ManyToMany(() => ShopEntity, (shop) => shop.assignedUsers)
+  @JoinTable({
+    inverseJoinColumn: { name: 'shop_id', referencedColumnName: 'id' },
+    joinColumn: { name: 'user_id', referencedColumnName: 'id' },
+    name: 'user_shop_assignments',
+  })
+  shops?: ShopEntity[];
 
   @Index('idx_users_role')
   @Column({ default: 'employee', enum: ['employee', 'manager', 'admin'], type: 'enum', enumName: 'user_role' })

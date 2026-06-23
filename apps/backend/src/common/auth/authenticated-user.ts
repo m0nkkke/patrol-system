@@ -8,5 +8,7 @@ export type AuthenticatedUser = {
   role: UserRole;
   shop?: ShopEntity;
   shopId?: string;
+  shopIds?: string[];
+  shops?: ShopEntity[];
   username: string;
 };

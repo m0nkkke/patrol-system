@@ -131,6 +131,21 @@ export class PatrolsRepository {
     });
   }
 
+  findByEmployee(
+    employeeId: string,
+    page: number,
+    limit: number,
+    shopIds?: string[],
+  ): Promise<[PatrolEntity[], number]> {
+    return this.patrols.findAndCount({
+      order: { createdAt: 'DESC' },
+      relations: { employee: true, schedule: true, shop: true },
+      skip: (page - 1) * limit,
+      take: limit,
+      where: { employeeId, ...(shopIds === undefined ? {} : { shopId: In(shopIds) }) },
+    });
+  }
+
   findActiveByEmployee(employeeId: string): Promise<PatrolEntity | null> {
     return this.patrols.findOne({
       order: { startedAt: 'DESC' },

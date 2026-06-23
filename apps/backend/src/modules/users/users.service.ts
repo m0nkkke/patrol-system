@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { CreateUserDto, PaginationDto } from '@patrol/shared';
+import { AssignUserShopsDto, CreateUserDto, PaginationDto } from '@patrol/shared';
 import { randomUUID } from 'crypto';
 
 import { formatAccessKey, generateAccessKey, hashAccessKey } from '../../common/auth/access-key';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
+import { DomainValidationError } from '../../common/errors/domain-validation.error';
+import { ShopEntity } from '../shops/entities/shop.entity';
 import { ShopsService } from '../shops/shops.service';
 import { UserEntity } from './entities/user.entity';
 import { UsersRepository } from './users.repository';
@@ -19,6 +21,8 @@ type PublicUser = {
   role: UserEntity['role'];
   shop: UserEntity['shop'];
   shopId?: string;
+  shopIds: string[];
+  shops: ShopEntity[];
   updatedAt: Date;
   username: string;
 };
@@ -38,9 +42,9 @@ export class UsersService {
   ) {}
 
   async create(dto: CreateUserDto): Promise<PublicUser> {
-    if (dto.shopId !== undefined) {
-      await this.shopsService.findOne(dto.shopId);
-    }
+    const shopIds = normalizeShopIds(dto.shopId, dto.shopIds);
+    const shops = await this.findShops(shopIds);
+    const primaryShopId = dto.shopId ?? shopIds[0];
 
     const accessKey = generateAccessKey();
     const accessKeyHash = hashAccessKey(accessKey);
@@ -51,7 +55,8 @@ export class UsersService {
       isActive: dto.isActive ?? true,
       passwordHash: accessKeyHash,
       role: dto.role,
-      shopId: dto.shopId,
+      shopId: primaryShopId,
+      shops,
       username: dto.username ?? generateUsername(),
     });
 
@@ -79,6 +84,35 @@ export class UsersService {
     return toPublicUser(user);
   }
 
+  async assignShops(id: string, dto: AssignUserShopsDto): Promise<PublicUser> {
+    const user = await this.requireEntity(id);
+
+    if (dto.primaryShopId !== undefined && !dto.shopIds.includes(dto.primaryShopId)) {
+      throw new DomainValidationError(
+        'USER_PRIMARY_SHOP_NOT_ASSIGNED',
+        'Primary shop must be included in shopIds',
+      );
+    }
+
+    const shops = await this.findShops(dto.shopIds);
+    const primaryShopId = dto.primaryShopId ?? dto.shopIds[0];
+    await this.usersRepository.assignShops(user.id, shops, primaryShopId);
+
+    return toPublicUser(await this.requireEntity(id));
+  }
+
+  async assertAssignedToShop(userId: string, shopId: string): Promise<void> {
+    const user = await this.requireEntity(userId);
+    const assigned = user.shopId === shopId || user.shops?.some((shop) => shop.id === shopId);
+
+    if (!assigned) {
+      throw new DomainValidationError(
+        'USER_SHOP_NOT_ASSIGNED',
+        'User is not assigned to the selected shop',
+      );
+    }
+  }
+
   findByUsername(username: string): Promise<UserEntity | null> {
     return this.usersRepository.findByUsername(username);
   }
@@ -94,6 +128,20 @@ export class UsersService {
   updateLastLogin(id: string, date: Date): Promise<void> {
     return this.usersRepository.updateLastLogin(id, date);
   }
+
+  private async findShops(shopIds: string[]): Promise<ShopEntity[]> {
+    return Promise.all(shopIds.map((shopId) => this.shopsService.findOne(shopId)));
+  }
+
+  private async requireEntity(id: string): Promise<UserEntity> {
+    const user = await this.usersRepository.findById(id);
+
+    if (user === null) {
+      throw new EntityNotFoundError('User', id);
+    }
+
+    return user;
+  }
 }
 
 function toPublicUser(user: UserEntity): PublicUser {
@@ -107,10 +155,16 @@ function toPublicUser(user: UserEntity): PublicUser {
     lastLoginAt: user.lastLoginAt,
     role: user.role,
     shop: user.shop,
-    shopId: user.shopId,
+    shopId: user.shopId ?? undefined,
+    shopIds: user.shops?.map((shop) => shop.id) ?? (user.shopId == null ? [] : [user.shopId]),
+    shops: user.shops ?? (user.shop === undefined ? [] : [user.shop]),
     updatedAt: user.updatedAt,
     username: user.username,
   };
+}
+
+function normalizeShopIds(primaryShopId: string | undefined, shopIds: string[] | undefined): string[] {
+  return [...new Set([...(shopIds ?? []), ...(primaryShopId === undefined ? [] : [primaryShopId])])];
 }
 
 function generateUsername(): string {

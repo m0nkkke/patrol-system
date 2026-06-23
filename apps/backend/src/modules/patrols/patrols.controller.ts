@@ -1,5 +1,16 @@
-import { Body, Controller, Get, HttpCode, Ip, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Ip,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   CreatePatrolEventDto,
   FindPatrolIncidentsDto,
@@ -7,6 +18,11 @@ import {
   StartPatrolDto,
 } from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolEntity } from './entities/patrol.entity';
 import { PatrolsService } from './patrols.service';
@@ -37,6 +53,19 @@ export class PatrolsController {
     @Query() query: FindPatrolIncidentsDto,
   ): ReturnType<PatrolsService['findIncidents']> {
     return this.patrolsService.findIncidents(query);
+  }
+
+  @Get('employee/:employeeId')
+  @ApiBearerAuth()
+  @Roles('admin', 'manager')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiOkResponse({ description: 'Patrol history by employee' })
+  findByEmployee(
+    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+    @Query() pagination: PaginationDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): ReturnType<PatrolsService['findByEmployee']> {
+    return this.patrolsService.findByEmployee(employeeId, pagination, actor);
   }
 
   @Get(':id')

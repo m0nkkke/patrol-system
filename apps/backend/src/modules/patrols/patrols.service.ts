@@ -13,6 +13,8 @@ import { DomainValidationError } from '../../common/errors/domain-validation.err
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { PatrolPointsService, normalizeNfcUid } from '../patrol-points/patrol-points.service';
 import { ShopsService } from '../shops/shops.service';
+import { UsersService } from '../users/users.service';
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolEntity } from './entities/patrol.entity';
@@ -50,10 +52,12 @@ export class PatrolsService {
     private readonly patrolSchedulesService: PatrolSchedulesService,
     private readonly patrolsRepository: PatrolsRepository,
     private readonly shopsService: ShopsService,
+    private readonly usersService: UsersService,
   ) {}
 
   async start(dto: StartPatrolDto): Promise<PatrolEntity> {
     const shop = await this.shopsService.findOne(dto.shopId);
+    await this.usersService.assertAssignedToShop(dto.employeeId, dto.shopId);
 
     if (shop.routeStatus !== RouteStatus.READY) {
       throw new DomainValidationError(
@@ -102,6 +106,38 @@ export class PatrolsService {
       shopId,
       pagination.page,
       pagination.limit,
+    );
+
+    return {
+      items,
+      limit: pagination.limit,
+      page: pagination.page,
+      total,
+    };
+  }
+
+  async findByEmployee(
+    employeeId: string,
+    pagination: PaginationDto,
+    actor: AuthenticatedUser,
+  ): Promise<PaginatedPatrols> {
+    await this.usersService.findOne(employeeId);
+
+    const managerShopIds =
+      actor.shopIds ?? (actor.shopId === undefined ? [] : [actor.shopId]);
+
+    if (actor.role === 'manager' && managerShopIds.length === 0) {
+      throw new DomainValidationError(
+        'PATROL_HISTORY_FORBIDDEN',
+        'Manager must be assigned to a shop to view patrol history',
+      );
+    }
+
+    const [items, total] = await this.patrolsRepository.findByEmployee(
+      employeeId,
+      pagination.page,
+      pagination.limit,
+      actor.role === 'manager' ? managerShopIds : undefined,
     );
 
     return {
