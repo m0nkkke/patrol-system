@@ -237,7 +237,10 @@ export class PatrolsService {
         ? await this.patrolPointsService.findActiveTagByUid(dto.nfcUid)
         : await this.patrolPointsService.findRegisteredTagByUid(dto.nfcUid);
 
-    if (!pointDeactivatedAfterScan && (point.nfcTagId === undefined || point.nfcTagId !== tag.id)) {
+    if (
+      !pointDeactivatedAfterScan &&
+      (point.nfcTagId === null || point.nfcTagId === undefined || point.nfcTagId !== tag.id)
+    ) {
       throw new DomainValidationError('NFC_TAG_MISMATCH', 'NFC tag does not match patrol point');
     }
 

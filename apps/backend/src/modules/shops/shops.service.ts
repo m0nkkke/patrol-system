@@ -106,7 +106,9 @@ export class ShopsService {
         point.sortOrder >= 1 &&
         (shop.routeExpectedPoints === 0 || point.sortOrder <= shop.routeExpectedPoints),
     );
-    const nextPoint = points.find((point) => point.nfcTagId === undefined);
+    const nextPoint = points.find(
+      (point) => point.nfcTagId === null || point.nfcTagId === undefined,
+    );
 
     return {
       expectedPoints: shop.routeExpectedPoints,

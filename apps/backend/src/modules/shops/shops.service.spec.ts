@@ -103,6 +103,7 @@ function createPoint(sortOrder: number): Awaited<
     id: `point-${sortOrder}`,
     isActive: false,
     name: `Контрольная точка ${sortOrder}`,
+    nfcTagId: null,
     shopId: 'shop-id',
     sortOrder,
     updatedAt: new Date(),

@@ -29,11 +29,11 @@ export class PatrolPointEntity {
 
   @Index('idx_patrol_points_nfc_tag_id')
   @Column({ name: 'nfc_tag_id', nullable: true, type: 'uuid' })
-  nfcTagId?: string;
+  nfcTagId?: string | null;
 
   @ManyToOne(() => NfcTagEntity, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'nfc_tag_id' })
-  nfcTag?: NfcTagEntity;
+  nfcTag?: NfcTagEntity | null;
 
   @Column({ length: 200 })
   name: string = '';

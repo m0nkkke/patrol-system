@@ -195,7 +195,7 @@ export class PatrolPointsService {
       newTag = await this.patrolPointsRepository.saveNfcTag(newTag);
     }
 
-    if (oldTag !== undefined) {
+    if (oldTag !== null && oldTag !== undefined) {
       oldTag.isActive = false;
       oldTag.notes = appendArchiveNote(oldTag.notes, point.id);
       await this.patrolPointsRepository.saveNfcTag(oldTag);
