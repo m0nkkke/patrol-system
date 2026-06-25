@@ -49,7 +49,7 @@ export class PatrolSchedulesRepository {
       .andWhere(':weekday = ANY(schedule.weekdays)', { weekday })
       .andWhere('schedule.start_time <= :localTime', { localTime })
       .andWhere('schedule.end_time > :localTime', { localTime })
-      .orderBy('schedule.start_time', 'ASC')
+      .orderBy('schedule.startTime', 'ASC')
       .getMany();
   }
 

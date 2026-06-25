@@ -163,7 +163,7 @@ export class PatrolsRepository {
       .leftJoinAndSelect('incident.toPatrolPoint', 'toPoint')
       .leftJoinAndSelect('patrol.employee', 'employee')
       .leftJoinAndSelect('patrol.shop', 'shop')
-      .orderBy('incident.created_at', 'DESC')
+      .orderBy('incident.createdAt', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 
@@ -199,8 +199,8 @@ export class PatrolsRepository {
       .innerJoinAndSelect('event.patrolPoint', 'point')
       .where('event.patrol_id = :patrolId', { patrolId })
       .andWhere('point.sort_order < :currentSortOrder', { currentSortOrder })
-      .orderBy('point.sort_order', 'DESC')
-      .addOrderBy('event.scanned_at', 'DESC')
+      .orderBy('point.sortOrder', 'DESC')
+      .addOrderBy('event.scannedAt', 'DESC')
       .getOne();
   }
 
@@ -209,8 +209,8 @@ export class PatrolsRepository {
       .createQueryBuilder('event')
       .innerJoinAndSelect('event.patrolPoint', 'point')
       .where('event.patrol_id = :patrolId', { patrolId })
-      .orderBy('point.sort_order', 'ASC')
-      .addOrderBy('event.scanned_at', 'ASC')
+      .orderBy('point.sortOrder', 'ASC')
+      .addOrderBy('event.scannedAt', 'ASC')
       .getMany();
   }
 
