@@ -8,8 +8,9 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   BindRoutePointNfcDto,
   CreateShopDto,
@@ -19,19 +20,26 @@ import {
 
 import { ShopEntity } from './entities/shop.entity';
 import { ShopsService } from './shops.service';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('shops')
+@ApiBearerAuth()
 @Controller('shops')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ShopsController {
   constructor(private readonly shopsService: ShopsService) {}
 
   @Post()
+  @Roles('admin')
   @ApiCreatedResponse({ description: 'Shop created' })
   create(@Body() dto: CreateShopDto): Promise<ShopEntity> {
     return this.shopsService.create(dto);
   }
 
   @Get()
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Active shops list' })
   findAll(@Query() pagination: PaginationDto): ReturnType<ShopsService['findAll']> {
     return this.shopsService.findAll(pagination);
@@ -45,6 +53,7 @@ export class ShopsController {
 
   @Post(':id/route-setup/start')
   @HttpCode(200)
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Route setup started for shop' })
   startRouteSetup(
     @Param('id', ParseUUIDPipe) id: string,
@@ -54,6 +63,7 @@ export class ShopsController {
   }
 
   @Get(':id/route-setup')
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Route setup state for shop' })
   getRouteSetup(@Param('id', ParseUUIDPipe) id: string): ReturnType<ShopsService['getRouteSetup']> {
     return this.shopsService.getRouteSetup(id);
@@ -61,6 +71,7 @@ export class ShopsController {
 
   @Post(':id/route-setup/points/:sortOrder/bind-nfc')
   @HttpCode(200)
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'NFC UID bound to route point' })
   bindRoutePointNfc(
     @Param('id', ParseUUIDPipe) id: string,
@@ -72,6 +83,7 @@ export class ShopsController {
 
   @Post(':id/route-setup/reset')
   @HttpCode(200)
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Route setup cancelled and reset for shop' })
   resetRouteSetup(
     @Param('id', ParseUUIDPipe) id: string,

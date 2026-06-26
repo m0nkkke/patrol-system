@@ -12,6 +12,14 @@
 - `POST /api/v1/shops/:id/route-setup/points/:sortOrder/bind-nfc` привязывает UID NFC-метки к номеру точки маршрута.
 - `POST /api/v1/shops/:id/route-setup/reset` отменяет текущую настройку цифрового маршрута и возвращает магазин в `not_configured`.
 
+## Доступ
+
+Все endpoints модуля требуют `Authorization: Bearer <accessToken>`.
+
+- `POST /api/v1/shops` доступен только роли `admin`.
+- `GET /api/v1/shops/:id` доступен любой авторизованной роли, потому что мобильный главный экран использует магазин пользователя для карточки "Основной магазин".
+- Остальные endpoints доступны ролям `admin`, `manager`.
+
 ## Бизнес-правила
 
 - Магазины поддерживают мягкое удаление через `deleted_at`.

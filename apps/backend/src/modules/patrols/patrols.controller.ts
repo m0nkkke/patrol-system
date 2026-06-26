@@ -30,37 +30,42 @@ import { PatrolEntity } from './entities/patrol.entity';
 import { PatrolsService } from './patrols.service';
 
 @ApiTags('patrols')
+@ApiBearerAuth()
 @Controller('patrols')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class PatrolsController {
   constructor(private readonly patrolsService: PatrolsService) {}
 
   @Post()
+  @Roles('admin')
   @ApiCreatedResponse({ description: 'Patrol started' })
   start(@Body() dto: StartPatrolDto): Promise<PatrolEntity> {
     return this.patrolsService.start(dto);
   }
 
   @Get('shop/:shopId')
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Patrols by shop' })
   findByShop(
     @Param('shopId', ParseUUIDPipe) shopId: string,
     @Query() pagination: PaginationDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<PatrolsService['findByShop']> {
-    return this.patrolsService.findByShop(shopId, pagination);
+    return this.patrolsService.findByShop(shopId, pagination, actor);
   }
 
   @Get('incidents')
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Patrol incidents list' })
   findIncidents(
     @Query() query: FindPatrolIncidentsDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<PatrolsService['findIncidents']> {
-    return this.patrolsService.findIncidents(query);
+    return this.patrolsService.findIncidents(query, actor);
   }
 
   @Get('employee/:employeeId')
-  @ApiBearerAuth()
   @Roles('admin', 'manager')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiOkResponse({ description: 'Patrol history by employee' })
   findByEmployee(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
@@ -71,12 +76,17 @@ export class PatrolsController {
   }
 
   @Get(':id')
+  @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Patrol details' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<PatrolEntity> {
-    return this.patrolsService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolEntity> {
+    return this.patrolsService.findOneForActor(id, actor);
   }
 
   @Post(':id/events')
+  @Roles('admin')
   @ApiCreatedResponse({ description: 'Patrol NFC event recorded' })
   recordEvent(
     @Param('id', ParseUUIDPipe) id: string,
@@ -88,6 +98,7 @@ export class PatrolsController {
 
   @Post(':id/complete')
   @HttpCode(200)
+  @Roles('admin')
   @ApiOkResponse({ description: 'Patrol completed' })
   complete(
     @Param('id', ParseUUIDPipe) id: string,
@@ -98,6 +109,7 @@ export class PatrolsController {
 
   @Post(':id/cancel')
   @HttpCode(200)
+  @Roles('admin')
   @ApiOkResponse({ description: 'Patrol cancelled' })
   cancel(
     @Param('id', ParseUUIDPipe) id: string,

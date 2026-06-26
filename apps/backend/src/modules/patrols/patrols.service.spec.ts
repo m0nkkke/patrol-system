@@ -1,5 +1,6 @@
 import { PatrolIncidentType } from '@patrol/shared';
 
+import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
 import { ShopsService } from '../shops/shops.service';
@@ -231,6 +232,64 @@ describe('PatrolsService', () => {
       ['shop-id'],
     );
     expect(result.total).toBe(1);
+  });
+
+  it('rejects manager patrol history outside assigned shops', async () => {
+    await expect(
+      service.findByShop(
+        'other-shop-id',
+        { limit: 20, page: 1 },
+        {
+          fullName: 'Manager',
+          id: 'manager-id',
+          role: 'manager',
+          shopId: 'shop-id',
+          username: 'manager',
+        },
+      ),
+    ).rejects.toBeInstanceOf(DomainValidationError);
+
+    expect(patrolsRepository.findByShop).not.toHaveBeenCalled();
+  });
+
+  it('limits manager incidents to assigned shops when shop filter is omitted', async () => {
+    patrolsRepository.findIncidents.mockResolvedValue([[createIncident()], 1]);
+
+    await service.findIncidents(
+      { limit: 20, page: 1 },
+      {
+        fullName: 'Manager',
+        id: 'manager-id',
+        role: 'manager',
+        shopIds: ['shop-1', 'shop-2'],
+        username: 'manager',
+      },
+    );
+
+    expect(patrolsRepository.findIncidents).toHaveBeenCalledWith({
+      employeeId: undefined,
+      from: undefined,
+      limit: 20,
+      page: 1,
+      shopId: undefined,
+      shopIds: ['shop-1', 'shop-2'],
+      to: undefined,
+      type: undefined,
+    });
+  });
+
+  it('rejects manager patrol details outside assigned shops', async () => {
+    patrolsRepository.findById.mockResolvedValue(createPatrol({ shopId: 'other-shop-id' }));
+
+    await expect(
+      service.findOneForActor('patrol-id', {
+        fullName: 'Manager',
+        id: 'manager-id',
+        role: 'manager',
+        shopId: 'shop-id',
+        username: 'manager',
+      }),
+    ).rejects.toBeInstanceOf(DomainValidationError);
   });
 
   it('returns existing event for repeated offline localId', async () => {

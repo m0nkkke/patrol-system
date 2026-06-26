@@ -13,6 +13,14 @@
 - `POST /api/v1/patrols/:id/complete` — завершает обход и сохраняет отчет сотрудника.
 - `POST /api/v1/patrols/:id/cancel` — отменяет активный обход с причиной отмены.
 
+## Доступ
+
+Все endpoints обычного модуля `patrols` требуют `Authorization: Bearer <accessToken>`.
+
+- `POST /api/v1/patrols`, `POST /api/v1/patrols/:id/events`, `POST /api/v1/patrols/:id/complete`, `POST /api/v1/patrols/:id/cancel` доступны только роли `admin`. Сценарии сотрудника в мобильном приложении должны использовать защищенные endpoints `/api/v1/mobile/patrols/*`.
+- `GET /api/v1/patrols/shop/:shopId`, `GET /api/v1/patrols/incidents`, `GET /api/v1/patrols/:id`, `GET /api/v1/patrols/employee/:employeeId` доступны ролям `admin`, `manager`.
+- Для роли `manager` доступ к данным обходов дополнительно ограничен назначенными магазинами пользователя.
+
 ## Бизнес-правила
 
 - Обход нельзя стартовать, если в магазине нет активных контрольных точек.

@@ -68,6 +68,7 @@ type FindPatrolIncidentsQuery = {
   limit: number;
   page: number;
   shopId?: string;
+  shopIds?: string[];
   to?: Date;
   type?: PatrolIncidentType;
 };
@@ -169,6 +170,8 @@ export class PatrolsRepository {
 
     if (query.shopId !== undefined) {
       builder.andWhere('incident.shop_id = :shopId', { shopId: query.shopId });
+    } else if (query.shopIds !== undefined) {
+      builder.andWhere('incident.shop_id IN (:...shopIds)', { shopIds: query.shopIds });
     }
 
     if (query.employeeId !== undefined) {

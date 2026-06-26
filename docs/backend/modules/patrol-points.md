@@ -10,6 +10,13 @@
 - `GET /api/v1/patrol-points/:id` — возвращает одну контрольную точку.
 - `POST /api/v1/patrol-points/:id/replace-nfc` — заменяет NFC-метку контрольной точки.
 
+## Доступ
+
+Все endpoints модуля требуют `Authorization: Bearer <accessToken>`.
+
+- `POST /api/v1/patrol-points/nfc-tags`, `POST /api/v1/patrol-points`, `POST /api/v1/patrol-points/:id/replace-nfc` доступны только роли `admin`.
+- `GET /api/v1/patrol-points/shop/:shopId` и `GET /api/v1/patrol-points/:id` доступны ролям `admin`, `manager`.
+
 ## Бизнес-правила
 
 - NFC UID всегда нормализуется в нижний регистр перед записью и сравнением.

@@ -103,7 +103,15 @@ export class PatrolsService {
     });
   }
 
-  async findByShop(shopId: string, pagination: PaginationDto): Promise<PaginatedPatrols> {
+  async findByShop(
+    shopId: string,
+    pagination: PaginationDto,
+    actor?: AuthenticatedUser,
+  ): Promise<PaginatedPatrols> {
+    if (actor !== undefined) {
+      assertCanAccessPatrolShop(actor, shopId);
+    }
+
     const [items, total] = await this.patrolsRepository.findByShop(
       shopId,
       pagination.page,
@@ -154,13 +162,34 @@ export class PatrolsService {
     return this.patrolsRepository.findActiveByEmployee(employeeId);
   }
 
-  async findIncidents(query: FindPatrolIncidentsDto): Promise<PaginatedPatrolIncidents> {
+  async findIncidents(
+    query: FindPatrolIncidentsDto,
+    actor?: AuthenticatedUser,
+  ): Promise<PaginatedPatrolIncidents> {
+    let managerIncidentShopIds: string[] | undefined;
+
+    if (actor?.role === 'manager' && query.shopId !== undefined) {
+      assertCanAccessPatrolShop(actor, query.shopId);
+    }
+
+    if (actor?.role === 'manager' && query.shopId === undefined) {
+      managerIncidentShopIds = getManagerShopIds(actor);
+
+      if (managerIncidentShopIds.length === 0) {
+        throw new DomainValidationError(
+          'PATROL_ACCESS_FORBIDDEN',
+          'Manager must be assigned to a shop to view patrol data',
+        );
+      }
+    }
+
     const [items, total] = await this.patrolsRepository.findIncidents({
       employeeId: query.employeeId,
       from: query.from === undefined ? undefined : new Date(query.from),
       limit: query.limit,
       page: query.page,
       shopId: query.shopId,
+      shopIds: managerIncidentShopIds,
       to: query.to === undefined ? undefined : new Date(query.to),
       type: query.type,
     });
@@ -179,6 +208,13 @@ export class PatrolsService {
     if (patrol === null) {
       throw new EntityNotFoundError('Patrol', id);
     }
+
+    return patrol;
+  }
+
+  async findOneForActor(id: string, actor: AuthenticatedUser): Promise<PatrolEntity> {
+    const patrol = await this.findOne(id);
+    assertCanAccessPatrolShop(actor, patrol.shopId);
 
     return patrol;
   }
@@ -459,4 +495,29 @@ export class PatrolsService {
       });
     }
   }
+}
+
+function assertCanAccessPatrolShop(actor: AuthenticatedUser, shopId: string): void {
+  if (actor.role === 'admin') {
+    return;
+  }
+
+  if (actor.role !== 'manager' || !actorHasShop(actor, shopId)) {
+    throw new DomainValidationError(
+      'PATROL_ACCESS_FORBIDDEN',
+      'User cannot access patrol data for this shop',
+    );
+  }
+}
+
+function getManagerShopIds(actor: AuthenticatedUser): string[] {
+  if (actor.role !== 'manager') {
+    return [];
+  }
+
+  return actor.shopIds ?? (actor.shopId === undefined ? [] : [actor.shopId]);
+}
+
+function actorHasShop(actor: AuthenticatedUser, shopId: string): boolean {
+  return actor.shopId === shopId || actor.shopIds?.includes(shopId) === true;
 }
