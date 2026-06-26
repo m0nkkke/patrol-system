@@ -88,6 +88,32 @@ describe('PatrolPointsService', () => {
     expect(result).toBe(replacement);
   });
 
+  it('archives old NFC tag with empty notes loaded as null', async () => {
+    const oldTag = createTag({ id: 'old-tag-id', notes: null, uid: '04old' });
+    const newTag = createTag({ id: 'new-tag-id', uid: '04new' });
+    const point = createPoint({ id: 'point-id', nfcTag: oldTag, nfcTagId: oldTag.id });
+    const replacement = createReplacement({
+      newNfcTagId: newTag.id,
+      newNfcUid: newTag.uid,
+      oldNfcTagId: oldTag.id,
+      oldNfcUid: oldTag.uid,
+      patrolPointId: point.id,
+    });
+
+    repository.findPatrolPointById.mockResolvedValue(point);
+    repository.findNfcTagByUid.mockResolvedValue(newTag);
+    repository.findPatrolPointByNfcTagId.mockResolvedValue(null);
+    repository.saveNfcTag.mockImplementation((tag) => Promise.resolve(tag));
+    repository.savePatrolPoint.mockResolvedValue(point);
+    repository.createNfcTagReplacement.mockResolvedValue(replacement);
+
+    await expect(service.replaceNfcTag(point.id, { uid: '04NEW' })).resolves.toBe(replacement);
+
+    expect(oldTag.isActive).toBe(false);
+    expect(oldTag.notes).toContain(point.id);
+    expect(repository.saveNfcTag).toHaveBeenCalledWith(oldTag);
+  });
+
   it('rejects replacement with the same UID', async () => {
     const oldTag = createTag({ uid: '04same' });
     const point = createPoint({ nfcTag: oldTag, nfcTagId: oldTag.id });

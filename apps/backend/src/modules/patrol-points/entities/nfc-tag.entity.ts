@@ -39,7 +39,7 @@ export class NfcTagEntity {
   registeredByUser?: UserEntity;
 
   @Column({ nullable: true, type: 'text' })
-  notes?: string;
+  notes?: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date = new Date();

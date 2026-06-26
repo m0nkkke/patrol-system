@@ -230,10 +230,10 @@ export function normalizeNfcUid(uid: string): string {
   return uid.trim().toLowerCase();
 }
 
-function appendArchiveNote(existingNote: string | undefined, pointId: string): string {
+function appendArchiveNote(existingNote: string | null | undefined, pointId: string): string {
   const archiveNote = `Архивирована при замене метки контрольной точки ${pointId}`;
 
-  if (existingNote === undefined || existingNote.length === 0) {
+  if (existingNote === null || existingNote === undefined || existingNote.length === 0) {
     return archiveNote;
   }
 
