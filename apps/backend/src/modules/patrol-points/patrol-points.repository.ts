@@ -124,4 +124,30 @@ export class PatrolPointsRepository {
       .andWhere('point.nfc_tag_id IS NOT NULL')
       .getCount();
   }
+
+  async resetRouteSetupPoints(shopId: string): Promise<void> {
+    await this.nfcTags
+      .createQueryBuilder()
+      .update(NfcTagEntity)
+      .set({ isActive: false })
+      .where(
+        `id IN (
+          SELECT point.nfc_tag_id
+          FROM patrol_points point
+          WHERE point.shop_id = :shopId
+            AND point.sort_order > 0
+            AND point.nfc_tag_id IS NOT NULL
+        )`,
+        { shopId },
+      )
+      .execute();
+
+    await this.patrolPoints
+      .createQueryBuilder()
+      .update(PatrolPointEntity)
+      .set({ isActive: false, nfcTagId: null })
+      .where('shop_id = :shopId', { shopId })
+      .andWhere('sort_order > 0')
+      .execute();
+  }
 }

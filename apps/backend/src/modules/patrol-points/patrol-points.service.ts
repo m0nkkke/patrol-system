@@ -220,6 +220,10 @@ export class PatrolPointsService {
   countRegisteredRoutePoints(shopId: string, expectedPoints: number): Promise<number> {
     return this.patrolPointsRepository.countRegisteredRoutePoints(shopId, expectedPoints);
   }
+
+  resetRouteSetupPoints(shopId: string): Promise<void> {
+    return this.patrolPointsRepository.resetRouteSetupPoints(shopId);
+  }
 }
 
 export function normalizeNfcUid(uid: string): string {

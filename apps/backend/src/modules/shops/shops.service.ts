@@ -167,4 +167,16 @@ export class ShopsService {
 
     return this.getRouteSetup(shopId);
   }
+
+  async resetRouteSetup(shopId: string): Promise<RouteSetupState> {
+    await this.findOne(shopId);
+    await this.patrolPointsService.resetRouteSetupPoints(shopId);
+    await this.shopsRepository.updateRouteSetup(shopId, {
+      expectedPoints: 0,
+      registeredPoints: 0,
+      status: RouteStatus.NOT_CONFIGURED,
+    });
+
+    return this.getRouteSetup(shopId);
+  }
 }

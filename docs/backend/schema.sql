@@ -257,10 +257,13 @@ CREATE TABLE patrols (
   status          patrol_status NOT NULL DEFAULT 'pending',
   started_at      TIMESTAMPTZ,
   completed_at    TIMESTAMPTZ,
+  cancelled_at    TIMESTAMPTZ,
   due_at          TIMESTAMPTZ,           -- дедлайн завершения
   total_points    SMALLINT NOT NULL DEFAULT 0,  -- сколько точек в маршруте
   scanned_points  SMALLINT NOT NULL DEFAULT 0,  -- сколько отсканировано
   notes           TEXT,
+  completion_report TEXT,
+  cancellation_reason TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -271,6 +274,8 @@ CREATE TABLE patrols (
 COMMENT ON TABLE patrols IS 'Один конкретный обход сотрудника';
 COMMENT ON COLUMN patrols.due_at IS 'Дедлайн из расписания. NULL = внеплановый обход';
 COMMENT ON COLUMN patrols.total_points IS 'Кэш: кол-во точек на момент старта обхода';
+COMMENT ON COLUMN patrols.completion_report IS 'Отчет сотрудника по итогам обхода и объяснение больших таймингов';
+COMMENT ON COLUMN patrols.cancellation_reason IS 'Причина ручной отмены обхода сотрудником';
 
 CREATE INDEX idx_patrols_shop_id      ON patrols(shop_id);
 CREATE INDEX idx_patrols_employee_id  ON patrols(employee_id);

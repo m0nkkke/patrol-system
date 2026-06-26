@@ -6,6 +6,7 @@ export * from './dto/create-patrol-point.dto';
 export * from './dto/create-shop.dto';
 export * from './dto/create-user.dto';
 export * from './dto/find-patrol-incidents.dto';
+export * from './dto/finish-patrol.dto';
 export * from './dto/pagination.dto';
 export * from './dto/patrol-schedule.dto';
 export * from './dto/replace-nfc-tag.dto';

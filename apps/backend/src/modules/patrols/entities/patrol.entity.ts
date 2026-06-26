@@ -61,6 +61,9 @@ export class PatrolEntity {
   @Column({ name: 'completed_at', nullable: true, type: 'timestamptz' })
   completedAt?: Date;
 
+  @Column({ name: 'cancelled_at', nullable: true, type: 'timestamptz' })
+  cancelledAt?: Date;
+
   @Index('idx_patrols_due_at')
   @Column({ name: 'due_at', nullable: true, type: 'timestamptz' })
   dueAt?: Date;
@@ -73,6 +76,12 @@ export class PatrolEntity {
 
   @Column({ nullable: true, type: 'text' })
   notes?: string;
+
+  @Column({ name: 'completion_report', nullable: true, type: 'text' })
+  completionReport?: string;
+
+  @Column({ name: 'cancellation_reason', nullable: true, type: 'text' })
+  cancellationReason?: string;
 
   @OneToMany(() => PatrolEventEntity, (event) => event.patrol)
   events?: PatrolEventEntity[];

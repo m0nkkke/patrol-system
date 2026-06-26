@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
+  CancelPatrolDto,
+  CompletePatrolDto,
   CreatePatrolEventDto,
   FindPatrolIncidentsDto,
   PaginationDto,
@@ -87,7 +89,20 @@ export class PatrolsController {
   @Post(':id/complete')
   @HttpCode(200)
   @ApiOkResponse({ description: 'Patrol completed' })
-  complete(@Param('id', ParseUUIDPipe) id: string): Promise<PatrolEntity> {
-    return this.patrolsService.complete(id);
+  complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompletePatrolDto,
+  ): Promise<PatrolEntity> {
+    return this.patrolsService.complete(id, dto);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'Patrol cancelled' })
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelPatrolDto,
+  ): Promise<PatrolEntity> {
+    return this.patrolsService.cancel(id, dto);
   }
 }

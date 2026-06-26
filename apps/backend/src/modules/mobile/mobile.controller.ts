@@ -13,6 +13,8 @@ import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nest
 import {
   BindRoutePointNfcDto,
   AvailablePatrolScheduleDto,
+  CancelPatrolDto,
+  CompletePatrolDto,
   CreatePatrolEventDto,
   StartRouteSetupDto,
   StartMobilePatrolDto,
@@ -74,6 +76,17 @@ export class MobileController {
     return this.mobileService.scanNextRoutePoint(shopId, dto);
   }
 
+  @Post('shops/:shopId/route-setup/reset')
+  @HttpCode(200)
+  @Roles('admin', 'manager')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Mobile route setup cancelled and reset' })
+  resetRouteSetup(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ): ReturnType<MobileService['resetRouteSetup']> {
+    return this.mobileService.resetRouteSetup(shopId);
+  }
+
   @Get('route')
   @Roles('employee')
   @UseGuards(RolesGuard)
@@ -127,6 +140,32 @@ export class MobileController {
     @Ip() ipAddress: string,
   ): ReturnType<MobileService['recordPatrolEvent']> {
     return this.mobileService.recordPatrolEvent(user, id, dto, ipAddress);
+  }
+
+  @Post('patrols/:id/complete')
+  @HttpCode(200)
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Mobile patrol completed with employee report' })
+  completePatrol(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompletePatrolDto,
+  ): ReturnType<MobileService['completePatrol']> {
+    return this.mobileService.completePatrol(user, id, dto);
+  }
+
+  @Post('patrols/:id/cancel')
+  @HttpCode(200)
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Mobile patrol cancelled' })
+  cancelPatrol(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelPatrolDto,
+  ): ReturnType<MobileService['cancelPatrol']> {
+    return this.mobileService.cancelPatrol(user, id, dto);
   }
 
   @Post('patrols/:id/events/sync')

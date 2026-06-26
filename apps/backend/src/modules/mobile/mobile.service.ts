@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   BindRoutePointNfcDto,
+  CancelPatrolDto,
+  CompletePatrolDto,
   CreatePatrolEventDto,
   StartRouteSetupDto,
   StartMobilePatrolDto,
@@ -60,6 +62,10 @@ export class MobileService {
     return this.shopsService.getRouteSetup(shopId);
   }
 
+  resetRouteSetup(shopId: string): ReturnType<ShopsService['resetRouteSetup']> {
+    return this.shopsService.resetRouteSetup(shopId);
+  }
+
   getRoute(user: AuthenticatedUser): ReturnType<PatrolPointsService['findByShop']> {
     const shopId = requireUserShopId(user);
 
@@ -104,6 +110,26 @@ export class MobileService {
     }
 
     return this.patrolsService.recordEvent(patrolId, dto, ipAddress);
+  }
+
+  async completePatrol(
+    user: AuthenticatedUser,
+    patrolId: string,
+    dto: CompletePatrolDto,
+  ): Promise<PatrolEntity> {
+    await this.assertPatrolBelongsToUser(user, patrolId);
+
+    return this.patrolsService.complete(patrolId, dto);
+  }
+
+  async cancelPatrol(
+    user: AuthenticatedUser,
+    patrolId: string,
+    dto: CancelPatrolDto,
+  ): Promise<PatrolEntity> {
+    await this.assertPatrolBelongsToUser(user, patrolId);
+
+    return this.patrolsService.cancel(patrolId, dto);
   }
 
   async syncPatrolEvents(
@@ -159,6 +185,22 @@ export class MobileService {
     }
 
     return this.shopsService.bindRoutePointNfc(shopId, state.nextSortOrder, dto);
+  }
+
+  private async assertPatrolBelongsToUser(
+    user: AuthenticatedUser,
+    patrolId: string,
+  ): Promise<PatrolEntity> {
+    const patrol = await this.patrolsService.findOne(patrolId);
+
+    if (patrol.employeeId !== user.id) {
+      throw new DomainValidationError(
+        'MOBILE_PATROL_FORBIDDEN',
+        'Patrol does not belong to current mobile user',
+      );
+    }
+
+    return patrol;
   }
 }
 

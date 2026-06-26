@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
+  CancelPatrolDto,
+  CompletePatrolDto,
   CreatePatrolEventDto,
   FindPatrolIncidentsDto,
   PaginationDto,
@@ -278,15 +280,28 @@ export class PatrolsService {
     await this.patrolsRepository.updateScanProgress(patrol.id, nextScannedPoints, nextStatus);
 
     if (nextStatus === 'completed') {
-      await this.patrolsRepository.markCompleted(patrol.id, new Date(), patrol.notes);
+      await this.patrolsRepository.markCompleted(
+        patrol.id,
+        new Date(),
+        patrol.notes,
+        patrol.completionReport,
+      );
       await this.createBaselineIntervalsIfNeeded(patrol.id, patrol.shopId);
     }
 
     return { event, status: 'created' };
   }
 
-  async complete(id: string): Promise<PatrolEntity> {
+  async complete(id: string, dto: CompletePatrolDto = {}): Promise<PatrolEntity> {
     const patrol = await this.findOne(id);
+
+    if (patrol.status === 'completed') {
+      if (dto.completionReport !== undefined) {
+        await this.patrolsRepository.updateCompletionReport(id, dto.completionReport);
+      }
+
+      return this.findOne(id);
+    }
 
     if (patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
       throw new DomainValidationError('PATROL_NOT_IN_PROGRESS', 'Patrol is not in progress');
@@ -296,8 +311,29 @@ export class PatrolsService {
       throw new DomainValidationError('PATROL_INCOMPLETE', 'All active points must be scanned');
     }
 
-    await this.patrolsRepository.markCompleted(id, new Date(), patrol.notes);
+    await this.patrolsRepository.markCompleted(
+      id,
+      new Date(),
+      patrol.notes,
+      dto.completionReport,
+    );
     await this.createBaselineIntervalsIfNeeded(patrol.id, patrol.shopId);
+
+    return this.findOne(id);
+  }
+
+  async cancel(id: string, dto: CancelPatrolDto = {}): Promise<PatrolEntity> {
+    const patrol = await this.findOne(id);
+
+    if (patrol.status === 'cancelled') {
+      return patrol;
+    }
+
+    if (patrol.status !== 'pending' && patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
+      throw new DomainValidationError('PATROL_CANNOT_BE_CANCELLED', 'Patrol cannot be cancelled');
+    }
+
+    await this.patrolsRepository.markCancelled(id, new Date(), dto.cancellationReason);
 
     return this.findOne(id);
   }

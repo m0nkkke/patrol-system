@@ -104,3 +104,46 @@ Content-Type: application/json
   ]
 }
 ```
+
+## Отмена и завершение из мобильного интерфейса
+
+Для кнопки отмены обхода мобильное приложение вызывает:
+
+```http
+POST /api/v1/mobile/patrols/:id/cancel
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "cancellationReason": "Отвлекло руководство, начну обход заново."
+}
+```
+
+Отменять можно обходы в статусах `pending`, `in_progress`, `overdue`. После отмены обход получает статус `cancelled`, а сотрудник может начать новый обход.
+
+Для диалогового отчета при завершении мобильное приложение вызывает:
+
+```http
+POST /api/v1/mobile/patrols/:id/complete
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "completionReport": "Между точками 4 и 5 покупатель попросил помочь найти товар, поэтому интервал был длиннее обычного."
+}
+```
+
+Если последний NFC-скан уже автоматически завершил обход, повторный вызов `complete` не падает и дозаписывает `completionReport`.
+
+Для отмены настройки цифрового маршрута и старта заново админский режим мобильного приложения вызывает:
+
+```http
+POST /api/v1/mobile/shops/:shopId/route-setup/reset
+Authorization: Bearer <accessToken>
+```
+
+Backend деактивирует точки текущей настройки, отвязывает NFC и переводит магазин в `routeStatus = not_configured`. После этого можно снова вызвать `route-setup/start`.

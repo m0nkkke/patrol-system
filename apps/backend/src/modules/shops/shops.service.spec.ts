@@ -12,6 +12,7 @@ type PatrolPointsServiceMock = Pick<
   | 'countRegisteredRoutePoints'
   | 'ensureRoutePoint'
   | 'findRouteSetupPointsByShop'
+  | 'resetRouteSetupPoints'
 >;
 
 type ShopsRepositoryMock = Pick<
@@ -30,6 +31,7 @@ describe('ShopsService', () => {
       countRegisteredRoutePoints: jest.fn(),
       ensureRoutePoint: jest.fn(),
       findRouteSetupPointsByShop: jest.fn(),
+      resetRouteSetupPoints: jest.fn(),
     };
     shopsRepository = {
       create: jest.fn(),
@@ -77,6 +79,23 @@ describe('ShopsService', () => {
     await expect(
       service.bindRoutePointNfc('shop-id', 1, { uid: '04a1b2c3d4e5f6' }),
     ).rejects.toBeInstanceOf(DomainValidationError);
+  });
+
+  it('resets route setup and clears route counters', async () => {
+    shopsRepository.findById
+      .mockResolvedValueOnce(createShop({ routeExpectedPoints: 3 }))
+      .mockResolvedValueOnce(createShop());
+    patrolPointsService.findRouteSetupPointsByShop.mockResolvedValue([]);
+
+    const result = await service.resetRouteSetup('shop-id');
+
+    expect(patrolPointsService.resetRouteSetupPoints).toHaveBeenCalledWith('shop-id');
+    expect(shopsRepository.updateRouteSetup).toHaveBeenCalledWith('shop-id', {
+      expectedPoints: 0,
+      registeredPoints: 0,
+      status: RouteStatus.NOT_CONFIGURED,
+    });
+    expect(result.routeStatus).toBe(RouteStatus.NOT_CONFIGURED);
   });
 });
 

@@ -69,4 +69,13 @@ export class ShopsController {
   ): ReturnType<ShopsService['bindRoutePointNfc']> {
     return this.shopsService.bindRoutePointNfc(id, sortOrder, dto);
   }
+
+  @Post(':id/route-setup/reset')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'Route setup cancelled and reset for shop' })
+  resetRouteSetup(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): ReturnType<ShopsService['resetRouteSetup']> {
+    return this.shopsService.resetRouteSetup(id);
+  }
 }

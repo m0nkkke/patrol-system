@@ -228,8 +228,25 @@ export class PatrolsRepository {
     return this.patrolRouteIntervals.count({ where: { shopId } });
   }
 
-  async markCompleted(id: string, completedAt: Date, notes?: string): Promise<void> {
-    await this.patrols.update(id, { completedAt, notes, status: 'completed' });
+  async markCompleted(
+    id: string,
+    completedAt: Date,
+    notes?: string,
+    completionReport?: string,
+  ): Promise<void> {
+    await this.patrols.update(id, { completedAt, completionReport, notes, status: 'completed' });
+  }
+
+  async markCancelled(
+    id: string,
+    cancelledAt: Date,
+    cancellationReason?: string,
+  ): Promise<void> {
+    await this.patrols.update(id, { cancellationReason, cancelledAt, status: 'cancelled' });
+  }
+
+  async updateCompletionReport(id: string, completionReport?: string): Promise<void> {
+    await this.patrols.update(id, { completionReport });
   }
 
   async updateScanProgress(id: string, scannedPoints: number, status: PatrolStatus): Promise<void> {

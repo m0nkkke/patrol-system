@@ -10,11 +10,17 @@ type PatrolPointsServiceMock = Pick<PatrolPointsService, 'findByShop'>;
 type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'findAvailableByShop'>;
 type PatrolsServiceMock = Pick<
   PatrolsService,
-  'findActiveByEmployee' | 'findOne' | 'recordEvent' | 'recordEventWithStatus' | 'start'
+  | 'cancel'
+  | 'complete'
+  | 'findActiveByEmployee'
+  | 'findOne'
+  | 'recordEvent'
+  | 'recordEventWithStatus'
+  | 'start'
 >;
 type ShopsServiceMock = Pick<
   ShopsService,
-  'bindRoutePointNfc' | 'getRouteSetup' | 'startRouteSetup'
+  'bindRoutePointNfc' | 'getRouteSetup' | 'resetRouteSetup' | 'startRouteSetup'
 >;
 
 describe('MobileService', () => {
@@ -32,6 +38,8 @@ describe('MobileService', () => {
       findAvailableByShop: jest.fn(),
     };
     patrolsService = {
+      cancel: jest.fn(),
+      complete: jest.fn(),
       findActiveByEmployee: jest.fn(),
       findOne: jest.fn(),
       recordEvent: jest.fn(),
@@ -41,6 +49,7 @@ describe('MobileService', () => {
     shopsService = {
       bindRoutePointNfc: jest.fn(),
       getRouteSetup: jest.fn(),
+      resetRouteSetup: jest.fn(),
       startRouteSetup: jest.fn(),
     };
     service = new MobileService(
@@ -132,6 +141,50 @@ describe('MobileService', () => {
         },
       ],
     });
+  });
+
+  it('completes only current employee patrol with report', async () => {
+    patrolsService.findOne.mockResolvedValue({
+      employeeId: 'user-id',
+      id: 'patrol-id',
+    } as Awaited<ReturnType<PatrolsService['findOne']>>);
+    patrolsService.complete.mockResolvedValue({
+      completionReport: 'Отвлек покупатель, поэтому интервал был длиннее.',
+      employeeId: 'user-id',
+      id: 'patrol-id',
+      status: 'completed',
+    } as Awaited<ReturnType<PatrolsService['complete']>>);
+
+    const result = await service.completePatrol(createUser({ id: 'user-id' }), 'patrol-id', {
+      completionReport: 'Отвлек покупатель, поэтому интервал был длиннее.',
+    });
+
+    expect(patrolsService.complete).toHaveBeenCalledWith('patrol-id', {
+      completionReport: 'Отвлек покупатель, поэтому интервал был длиннее.',
+    });
+    expect(result.status).toBe('completed');
+  });
+
+  it('cancels only current employee patrol', async () => {
+    patrolsService.findOne.mockResolvedValue({
+      employeeId: 'user-id',
+      id: 'patrol-id',
+    } as Awaited<ReturnType<PatrolsService['findOne']>>);
+    patrolsService.cancel.mockResolvedValue({
+      cancellationReason: 'Отвлекло руководство, начну заново.',
+      employeeId: 'user-id',
+      id: 'patrol-id',
+      status: 'cancelled',
+    } as Awaited<ReturnType<PatrolsService['cancel']>>);
+
+    const result = await service.cancelPatrol(createUser({ id: 'user-id' }), 'patrol-id', {
+      cancellationReason: 'Отвлекло руководство, начну заново.',
+    });
+
+    expect(patrolsService.cancel).toHaveBeenCalledWith('patrol-id', {
+      cancellationReason: 'Отвлекло руководство, начну заново.',
+    });
+    expect(result.status).toBe('cancelled');
   });
 });
 

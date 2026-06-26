@@ -29,7 +29,9 @@ type PatrolsRepositoryMock = Pick<
   | 'findPreviousEventByRouteOrder'
   | 'findRouteInterval'
   | 'markCompleted'
+  | 'markCancelled'
   | 'markOverdue'
+  | 'updateCompletionReport'
   | 'updateScanProgress'
 >;
 
@@ -75,8 +77,10 @@ describe('PatrolsService', () => {
       findIncidents: jest.fn(),
       findPreviousEventByRouteOrder: jest.fn(),
       findRouteInterval: jest.fn(),
+      markCancelled: jest.fn(),
       markCompleted: jest.fn(),
       markOverdue: jest.fn(),
+      updateCompletionReport: jest.fn(),
       updateScanProgress: jest.fn(),
     };
     shopsService = {
@@ -391,6 +395,45 @@ describe('PatrolsService', () => {
     });
 
     expect(patrolsRepository.updateScanProgress).toHaveBeenCalledWith(patrol.id, 2, 'overdue');
+  });
+
+  it('stores completion report for already auto-completed patrol', async () => {
+    const completedPatrol = createPatrol({ status: 'completed' });
+    patrolsRepository.findById.mockResolvedValueOnce(completedPatrol).mockResolvedValueOnce({
+      ...completedPatrol,
+      completionReport: 'Покупатель попросил помочь найти товар.',
+    });
+
+    const result = await service.complete(completedPatrol.id, {
+      completionReport: 'Покупатель попросил помочь найти товар.',
+    });
+
+    expect(patrolsRepository.updateCompletionReport).toHaveBeenCalledWith(
+      completedPatrol.id,
+      'Покупатель попросил помочь найти товар.',
+    );
+    expect(patrolsRepository.markCompleted).not.toHaveBeenCalled();
+    expect(result.completionReport).toBe('Покупатель попросил помочь найти товар.');
+  });
+
+  it('cancels active patrol with employee reason', async () => {
+    const patrol = createPatrol();
+    patrolsRepository.findById.mockResolvedValueOnce(patrol).mockResolvedValueOnce({
+      ...patrol,
+      cancellationReason: 'Отвлекло руководство, начну маршрут заново.',
+      status: 'cancelled',
+    });
+
+    const result = await service.cancel(patrol.id, {
+      cancellationReason: 'Отвлекло руководство, начну маршрут заново.',
+    });
+
+    expect(patrolsRepository.markCancelled).toHaveBeenCalledWith(
+      patrol.id,
+      expect.any(Date),
+      'Отвлекло руководство, начну маршрут заново.',
+    );
+    expect(result.status).toBe('cancelled');
   });
 });
 
