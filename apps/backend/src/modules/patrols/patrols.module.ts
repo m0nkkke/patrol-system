@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { NotificationsModule } from '../notifications/notifications.module';
 import { PatrolPointsModule } from '../patrol-points/patrol-points.module';
 import { ShopsModule } from '../shops/shops.module';
 import { UsersModule } from '../users/users.module';
@@ -21,6 +22,7 @@ import { PatrolsService } from './patrols.service';
   controllers: [PatrolSchedulesController, PatrolsController],
   exports: [PatrolSchedulesService, PatrolsService],
   imports: [
+    NotificationsModule,
     PatrolPointsModule,
     ShopsModule,
     UsersModule,

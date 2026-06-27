@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { MobilePlatform } from '@patrol/shared';
 
@@ -59,5 +59,44 @@ export class NotificationsRepository {
 
   async deactivateDevicePushToken(userId: string, deviceId: string): Promise<void> {
     await this.devicePushTokens.update({ deviceId, userId }, { isActive: false });
+  }
+
+  async deactivatePushTokens(pushTokens: string[]): Promise<void> {
+    if (pushTokens.length === 0) {
+      return;
+    }
+
+    await this.devicePushTokens.update({ pushToken: In(pushTokens) }, { isActive: false });
+  }
+
+  findActivePushTokensByUserIds(userIds: string[]): Promise<DevicePushTokenEntity[]> {
+    if (userIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.devicePushTokens.find({
+      where: {
+        isActive: true,
+        userId: In(userIds),
+      },
+    });
+  }
+
+  findActiveManagerAndAdminPushTokensByShop(shopId: string): Promise<DevicePushTokenEntity[]> {
+    return this.devicePushTokens
+      .createQueryBuilder('token')
+      .innerJoin('token.user', 'user')
+      .leftJoin('user.shops', 'assignedShop')
+      .where('token.is_active = :isActive', { isActive: true })
+      .andWhere('user.is_active = :userIsActive', { userIsActive: true })
+      .andWhere(
+        '(user.role = :adminRole OR (user.role = :managerRole AND (user.shop_id = :shopId OR assignedShop.id = :shopId)))',
+        {
+          adminRole: 'admin',
+          managerRole: 'manager',
+          shopId,
+        },
+      )
+      .getMany();
   }
 }

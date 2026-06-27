@@ -13,6 +13,7 @@ import {
 
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PatrolPointsService, normalizeNfcUid } from '../patrol-points/patrol-points.service';
 import { ShopsService } from '../shops/shops.service';
 import { UsersService } from '../users/users.service';
@@ -53,6 +54,7 @@ export class PatrolsService {
     private readonly patrolPointsService: PatrolPointsService,
     private readonly patrolSchedulesService: PatrolSchedulesService,
     private readonly patrolsRepository: PatrolsRepository,
+    private readonly notificationsService: NotificationsService,
     private readonly shopsService: ShopsService,
     private readonly usersService: UsersService,
   ) {}
@@ -384,6 +386,13 @@ export class PatrolsService {
     }
 
     await this.patrolsRepository.markCancelled(id, new Date(), dto.cancellationReason);
+    await this.notificationsService.notifyPatrolCancelled({
+      cancellationReason: dto.cancellationReason,
+      employeeName: patrol.employee?.fullName,
+      patrolId: patrol.id,
+      shopId: patrol.shopId,
+      shopName: patrol.shop?.name,
+    });
 
     return this.findOne(id);
   }
@@ -405,7 +414,7 @@ export class PatrolsService {
     const previousSortOrder = previousEvent.patrolPoint.sortOrder;
 
     if (currentSortOrder > previousSortOrder + 1) {
-      await this.patrolsRepository.createPatrolIncident({
+      const incident = await this.patrolsRepository.createPatrolIncident({
         fromPatrolPointId: previousEvent.patrolPointId,
         message: `Пропущены точки маршрута между ${previousSortOrder} и ${currentSortOrder}`,
         patrolEventId: event.id,
@@ -414,6 +423,7 @@ export class PatrolsService {
         toPatrolPointId: event.patrolPointId,
         type: PatrolIncidentType.MISSED_POINT,
       });
+      await this.notifyIncidentCreated(patrol, incident);
     }
 
     const routeInterval = await this.patrolsRepository.findRouteInterval(
@@ -432,7 +442,7 @@ export class PatrolsService {
     );
 
     if (actualSeconds < routeInterval.minSeconds) {
-      await this.patrolsRepository.createPatrolIncident({
+      const incident = await this.patrolsRepository.createPatrolIncident({
         actualSeconds,
         expectedSeconds: routeInterval.baselineSeconds,
         fromPatrolPointId: previousEvent.patrolPointId,
@@ -443,11 +453,12 @@ export class PatrolsService {
         toPatrolPointId: event.patrolPointId,
         type: PatrolIncidentType.SHORT_INTERVAL,
       });
+      await this.notifyIncidentCreated(patrol, incident);
       return;
     }
 
     if (actualSeconds > routeInterval.maxSeconds) {
-      await this.patrolsRepository.createPatrolIncident({
+      const incident = await this.patrolsRepository.createPatrolIncident({
         actualSeconds,
         expectedSeconds: routeInterval.baselineSeconds,
         fromPatrolPointId: previousEvent.patrolPointId,
@@ -458,7 +469,23 @@ export class PatrolsService {
         toPatrolPointId: event.patrolPointId,
         type: PatrolIncidentType.LONG_INTERVAL,
       });
+      await this.notifyIncidentCreated(patrol, incident);
     }
+  }
+
+  private async notifyIncidentCreated(
+    patrol: PatrolEntity,
+    incident: PatrolIncidentEntity,
+  ): Promise<void> {
+    await this.notificationsService.notifyPatrolIncident({
+      employeeName: patrol.employee?.fullName,
+      incidentId: incident.id,
+      message: incident.message,
+      patrolId: patrol.id,
+      shopId: patrol.shopId,
+      shopName: patrol.shop?.name,
+      type: incident.type,
+    });
   }
 
   private async createBaselineIntervalsIfNeeded(patrolId: string, shopId: string): Promise<void> {

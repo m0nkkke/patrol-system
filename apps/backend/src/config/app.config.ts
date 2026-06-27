@@ -18,6 +18,11 @@ export type AppConfig = {
     refreshTtlSeconds: number;
   };
   nodeEnv: string;
+  notifications: {
+    expoAccessToken?: string;
+    expoPushEndpoint: string;
+    pushEnabled: boolean;
+  };
   port: number;
   redis: {
     host: string;
@@ -40,6 +45,9 @@ export const validationSchema = Joi.object({
   JWT_REFRESH_SECRET: Joi.string().min(64).required(),
   JWT_REFRESH_TTL_SECONDS: Joi.number().integer().positive().default(604800),
   NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
+  EXPO_PUSH_ACCESS_TOKEN: Joi.string().allow('').optional(),
+  EXPO_PUSH_ENDPOINT: Joi.string().uri().default('https://exp.host/--/api/v2/push/send'),
+  PUSH_NOTIFICATIONS_ENABLED: Joi.boolean().default(false),
   PORT: Joi.number().port().default(3000),
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PASSWORD: Joi.string().allow('').optional(),
@@ -70,6 +78,11 @@ export const appConfig = (): AppConfig => {
       refreshTtlSeconds: readNumberEnv('JWT_REFRESH_TTL_SECONDS'),
     },
     nodeEnv: readEnv('NODE_ENV'),
+    notifications: {
+      expoAccessToken: readOptionalEnv('EXPO_PUSH_ACCESS_TOKEN'),
+      expoPushEndpoint: readEnv('EXPO_PUSH_ENDPOINT'),
+      pushEnabled: readBooleanEnv('PUSH_NOTIFICATIONS_ENABLED'),
+    },
     port: readNumberEnv('PORT'),
     redis: {
       host: readEnv('REDIS_HOST'),

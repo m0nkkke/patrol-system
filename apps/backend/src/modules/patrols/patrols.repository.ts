@@ -154,6 +154,16 @@ export class PatrolsRepository {
     });
   }
 
+  findOverdueCandidates(now: Date): Promise<PatrolEntity[]> {
+    return this.patrols.find({
+      relations: { employee: true, shop: true },
+      where: {
+        dueAt: LessThan(now),
+        status: In(['pending', 'in_progress']),
+      },
+    });
+  }
+
   findExistingScheduledPatrol(
     scheduleId: string,
     dueAt: Date,
@@ -311,6 +321,16 @@ export class PatrolsRepository {
       },
       { status: 'overdue' },
     );
+
+    return result.affected ?? 0;
+  }
+
+  async markOverdueByIds(ids: string[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const result = await this.patrols.update({ id: In(ids) }, { status: 'overdue' });
 
     return result.affected ?? 0;
   }

@@ -1,6 +1,7 @@
 import { PatrolIncidentType } from '@patrol/shared';
 
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
 import { ShopsService } from '../shops/shops.service';
@@ -45,11 +46,16 @@ type PatrolPointsServiceMock = Pick<
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
 type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'resolveDueAt'>;
 type UsersServiceMock = Pick<UsersService, 'assertAssignedToShop' | 'findOne'>;
+type NotificationsServiceMock = Pick<
+  NotificationsService,
+  'notifyPatrolCancelled' | 'notifyPatrolIncident'
+>;
 
 describe('PatrolsService', () => {
   let patrolPointsService: jest.Mocked<PatrolPointsServiceMock>;
   let patrolSchedulesService: jest.Mocked<PatrolSchedulesServiceMock>;
   let patrolsRepository: jest.Mocked<PatrolsRepositoryMock>;
+  let notificationsService: jest.Mocked<NotificationsServiceMock>;
   let service: PatrolsService;
   let shopsService: jest.Mocked<ShopsServiceMock>;
   let usersService: jest.Mocked<UsersServiceMock>;
@@ -86,6 +92,10 @@ describe('PatrolsService', () => {
       updateCompletionReport: jest.fn(),
       updateScanProgress: jest.fn(),
     };
+    notificationsService = {
+      notifyPatrolCancelled: jest.fn(),
+      notifyPatrolIncident: jest.fn(),
+    };
     shopsService = {
       findOne: jest.fn(),
     };
@@ -97,12 +107,16 @@ describe('PatrolsService', () => {
       patrolPointsService as unknown as PatrolPointsService,
       patrolSchedulesService as unknown as PatrolSchedulesService,
       patrolsRepository as unknown as PatrolsRepository,
+      notificationsService as unknown as NotificationsService,
       shopsService as unknown as ShopsService,
       usersService as unknown as UsersService,
     );
     patrolsRepository.findEventByClientLocalId.mockResolvedValue(null);
     patrolsRepository.findEventByPatrolAndPoint.mockResolvedValue(null);
     patrolsRepository.findExistingScheduledPatrol.mockResolvedValue(null);
+    patrolsRepository.createPatrolIncident.mockImplementation((data) =>
+      Promise.resolve(createIncident(data)),
+    );
   });
 
   it('creates long interval incident when scan is slower than route baseline', async () => {
@@ -155,6 +169,15 @@ describe('PatrolsService', () => {
       patrolId: patrol.id,
       shopId: patrol.shopId,
       toPatrolPointId: 'point-2',
+      type: PatrolIncidentType.LONG_INTERVAL,
+    });
+    expect(notificationsService.notifyPatrolIncident).toHaveBeenCalledWith({
+      employeeName: undefined,
+      incidentId: 'incident-id',
+      message: 'Слишком длинный интервал: 300 сек. при эталоне 60 сек.',
+      patrolId: patrol.id,
+      shopId: patrol.shopId,
+      shopName: undefined,
       type: PatrolIncidentType.LONG_INTERVAL,
     });
   });
@@ -517,6 +540,13 @@ describe('PatrolsService', () => {
       expect.any(Date),
       'Отвлекло руководство, начну маршрут заново.',
     );
+    expect(notificationsService.notifyPatrolCancelled).toHaveBeenCalledWith({
+      cancellationReason: 'Отвлекло руководство, начну маршрут заново.',
+      employeeName: undefined,
+      patrolId: patrol.id,
+      shopId: patrol.shopId,
+      shopName: undefined,
+    });
     expect(result.status).toBe('cancelled');
   });
 });
@@ -586,7 +616,7 @@ function createRouteInterval(
   } as PatrolRouteIntervalEntity;
 }
 
-function createIncident(): PatrolIncidentEntity {
+function createIncident(overrides: Partial<PatrolIncidentEntity> = {}): PatrolIncidentEntity {
   return {
     createdAt: new Date(),
     id: 'incident-id',
@@ -594,5 +624,6 @@ function createIncident(): PatrolIncidentEntity {
     patrolId: 'patrol-id',
     shopId: 'shop-id',
     type: PatrolIncidentType.LONG_INTERVAL,
+    ...overrides,
   } as PatrolIncidentEntity;
 }
