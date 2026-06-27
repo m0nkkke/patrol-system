@@ -8,6 +8,7 @@
     "migration:run": "typeorm-ts-node-commonjs -d src/database/data-source.ts migration:run",
     "prestart:dev": "npm run build -w @patrol/shared",
     "seed:manual": "ts-node -r tsconfig-paths/register src/database/seeds/manual-check.seed.ts",
+    "seed:scenarios": "ts-node -r tsconfig-paths/register src/database/seeds/scenarios.seed.ts",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "test": "jest",
