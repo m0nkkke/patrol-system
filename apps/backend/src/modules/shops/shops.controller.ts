@@ -6,6 +6,7 @@ import {
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -14,8 +15,9 @@ import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nest
 import {
   BindRoutePointNfcDto,
   CreateShopDto,
-  PaginationDto,
+  ListShopsQueryDto,
   StartRouteSetupDto,
+  UpdateShopDto,
 } from '@patrol/shared';
 
 import { ShopEntity } from './entities/shop.entity';
@@ -41,14 +43,24 @@ export class ShopsController {
   @Get()
   @Roles('admin', 'manager')
   @ApiOkResponse({ description: 'Active shops list' })
-  findAll(@Query() pagination: PaginationDto): ReturnType<ShopsService['findAll']> {
-    return this.shopsService.findAll(pagination);
+  findAll(@Query() query: ListShopsQueryDto): ReturnType<ShopsService['findAll']> {
+    return this.shopsService.findAll(query);
   }
 
   @Get(':id')
   @ApiOkResponse({ description: 'Shop details' })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ShopEntity> {
     return this.shopsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @Roles('admin')
+  @ApiOkResponse({ description: 'Shop updated' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateShopDto,
+  ): Promise<ShopEntity> {
+    return this.shopsService.update(id, dto);
   }
 
   @Post(':id/route-setup/start')

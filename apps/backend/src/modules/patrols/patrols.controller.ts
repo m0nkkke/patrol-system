@@ -16,7 +16,7 @@ import {
   CompletePatrolDto,
   CreatePatrolEventDto,
   FindPatrolIncidentsDto,
-  PaginationDto,
+  FindPatrolsDto,
   StartPatrolDto,
 } from '@patrol/shared';
 
@@ -48,10 +48,10 @@ export class PatrolsController {
   @ApiOkResponse({ description: 'Patrols by shop' })
   findByShop(
     @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Query() pagination: PaginationDto,
+    @Query() query: FindPatrolsDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<PatrolsService['findByShop']> {
-    return this.patrolsService.findByShop(shopId, pagination, actor);
+    return this.patrolsService.findByShop(shopId, query, actor);
   }
 
   @Get('incidents')
@@ -69,10 +69,10 @@ export class PatrolsController {
   @ApiOkResponse({ description: 'Patrol history by employee' })
   findByEmployee(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
-    @Query() pagination: PaginationDto,
+    @Query() query: FindPatrolsDto,
     @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<PatrolsService['findByEmployee']> {
-    return this.patrolsService.findByEmployee(employeeId, pagination, actor);
+    return this.patrolsService.findByEmployee(employeeId, query, actor);
   }
 
   @Get(':id')

@@ -10,6 +10,7 @@ import {
 import { Response } from 'express';
 
 import { DomainError } from '../errors/domain.error';
+import { DomainConflictError } from '../errors/domain-conflict.error';
 import { EntityNotFoundError } from '../errors/not-found.error';
 import { InvalidCredentialsError } from '../errors/invalid-credentials.error';
 
@@ -38,6 +39,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof InvalidCredentialsError || exception instanceof UnauthorizedException) {
       return createErrorResponse(HttpStatus.UNAUTHORIZED, 'UNAUTHORIZED', 'Unauthorized');
+    }
+
+    if (exception instanceof DomainConflictError) {
+      return createErrorResponse(HttpStatus.CONFLICT, exception.code, exception.message);
     }
 
     if (exception instanceof DomainError) {

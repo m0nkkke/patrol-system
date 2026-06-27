@@ -25,3 +25,10 @@
   "deviceId": "android-device-fingerprint"
 }
 ```
+
+## Релизная готовность mobile
+
+- `POST /api/v1/auth/refresh` принимает `{ refreshToken, deviceId }`, проверяет refresh-токен в JWT, Redis и таблице `refresh_tokens`, отзывает старый refresh-токен и возвращает новую пару `{ accessToken, refreshToken }`.
+- `POST /api/v1/auth/logout` принимает `{ refreshToken, deviceId }`, отзывает refresh-токен текущей сессии в PostgreSQL и удаляет активный hash из Redis.
+- `POST /api/v1/auth/login` защищен от перебора: после 5 неудачных попыток за 60 секунд для пары `ip + deviceId` backend возвращает доменную ошибку `AUTH_TOO_MANY_ATTEMPTS`.
+- При `401` mobile-клиент должен один раз вызвать `/auth/refresh`; если refresh вернул `401`, нужно очистить локальные токены и показать экран входа.

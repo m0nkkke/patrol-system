@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, Ip, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { LoginDto } from '@patrol/shared';
+import { LoginDto, LogoutDto, RefreshTokenDto } from '@patrol/shared';
 
 import { AuthService } from './auth.service';
 import { AuthTokens } from './auth.types';
@@ -15,5 +15,19 @@ export class AuthController {
   @ApiOkResponse({ description: 'JWT access and refresh tokens' })
   login(@Body() dto: LoginDto, @Ip() ipAddress: string): Promise<AuthTokens> {
     return this.authService.login(dto, ipAddress);
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'Refreshed JWT access and refresh tokens' })
+  refresh(@Body() dto: RefreshTokenDto, @Ip() ipAddress: string): Promise<AuthTokens> {
+    return this.authService.refresh(dto, ipAddress);
+  }
+
+  @Post('logout')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'Refresh token revoked' })
+  logout(@Body() dto: LogoutDto): Promise<{ success: true }> {
+    return this.authService.logout(dto);
   }
 }

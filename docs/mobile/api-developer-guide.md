@@ -78,7 +78,54 @@ Content-Type: application/json
 }
 ```
 
-Важно: backend уже выдаёт `refreshToken`, но отдельный refresh endpoint пока не используется мобильным контрактом. На MVP при `401` приложение должно просить пользователя войти снова.
+Важно: `accessToken` короткоживущий. При `401` приложение должно один раз вызвать `POST /api/v1/auth/refresh`; если refresh тоже вернул `401`, нужно очистить локальные токены и показать экран входа.
+
+## Refresh и logout
+
+```http
+POST /api/v1/auth/refresh
+Content-Type: application/json
+```
+
+```json
+{
+  "refreshToken": "<refresh-jwt>",
+  "deviceId": "android-device-01"
+}
+```
+
+Ответ:
+
+```json
+{
+  "accessToken": "<new-access-jwt>",
+  "refreshToken": "<new-refresh-jwt>"
+}
+```
+
+Refresh-токен ротируется: после успешного refresh нужно заменить локально оба токена. Старый refresh-токен больше не использовать.
+
+```http
+POST /api/v1/auth/logout
+Content-Type: application/json
+```
+
+```json
+{
+  "refreshToken": "<refresh-jwt>",
+  "deviceId": "android-device-01"
+}
+```
+
+Ответ:
+
+```json
+{
+  "success": true
+}
+```
+
+После logout очистить локальные `accessToken` и `refreshToken`.
 
 ## Создание пользователей в мобильной админке
 

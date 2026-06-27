@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AssignUserShopsDto, CreateUserDto, PaginationDto } from '@patrol/shared';
+import { AssignUserShopsDto, CreateUserDto, ListUsersQueryDto, UpdateUserDto } from '@patrol/shared';
 import { randomUUID } from 'crypto';
 
 import { formatAccessKey, generateAccessKey, hashAccessKey } from '../../common/auth/access-key';
@@ -63,13 +63,13 @@ export class UsersService {
     return toPublicUser(user);
   }
 
-  async findAll(pagination: PaginationDto): Promise<PaginatedUsers> {
-    const [items, total] = await this.usersRepository.findActive(pagination.page, pagination.limit);
+  async findAll(query: ListUsersQueryDto): Promise<PaginatedUsers> {
+    const [items, total] = await this.usersRepository.findMany(query);
 
     return {
       items: items.map(toPublicUser),
-      limit: pagination.limit,
-      page: pagination.page,
+      limit: query.limit,
+      page: query.page,
       total,
     };
   }
@@ -97,6 +97,42 @@ export class UsersService {
     const shops = await this.findShops(dto.shopIds);
     const primaryShopId = dto.primaryShopId ?? dto.shopIds[0];
     await this.usersRepository.assignShops(user.id, shops, primaryShopId);
+
+    return toPublicUser(await this.requireEntity(id));
+  }
+
+  async update(id: string, dto: UpdateUserDto): Promise<PublicUser> {
+    await this.requireEntity(id);
+
+    const shopIds =
+      dto.shopId === undefined && dto.shopIds === undefined
+        ? undefined
+        : normalizeShopIds(dto.shopId, dto.shopIds);
+    const shops = shopIds === undefined ? undefined : await this.findShops(shopIds);
+    const primaryShopId = dto.shopId ?? shopIds?.[0];
+
+    await this.usersRepository.update(id, {
+      fullName: dto.fullName,
+      isActive: dto.isActive,
+      role: dto.role,
+      shopId: shopIds === undefined ? undefined : primaryShopId ?? null,
+      shops,
+      username: dto.username,
+    });
+
+    return toPublicUser(await this.requireEntity(id));
+  }
+
+  async rotateAccessKey(id: string): Promise<PublicUser> {
+    await this.requireEntity(id);
+
+    const accessKey = generateAccessKey();
+    const accessKeyHash = hashAccessKey(accessKey);
+    await this.usersRepository.update(id, {
+      accessKey,
+      accessKeyHash,
+      passwordHash: accessKeyHash,
+    });
 
     return toPublicUser(await this.requireEntity(id));
   }

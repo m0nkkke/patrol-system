@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { UserRole } from '@patrol/shared';
+import { ListUsersQueryDto, UserRole } from '@patrol/shared';
 
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { UserEntity } from './entities/user.entity';
@@ -19,6 +19,18 @@ type CreateUserRecord = {
   username: string;
 };
 
+type UpdateUserRecord = {
+  accessKey?: string;
+  accessKeyHash?: string;
+  fullName?: string;
+  isActive?: boolean;
+  passwordHash?: string;
+  role?: UserRole;
+  shopId?: string | null;
+  shops?: ShopEntity[];
+  username?: string;
+};
+
 @Injectable()
 export class UsersRepository {
   constructor(
@@ -30,14 +42,30 @@ export class UsersRepository {
     return this.repo.save(this.repo.create(data));
   }
 
-  findActive(page: number, limit: number): Promise<[UserEntity[], number]> {
-    return this.repo.findAndCount({
-      order: { createdAt: 'DESC' },
-      relations: { shop: true, shops: true },
-      skip: (page - 1) * limit,
-      take: limit,
-      where: { isActive: true },
-    });
+  findMany(query: ListUsersQueryDto): Promise<[UserEntity[], number]> {
+    const builder = this.repo
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.shop', 'shop')
+      .leftJoinAndSelect('user.shops', 'shops')
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+
+    builder.andWhere('user.is_active = :isActive', { isActive: query.isActive ?? true });
+
+    if (query.search !== undefined && query.search.trim().length > 0) {
+      builder.andWhere('(user.full_name ILIKE :search OR user.username ILIKE :search)', {
+        search: `%${query.search.trim()}%`,
+      });
+    }
+
+    if (query.role !== undefined) {
+      builder.andWhere('user.role = :role', { role: query.role });
+    }
+
+    const [field, direction] = parseUserSort(query.sort);
+    builder.orderBy(`user.${field}`, direction);
+
+    return builder.getManyAndCount();
   }
 
   findById(id: string): Promise<UserEntity | null> {
@@ -59,4 +87,17 @@ export class UsersRepository {
   async assignShops(userId: string, shops: ShopEntity[], primaryShopId?: string): Promise<void> {
     await this.repo.save({ id: userId, shopId: primaryShopId ?? null, shops });
   }
+
+  async update(id: string, data: UpdateUserRecord): Promise<UserEntity> {
+    return this.repo.save({ id, ...data });
+  }
+}
+
+function parseUserSort(sort: ListUsersQueryDto['sort']): ['createdAt' | 'fullName' | 'role', 'ASC' | 'DESC'] {
+  if (sort === undefined) {
+    return ['createdAt', 'DESC'];
+  }
+
+  const [field, direction] = sort.split(':');
+  return [field as 'createdAt' | 'fullName' | 'role', direction === 'asc' ? 'ASC' : 'DESC'];
 }

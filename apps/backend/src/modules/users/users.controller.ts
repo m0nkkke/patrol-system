@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { AssignUserShopsDto, CreateUserDto, PaginationDto } from '@patrol/shared';
+import { AssignUserShopsDto, CreateUserDto, ListUsersQueryDto, UpdateUserDto } from '@patrol/shared';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -23,14 +23,30 @@ export class UsersController {
 
   @Get()
   @ApiOkResponse({ description: 'Active users list' })
-  findAll(@Query() pagination: PaginationDto): ReturnType<UsersService['findAll']> {
-    return this.usersService.findAll(pagination);
+  findAll(@Query() query: ListUsersQueryDto): ReturnType<UsersService['findAll']> {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')
   @ApiOkResponse({ description: 'User details' })
   findOne(@Param('id', ParseUUIDPipe) id: string): ReturnType<UsersService['findOne']> {
     return this.usersService.findOne(id);
+  }
+
+  @Patch(':id')
+  @ApiOkResponse({ description: 'User updated' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+  ): ReturnType<UsersService['update']> {
+    return this.usersService.update(id, dto);
+  }
+
+  @Post(':id/access-key/rotate')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'User access key rotated' })
+  rotateAccessKey(@Param('id', ParseUUIDPipe) id: string): ReturnType<UsersService['rotateAccessKey']> {
+    return this.usersService.rotateAccessKey(id);
   }
 
   @Put(':id/shops')

@@ -17,7 +17,7 @@ type PatrolPointsServiceMock = Pick<
 
 type ShopsRepositoryMock = Pick<
   ShopsRepository,
-  'create' | 'findActive' | 'findById' | 'updateRouteSetup'
+  'create' | 'findByExternalId' | 'findById' | 'findMany' | 'update' | 'updateRouteSetup'
 >;
 
 describe('ShopsService', () => {
@@ -35,8 +35,10 @@ describe('ShopsService', () => {
     };
     shopsRepository = {
       create: jest.fn(),
-      findActive: jest.fn(),
+      findByExternalId: jest.fn(),
       findById: jest.fn(),
+      findMany: jest.fn(),
+      update: jest.fn(),
       updateRouteSetup: jest.fn(),
     };
     service = new ShopsService(
@@ -79,6 +81,31 @@ describe('ShopsService', () => {
     await expect(
       service.bindRoutePointNfc('shop-id', 1, { uid: '04a1b2c3d4e5f6' }),
     ).rejects.toBeInstanceOf(DomainValidationError);
+  });
+
+  it('rejects duplicate external ID on shop creation', async () => {
+    shopsRepository.findByExternalId.mockResolvedValue(createShop({ externalId: '00234343' }));
+
+    await expect(
+      service.create({ externalId: '00234343', name: 'Магазин 2' }),
+    ).rejects.toMatchObject({ code: 'SHOP_EXTERNAL_ID_TAKEN' });
+    expect(shopsRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('updates shop fields after validating external ID', async () => {
+    shopsRepository.findById
+      .mockResolvedValueOnce(createShop())
+      .mockResolvedValueOnce(createShop({ name: 'Магазин 2' }));
+    shopsRepository.findByExternalId.mockResolvedValue(null);
+    shopsRepository.update.mockResolvedValue(createShop({ name: 'Магазин 2' }));
+
+    const result = await service.update('shop-id', { externalId: '00234343', name: 'Магазин 2' });
+
+    expect(shopsRepository.update).toHaveBeenCalledWith(
+      'shop-id',
+      expect.objectContaining({ externalId: '00234343', name: 'Магазин 2' }),
+    );
+    expect(result.name).toBe('Магазин 2');
   });
 
   it('resets route setup and clears route counters', async () => {

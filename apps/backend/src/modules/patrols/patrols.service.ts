@@ -4,7 +4,7 @@ import {
   CompletePatrolDto,
   CreatePatrolEventDto,
   FindPatrolIncidentsDto,
-  PaginationDto,
+  FindPatrolsDto,
   PatrolIncidentType,
   RouteStatus,
   StartPatrolDto,
@@ -91,6 +91,20 @@ export class PatrolsService {
           : new Date(dto.dueAt)
         : await this.patrolSchedulesService.resolveDueAt(dto.scheduleId, dto.shopId);
 
+    if (dto.scheduleId !== undefined && dueAt !== undefined) {
+      const existingScheduledPatrol = await this.patrolsRepository.findExistingScheduledPatrol(
+        dto.scheduleId,
+        dueAt,
+      );
+
+      if (existingScheduledPatrol !== null) {
+        throw new DomainValidationError(
+          'PATROL_SCHEDULE_ALREADY_STARTED',
+          'Patrol for this schedule has already been started',
+        );
+      }
+    }
+
     return this.patrolsRepository.createPatrol({
       dueAt,
       employeeId: dto.employeeId,
@@ -105,7 +119,7 @@ export class PatrolsService {
 
   async findByShop(
     shopId: string,
-    pagination: PaginationDto,
+    query: FindPatrolsDto,
     actor?: AuthenticatedUser,
   ): Promise<PaginatedPatrols> {
     if (actor !== undefined) {
@@ -114,21 +128,20 @@ export class PatrolsService {
 
     const [items, total] = await this.patrolsRepository.findByShop(
       shopId,
-      pagination.page,
-      pagination.limit,
+      query,
     );
 
     return {
       items,
-      limit: pagination.limit,
-      page: pagination.page,
+      limit: query.limit,
+      page: query.page,
       total,
     };
   }
 
   async findByEmployee(
     employeeId: string,
-    pagination: PaginationDto,
+    query: FindPatrolsDto,
     actor: AuthenticatedUser,
   ): Promise<PaginatedPatrols> {
     await this.usersService.findOne(employeeId);
@@ -145,15 +158,14 @@ export class PatrolsService {
 
     const [items, total] = await this.patrolsRepository.findByEmployee(
       employeeId,
-      pagination.page,
-      pagination.limit,
+      query,
       actor.role === 'manager' ? managerShopIds : undefined,
     );
 
     return {
       items,
-      limit: pagination.limit,
-      page: pagination.page,
+      limit: query.limit,
+      page: query.page,
       total,
     };
   }
@@ -188,8 +200,10 @@ export class PatrolsService {
       from: query.from === undefined ? undefined : new Date(query.from),
       limit: query.limit,
       page: query.page,
+      search: query.search,
       shopId: query.shopId,
       shopIds: managerIncidentShopIds,
+      sort: query.sort,
       to: query.to === undefined ? undefined : new Date(query.to),
       type: query.type,
     });

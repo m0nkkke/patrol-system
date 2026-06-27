@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { PatrolIncidentType, PatrolStatus } from '@patrol/shared';
-import { In, LessThan, Repository } from 'typeorm';
+import { FindPatrolsDto, PatrolIncidentType, PatrolStatus } from '@patrol/shared';
+import { In, LessThan, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
@@ -67,8 +67,10 @@ type FindPatrolIncidentsQuery = {
   from?: Date;
   limit: number;
   page: number;
+  search?: string;
   shopId?: string;
   shopIds?: string[];
+  sort?: 'createdAt:desc' | 'createdAt:asc' | 'type:asc' | 'type:desc';
   to?: Date;
   type?: PatrolIncidentType;
 };
@@ -122,29 +124,26 @@ export class PatrolsRepository {
     });
   }
 
-  findByShop(shopId: string, page: number, limit: number): Promise<[PatrolEntity[], number]> {
-    return this.patrols.findAndCount({
-      order: { createdAt: 'DESC' },
-      relations: { employee: true },
-      skip: (page - 1) * limit,
-      take: limit,
-      where: { shopId },
-    });
+  findByShop(shopId: string, query: FindPatrolsDto): Promise<[PatrolEntity[], number]> {
+    return this.createPatrolListBuilder(query)
+      .andWhere('patrol.shop_id = :shopId', { shopId })
+      .getManyAndCount();
   }
 
   findByEmployee(
     employeeId: string,
-    page: number,
-    limit: number,
+    query: FindPatrolsDto,
     shopIds?: string[],
   ): Promise<[PatrolEntity[], number]> {
-    return this.patrols.findAndCount({
-      order: { createdAt: 'DESC' },
-      relations: { employee: true, schedule: true, shop: true },
-      skip: (page - 1) * limit,
-      take: limit,
-      where: { employeeId, ...(shopIds === undefined ? {} : { shopId: In(shopIds) }) },
+    const builder = this.createPatrolListBuilder(query).andWhere('patrol.employee_id = :employeeId', {
+      employeeId,
     });
+
+    if (shopIds !== undefined) {
+      builder.andWhere('patrol.shop_id IN (:...shopIds)', { shopIds });
+    }
+
+    return builder.getManyAndCount();
   }
 
   findActiveByEmployee(employeeId: string): Promise<PatrolEntity | null> {
@@ -153,6 +152,18 @@ export class PatrolsRepository {
       relations: { employee: true, events: true, schedule: true, shop: true },
       where: { employeeId, status: In(['in_progress', 'overdue']) },
     });
+  }
+
+  findExistingScheduledPatrol(
+    scheduleId: string,
+    dueAt: Date,
+  ): Promise<PatrolEntity | null> {
+    return this.patrols
+      .createQueryBuilder('patrol')
+      .where('patrol.schedule_id = :scheduleId', { scheduleId })
+      .andWhere('patrol.due_at = :dueAt', { dueAt })
+      .andWhere('patrol.status != :cancelledStatus', { cancelledStatus: 'cancelled' })
+      .getOne();
   }
 
   findIncidents(query: FindPatrolIncidentsQuery): Promise<[PatrolIncidentEntity[], number]> {
@@ -164,9 +175,11 @@ export class PatrolsRepository {
       .leftJoinAndSelect('incident.toPatrolPoint', 'toPoint')
       .leftJoinAndSelect('patrol.employee', 'employee')
       .leftJoinAndSelect('patrol.shop', 'shop')
-      .orderBy('incident.createdAt', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
+
+    const [incidentSortField, incidentSortDirection] = parseIncidentSort(query.sort);
+    builder.orderBy(`incident.${incidentSortField}`, incidentSortDirection);
 
     if (query.shopId !== undefined) {
       builder.andWhere('incident.shop_id = :shopId', { shopId: query.shopId });
@@ -176,6 +189,13 @@ export class PatrolsRepository {
 
     if (query.employeeId !== undefined) {
       builder.andWhere('patrol.employee_id = :employeeId', { employeeId: query.employeeId });
+    }
+
+    if (query.search !== undefined && query.search.trim().length > 0) {
+      builder.andWhere(
+        '(incident.message ILIKE :search OR employee.full_name ILIKE :search OR shop.name ILIKE :search)',
+        { search: `%${query.search.trim()}%` },
+      );
     }
 
     if (query.type !== undefined) {
@@ -191,6 +211,33 @@ export class PatrolsRepository {
     }
 
     return builder.getManyAndCount();
+  }
+
+  private createPatrolListBuilder(query: FindPatrolsDto): SelectQueryBuilder<PatrolEntity> {
+    const builder = this.patrols
+      .createQueryBuilder('patrol')
+      .leftJoinAndSelect('patrol.employee', 'employee')
+      .leftJoinAndSelect('patrol.schedule', 'schedule')
+      .leftJoinAndSelect('patrol.shop', 'shop')
+      .skip((query.page - 1) * query.limit)
+      .take(query.limit);
+
+    if (query.status !== undefined) {
+      builder.andWhere('patrol.status = :status', { status: query.status });
+    }
+
+    if (query.from !== undefined) {
+      builder.andWhere('patrol.created_at >= :from', { from: new Date(query.from) });
+    }
+
+    if (query.to !== undefined) {
+      builder.andWhere('patrol.created_at <= :to', { to: new Date(query.to) });
+    }
+
+    const [field, direction] = parsePatrolSort(query.sort);
+    builder.orderBy(`patrol.${field}`, direction);
+
+    return builder;
   }
 
   findPreviousEventByRouteOrder(
@@ -267,4 +314,24 @@ export class PatrolsRepository {
 
     return result.affected ?? 0;
   }
+}
+
+function parsePatrolSort(sort: FindPatrolsDto['sort']): ['createdAt' | 'startedAt' | 'status', 'ASC' | 'DESC'] {
+  if (sort === undefined) {
+    return ['createdAt', 'DESC'];
+  }
+
+  const [field, direction] = sort.split(':');
+  return [field as 'createdAt' | 'startedAt' | 'status', direction === 'asc' ? 'ASC' : 'DESC'];
+}
+
+function parseIncidentSort(
+  sort: FindPatrolIncidentsQuery['sort'],
+): ['createdAt' | 'type', 'ASC' | 'DESC'] {
+  if (sort === undefined) {
+    return ['createdAt', 'DESC'];
+  }
+
+  const [field, direction] = sort.split(':');
+  return [field as 'createdAt' | 'type', direction === 'asc' ? 'ASC' : 'DESC'];
 }

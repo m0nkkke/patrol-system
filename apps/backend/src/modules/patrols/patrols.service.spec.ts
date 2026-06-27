@@ -26,6 +26,7 @@ type PatrolsRepositoryMock = Pick<
   | 'findEventsByPatrolOrdered'
   | 'findEventByClientLocalId'
   | 'findEventByPatrolAndPoint'
+  | 'findExistingScheduledPatrol'
   | 'findIncidents'
   | 'findPreviousEventByRouteOrder'
   | 'findRouteInterval'
@@ -75,6 +76,7 @@ describe('PatrolsService', () => {
       findEventsByPatrolOrdered: jest.fn(),
       findEventByClientLocalId: jest.fn(),
       findEventByPatrolAndPoint: jest.fn(),
+      findExistingScheduledPatrol: jest.fn(),
       findIncidents: jest.fn(),
       findPreviousEventByRouteOrder: jest.fn(),
       findRouteInterval: jest.fn(),
@@ -100,6 +102,7 @@ describe('PatrolsService', () => {
     );
     patrolsRepository.findEventByClientLocalId.mockResolvedValue(null);
     patrolsRepository.findEventByPatrolAndPoint.mockResolvedValue(null);
+    patrolsRepository.findExistingScheduledPatrol.mockResolvedValue(null);
   });
 
   it('creates long interval incident when scan is slower than route baseline', async () => {
@@ -174,7 +177,9 @@ describe('PatrolsService', () => {
       from: new Date('2026-06-19T00:00:00.000Z'),
       limit: 10,
       page: 2,
+      search: undefined,
       shopId: '22222222-2222-4222-8222-222222222222',
+      sort: undefined,
       to: new Date('2026-06-19T23:59:59.000Z'),
       type: PatrolIncidentType.LONG_INTERVAL,
     });
@@ -207,6 +212,25 @@ describe('PatrolsService', () => {
     );
   });
 
+  it('rejects duplicate patrol for the same schedule dueAt', async () => {
+    const dueAt = new Date('2026-06-22T04:00:00.000Z');
+    shopsService.findOne.mockResolvedValue({ routeStatus: 'ready' } as Awaited<
+      ReturnType<ShopsService['findOne']>
+    >);
+    patrolPointsService.countActiveByShop.mockResolvedValue(3);
+    patrolSchedulesService.resolveDueAt.mockResolvedValue(dueAt);
+    patrolsRepository.findExistingScheduledPatrol.mockResolvedValue(createPatrol({ dueAt }));
+
+    await expect(
+      service.start({
+        employeeId: 'employee-id',
+        scheduleId: 'schedule-id',
+        shopId: 'shop-id',
+      }),
+    ).rejects.toMatchObject({ code: 'PATROL_SCHEDULE_ALREADY_STARTED' });
+    expect(patrolsRepository.createPatrol).not.toHaveBeenCalled();
+  });
+
   it('limits employee history to manager shop', async () => {
     usersService.findOne.mockResolvedValue({ id: 'employee-id' } as Awaited<
       ReturnType<UsersService['findOne']>
@@ -227,8 +251,7 @@ describe('PatrolsService', () => {
 
     expect(patrolsRepository.findByEmployee).toHaveBeenCalledWith(
       'employee-id',
-      1,
-      20,
+      { limit: 20, page: 1 },
       ['shop-id'],
     );
     expect(result.total).toBe(1);
@@ -271,8 +294,10 @@ describe('PatrolsService', () => {
       from: undefined,
       limit: 20,
       page: 1,
+      search: undefined,
       shopId: undefined,
       shopIds: ['shop-1', 'shop-2'],
+      sort: undefined,
       to: undefined,
       type: undefined,
     });

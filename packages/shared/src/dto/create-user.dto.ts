@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   ArrayUnique,
   IsArray,
@@ -12,6 +13,9 @@ import {
 } from 'class-validator';
 
 import { USER_ROLES, UserRole } from '../enums/user-role';
+import { PaginationDto } from './pagination.dto';
+
+const USER_SORT_FIELDS = ['createdAt:desc', 'createdAt:asc', 'fullName:asc', 'fullName:desc', 'role:asc', 'role:desc'] as const;
 
 export class CreateUserDto {
   @ApiProperty({ example: 'Иван Петров' })
@@ -60,4 +64,67 @@ export class AssignUserShopsDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   shopIds: string[] = [];
+}
+
+export class UpdateUserDto {
+  @ApiPropertyOptional({ example: 'Иван Петров' })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  fullName?: string;
+
+  @ApiPropertyOptional({ example: 'ivan.petrov' })
+  @IsOptional()
+  @IsString()
+  @MinLength(3)
+  @MaxLength(100)
+  username?: string;
+
+  @ApiPropertyOptional({ enum: USER_ROLES })
+  @IsOptional()
+  @IsIn(USER_ROLES)
+  role?: UserRole;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  shopId?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  shopIds?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class ListUsersQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ description: 'Search by full name or username' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
+
+  @ApiPropertyOptional({ enum: USER_ROLES })
+  @IsOptional()
+  @IsIn(USER_ROLES)
+  role?: UserRole;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ enum: USER_SORT_FIELDS })
+  @IsOptional()
+  @IsIn(USER_SORT_FIELDS)
+  sort?: (typeof USER_SORT_FIELDS)[number];
 }

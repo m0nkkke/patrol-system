@@ -36,6 +36,13 @@
 }
 ```
 
+## Релизная готовность mobile
+
+- `GET /api/v1/users` поддерживает `page`, `limit`, `search`, `role`, `isActive`, `sort`. Поиск идет по ФИО и `username`; сортировки: `createdAt:desc`, `createdAt:asc`, `fullName:asc`, `fullName:desc`, `role:asc`, `role:desc`.
+- `PATCH /api/v1/users/:id` обновляет ФИО, `username`, роль, активность и назначения магазинов. Если переданы `shopId` или `shopIds`, backend заново валидирует магазины и заменяет связи.
+- `POST /api/v1/users/:id/access-key/rotate` перевыпускает постоянный ключ доступа пользователя и возвращает новый `accessKey` в ответе. Старый ключ после этого больше не подходит для входа.
+- Все endpoints модуля доступны только роли `admin`.
+
 Пример замены назначений:
 
 ```http

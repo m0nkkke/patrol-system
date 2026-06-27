@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import {
   BindRoutePointNfcDto,
   CreateShopDto,
-  PaginationDto,
+  ListShopsQueryDto,
   RouteStatus,
   StartRouteSetupDto,
+  UpdateShopDto,
 } from '@patrol/shared';
 
+import { DomainConflictError } from '../../common/errors/domain-conflict.error';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
@@ -37,7 +39,9 @@ export class ShopsService {
     private readonly shopsRepository: ShopsRepository,
   ) {}
 
-  create(dto: CreateShopDto): Promise<ShopEntity> {
+  async create(dto: CreateShopDto): Promise<ShopEntity> {
+    await this.assertExternalIdAvailable(dto.externalId);
+
     return this.shopsRepository.create({
       address: dto.address,
       externalId: dto.externalId,
@@ -48,13 +52,13 @@ export class ShopsService {
     });
   }
 
-  async findAll(pagination: PaginationDto): Promise<PaginatedShops> {
-    const [items, total] = await this.shopsRepository.findActive(pagination.page, pagination.limit);
+  async findAll(query: ListShopsQueryDto): Promise<PaginatedShops> {
+    const [items, total] = await this.shopsRepository.findMany(query);
 
     return {
       items,
-      limit: pagination.limit,
-      page: pagination.page,
+      limit: query.limit,
+      page: query.page,
       total,
     };
   }
@@ -67,6 +71,21 @@ export class ShopsService {
     }
 
     return shop;
+  }
+
+  async update(id: string, dto: UpdateShopDto): Promise<ShopEntity> {
+    await this.findOne(id);
+    await this.assertExternalIdAvailable(dto.externalId, id);
+    await this.shopsRepository.update(id, {
+      address: dto.address,
+      externalId: dto.externalId,
+      isActive: dto.isActive,
+      name: dto.name,
+      regionId: dto.regionId,
+      timezone: dto.timezone,
+    });
+
+    return this.findOne(id);
   }
 
   async startRouteSetup(shopId: string, dto: StartRouteSetupDto): Promise<RouteSetupState> {
@@ -178,5 +197,20 @@ export class ShopsService {
     });
 
     return this.getRouteSetup(shopId);
+  }
+
+  private async assertExternalIdAvailable(externalId: string | undefined, currentShopId?: string): Promise<void> {
+    if (externalId === undefined) {
+      return;
+    }
+
+    const existing = await this.shopsRepository.findByExternalId(externalId);
+
+    if (existing !== null && existing.id !== currentShopId) {
+      throw new DomainConflictError(
+        'SHOP_EXTERNAL_ID_TAKEN',
+        'Shop external ID is already taken',
+      );
+    }
   }
 }

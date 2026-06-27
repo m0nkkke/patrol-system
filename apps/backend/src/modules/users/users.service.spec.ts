@@ -7,7 +7,7 @@ import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
-type UsersRepositoryMock = Pick<UsersRepository, 'assignShops' | 'create' | 'findById'>;
+type UsersRepositoryMock = Pick<UsersRepository, 'assignShops' | 'create' | 'findById' | 'update'>;
 
 describe('UsersService', () => {
   let shopsService: jest.Mocked<ShopsServiceMock>;
@@ -22,6 +22,7 @@ describe('UsersService', () => {
       assignShops: jest.fn(),
       create: jest.fn(),
       findById: jest.fn(),
+      update: jest.fn(),
     };
 
     service = new UsersService(
@@ -115,5 +116,58 @@ describe('UsersService', () => {
       secondShop.id,
     );
     expect(result.shopId).toBe(secondShop.id);
+  });
+
+  it('updates user lifecycle fields', async () => {
+    const user = {
+      createdAt: new Date(),
+      fullName: 'Mobile Employee',
+      id: 'user-id',
+      isActive: true,
+      passwordHash: 'hash',
+      role: 'employee',
+      updatedAt: new Date(),
+      username: 'mobile.employee',
+    } as UserEntity;
+    usersRepository.findById
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, fullName: 'Updated Employee', isActive: false });
+
+    const result = await service.update('user-id', {
+      fullName: 'Updated Employee',
+      isActive: false,
+    });
+
+    expect(usersRepository.update).toHaveBeenCalledWith(
+      'user-id',
+      expect.objectContaining({ fullName: 'Updated Employee', isActive: false }),
+    );
+    expect(result.fullName).toBe('Updated Employee');
+    expect(result.isActive).toBe(false);
+  });
+
+  it('rotates user access key', async () => {
+    const user = {
+      createdAt: new Date(),
+      fullName: 'Mobile Employee',
+      id: 'user-id',
+      isActive: true,
+      passwordHash: 'hash',
+      role: 'employee',
+      updatedAt: new Date(),
+      username: 'mobile.employee',
+    } as UserEntity;
+    usersRepository.findById
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({ ...user, accessKey: 'MEMP-0000-0001' });
+
+    const result = await service.rotateAccessKey('user-id');
+
+    const updateCall = usersRepository.update.mock.calls[0];
+    expect(updateCall?.[0]).toBe('user-id');
+    expect(typeof updateCall?.[1].accessKey).toBe('string');
+    expect(typeof updateCall?.[1].accessKeyHash).toBe('string');
+    expect(typeof updateCall?.[1].passwordHash).toBe('string');
+    expect(typeof result.accessKey).toBe('string');
   });
 });

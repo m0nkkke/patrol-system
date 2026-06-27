@@ -27,3 +27,5 @@ export class RefreshTokenDto {
   @MaxLength(200)
   deviceId: string = '';
 }
+
+export class LogoutDto extends RefreshTokenDto {}
