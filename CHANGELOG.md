@@ -38,3 +38,4 @@
 - Добавлены релизные backend-контракты для mobile: `POST /auth/refresh`, `POST /auth/logout`, Redis rate-limit для `/auth/login`, серверный поиск/фильтры/сортировка в списках магазинов, пользователей, обходов и инцидентов.
 - Добавлены операции эксплуатации сети: `PATCH /api/v1/users/:id`, `POST /api/v1/users/:id/access-key/rotate`, `PATCH /api/v1/shops/:id`; дубль `externalId` магазина теперь возвращает `409 SHOP_EXTERNAL_ID_TAKEN`.
 - Для плановых обходов запрещен дубль по тому же `scheduleId` и рассчитанному `dueAt`, если предыдущий обход не был отменен.
+- Добавлен модуль `notifications` и endpoint `POST /api/v1/mobile/devices/push-token` для регистрации Expo push-токенов мобильных устройств.

@@ -1,5 +1,6 @@
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolSchedulesService } from '../patrols/patrol-schedules.service';
 import { PatrolsService } from '../patrols/patrols.service';
@@ -7,6 +8,7 @@ import { ShopsService } from '../shops/shops.service';
 import { MobileService } from './mobile.service';
 
 type PatrolPointsServiceMock = Pick<PatrolPointsService, 'findByShop'>;
+type NotificationsServiceMock = Pick<NotificationsService, 'registerDevicePushToken'>;
 type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'findAvailableByShop'>;
 type PatrolsServiceMock = Pick<
   PatrolsService,
@@ -24,6 +26,7 @@ type ShopsServiceMock = Pick<
 >;
 
 describe('MobileService', () => {
+  let notificationsService: jest.Mocked<NotificationsServiceMock>;
   let patrolPointsService: jest.Mocked<PatrolPointsServiceMock>;
   let patrolSchedulesService: jest.Mocked<PatrolSchedulesServiceMock>;
   let patrolsService: jest.Mocked<PatrolsServiceMock>;
@@ -31,6 +34,9 @@ describe('MobileService', () => {
   let shopsService: jest.Mocked<ShopsServiceMock>;
 
   beforeEach(() => {
+    notificationsService = {
+      registerDevicePushToken: jest.fn(),
+    };
     patrolPointsService = {
       findByShop: jest.fn(),
     };
@@ -53,6 +59,7 @@ describe('MobileService', () => {
       startRouteSetup: jest.fn(),
     };
     service = new MobileService(
+      notificationsService as unknown as NotificationsService,
       patrolPointsService as unknown as PatrolPointsService,
       patrolSchedulesService as unknown as PatrolSchedulesService,
       patrolsService as unknown as PatrolsService,
@@ -65,6 +72,29 @@ describe('MobileService', () => {
 
     expect(profile.capabilities.canRegisterRoutes).toBe(true);
     expect(profile.capabilities.canRunPatrols).toBe(false);
+  });
+
+  it('registers current device push token', async () => {
+    notificationsService.registerDevicePushToken.mockResolvedValue({
+      deviceId: 'device-1',
+      id: 'token-id',
+      isActive: true,
+      pushToken: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+      userId: 'user-id',
+    } as Awaited<ReturnType<NotificationsService['registerDevicePushToken']>>);
+
+    const result = await service.registerDevicePushToken(createUser({ id: 'user-id' }), {
+      deviceId: 'device-1',
+      platform: 'android',
+      pushToken: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+    });
+
+    expect(notificationsService.registerDevicePushToken).toHaveBeenCalledWith('user-id', {
+      deviceId: 'device-1',
+      platform: 'android',
+      pushToken: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+    });
+    expect(result.isActive).toBe(true);
   });
 
   it('binds scanned NFC UID to next route point', async () => {

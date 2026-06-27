@@ -25,6 +25,7 @@ type MobileServiceMock = Pick<
   | 'getProfile'
   | 'getRoute'
   | 'recordPatrolEvent'
+  | 'registerDevicePushToken'
   | 'scanNextRoutePoint'
   | 'startPatrol'
   | 'startRouteSetup'
@@ -55,6 +56,7 @@ describe('Mobile API contract', () => {
       getProfile: jest.fn(),
       getRoute: jest.fn(),
       recordPatrolEvent: jest.fn(),
+      registerDevicePushToken: jest.fn(),
       scanNextRoutePoint: jest.fn(),
       startPatrol: jest.fn(),
       startRouteSetup: jest.fn(),
@@ -163,6 +165,13 @@ describe('Mobile API contract', () => {
         },
       ],
     });
+    mobileService.registerDevicePushToken.mockResolvedValue({
+      deviceId: 'android-device-01',
+      id: '77777777-7777-4777-8777-777777777777',
+      isActive: true,
+      pushToken: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+      userId: employeeUser.id,
+    } as Awaited<ReturnType<MobileService['registerDevicePushToken']>>);
 
     await request(app.getHttpServer())
       .get('/api/v1/mobile/route')
@@ -220,6 +229,22 @@ describe('Mobile API contract', () => {
           ]);
         },
       );
+
+    await request(app.getHttpServer())
+      .post('/api/v1/mobile/devices/push-token')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        deviceId: 'android-device-01',
+        platform: 'android',
+        pushToken: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]',
+      })
+      .expect(200)
+      .expect((response) => {
+        const body = response.body as { isActive?: boolean; pushToken?: string };
+
+        expect(body.isActive).toBe(true);
+        expect(body.pushToken).toBe('ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]');
+      });
   });
 
   it('allows admin to register route points but forbids patrol execution', async () => {

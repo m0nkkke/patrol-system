@@ -5,6 +5,7 @@ export * from './dto/create-patrol-event.dto';
 export * from './dto/create-patrol-point.dto';
 export * from './dto/create-shop.dto';
 export * from './dto/create-user.dto';
+export * from './dto/device-push-token.dto';
 export * from './dto/find-patrol-incidents.dto';
 export * from './dto/finish-patrol.dto';
 export * from './dto/pagination.dto';

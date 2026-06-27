@@ -14,6 +14,7 @@
 - [Seed-данные](guides/seed-data.md)
 - [Auth](modules/auth.md)
 - [Mobile API backend-модуль](modules/mobile-api.md)
+- [Notifications](modules/notifications.md)
 - [Patrols](modules/patrols.md)
 - [Patrol Schedules](modules/patrol-schedules.md)
 - [Patrol Points](modules/patrol-points.md)

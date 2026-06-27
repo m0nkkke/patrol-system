@@ -148,6 +148,26 @@ COMMENT ON TABLE refresh_tokens IS 'Аудит refresh-токенов. Акту�
 CREATE INDEX idx_refresh_tokens_user_id    ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 
+-- Push-токены мобильных устройств для уведомлений
+CREATE TABLE device_push_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_id   VARCHAR(200) NOT NULL,
+  push_token  VARCHAR(200) NOT NULL,
+  platform    VARCHAR(20),
+  app_version VARCHAR(50),
+  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT uq_device_push_tokens_token UNIQUE (push_token)
+);
+
+COMMENT ON TABLE device_push_tokens IS 'Expo push-токены мобильных устройств пользователей';
+
+CREATE INDEX idx_device_push_tokens_user_id   ON device_push_tokens(user_id);
+CREATE INDEX idx_device_push_tokens_device_id ON device_push_tokens(device_id);
+
 -- ============================================================
 -- 3. NFC-МЕТКИ И КОНТРОЛЬНЫЕ ТОЧКИ
 -- ============================================================

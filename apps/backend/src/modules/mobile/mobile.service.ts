@@ -4,6 +4,7 @@ import {
   CancelPatrolDto,
   CompletePatrolDto,
   CreatePatrolEventDto,
+  RegisterDevicePushTokenDto,
   StartRouteSetupDto,
   StartMobilePatrolDto,
   SyncPatrolEventsDto,
@@ -12,6 +13,8 @@ import {
 
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
+import { DevicePushTokenEntity } from '../notifications/entities/device-push-token.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolEventEntity } from '../patrols/entities/patrol-event.entity';
 import { PatrolEntity } from '../patrols/entities/patrol.entity';
@@ -38,6 +41,7 @@ type SyncPatrolEventsResult = SyncPatrolEventsResultDto;
 @Injectable()
 export class MobileService {
   constructor(
+    private readonly notificationsService: NotificationsService,
     private readonly patrolPointsService: PatrolPointsService,
     private readonly patrolSchedulesService: PatrolSchedulesService,
     private readonly patrolsService: PatrolsService,
@@ -52,6 +56,13 @@ export class MobileService {
       },
       user,
     };
+  }
+
+  registerDevicePushToken(
+    user: AuthenticatedUser,
+    dto: RegisterDevicePushTokenDto,
+  ): Promise<DevicePushTokenEntity> {
+    return this.notificationsService.registerDevicePushToken(user.id, dto);
   }
 
   startRouteSetup(shopId: string, dto: StartRouteSetupDto): ReturnType<ShopsService['startRouteSetup']> {

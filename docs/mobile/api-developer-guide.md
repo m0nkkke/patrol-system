@@ -477,6 +477,33 @@ Content-Type: application/json
 10. Фоновый sync worker.
 11. Обработка `created`, `duplicate`, `late_sync`, `point_deactivated`.
 
+## Push-уведомления
+
+После логина и получения Expo push-токена от приложения зарегистрируйте устройство на backend:
+
+```http
+POST /api/v1/mobile/devices/push-token
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "deviceId": "android-device-01",
+  "pushToken": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+  "platform": "android",
+  "appVersion": "1.0.0"
+}
+```
+
+Вызывать endpoint нужно:
+
+- после успешного логина;
+- при обновлении Expo push-токена на устройстве;
+- после переустановки приложения, если изменился `deviceId` или token.
+
+Backend сохраняет token идемпотентно. Если token уже был привязан к другому пользователю или устройству, запись переносится на текущего пользователя.
+
 ## Smoke-проверка backend-контракта
 
 Backend покрывает mobile API smoke-тестом:

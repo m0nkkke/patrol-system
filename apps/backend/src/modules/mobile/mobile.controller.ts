@@ -16,6 +16,8 @@ import {
   CancelPatrolDto,
   CompletePatrolDto,
   CreatePatrolEventDto,
+  DevicePushTokenResponseDto,
+  RegisterDevicePushTokenDto,
   StartRouteSetupDto,
   StartMobilePatrolDto,
   SyncPatrolEventsDto,
@@ -40,6 +42,19 @@ export class MobileController {
   @ApiOkResponse({ description: 'Current mobile user profile' })
   me(@CurrentUser() user: AuthenticatedUser): ReturnType<MobileService['getProfile']> {
     return this.mobileService.getProfile(user);
+  }
+
+  @Post('devices/push-token')
+  @HttpCode(200)
+  @ApiOkResponse({
+    description: 'Current device push token registered',
+    type: DevicePushTokenResponseDto,
+  })
+  registerDevicePushToken(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RegisterDevicePushTokenDto,
+  ): ReturnType<MobileService['registerDevicePushToken']> {
+    return this.mobileService.registerDevicePushToken(user, dto);
   }
 
   @Post('shops/:shopId/route-setup/start')
