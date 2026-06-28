@@ -7,6 +7,7 @@ import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { ShopsService } from '../shops/shops.service';
 import { PatrolScheduleEntity } from './entities/patrol-schedule.entity';
 import { PatrolSchedulesRepository } from './patrol-schedules.repository';
+import { PatrolsRepository } from './patrols.repository';
 
 type AvailablePatrolSchedule = PatrolScheduleEntity & { dueAt: Date };
 
@@ -25,6 +26,7 @@ export class PatrolSchedulesService {
   constructor(
     private readonly schedulesRepository: PatrolSchedulesRepository,
     private readonly shopsService: ShopsService,
+    private readonly patrolsRepository: PatrolsRepository,
   ) {}
 
   async create(
@@ -86,10 +88,21 @@ export class PatrolSchedulesService {
       formatTime(local),
     );
 
-    return schedules.map((schedule) => ({
-      ...schedule,
-      dueAt: localDateTimeToUtc(local, schedule.endTime, shop.timezone),
-    }));
+    const available: AvailablePatrolSchedule[] = [];
+
+    for (const schedule of schedules) {
+      const dueAt = localDateTimeToUtc(local, schedule.endTime, shop.timezone);
+      const existingPatrol = await this.patrolsRepository.findExistingScheduledPatrol(
+        schedule.id,
+        dueAt,
+      );
+
+      if (existingPatrol === null) {
+        available.push({ ...schedule, dueAt });
+      }
+    }
+
+    return available;
   }
 
   async resolveDueAt(

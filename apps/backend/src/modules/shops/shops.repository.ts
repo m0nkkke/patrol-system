@@ -47,7 +47,9 @@ export class ShopsRepository {
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 
-    builder.andWhere('shop.is_active = :isActive', { isActive: query.isActive ?? true });
+    if (query.isActive !== undefined) {
+      builder.andWhere('shop.is_active = :isActive', { isActive: query.isActive });
+    }
 
     if (query.search !== undefined && query.search.trim().length > 0) {
       builder.andWhere(
@@ -87,11 +89,16 @@ export class ShopsRepository {
   }
 }
 
-function parseShopSort(sort: ListShopsQueryDto['sort']): ['createdAt' | 'name' | 'routeStatus', 'ASC' | 'DESC'] {
+function parseShopSort(
+  sort: ListShopsQueryDto['sort'],
+): ['createdAt' | 'isActive' | 'name' | 'routeStatus', 'ASC' | 'DESC'] {
   if (sort === undefined) {
     return ['createdAt', 'DESC'];
   }
 
   const [field, direction] = sort.split(':');
-  return [field as 'createdAt' | 'name' | 'routeStatus', direction === 'asc' ? 'ASC' : 'DESC'];
+  return [
+    field as 'createdAt' | 'isActive' | 'name' | 'routeStatus',
+    direction === 'asc' ? 'ASC' : 'DESC',
+  ];
 }

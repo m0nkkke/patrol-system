@@ -50,7 +50,9 @@ export class UsersRepository {
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 
-    builder.andWhere('user.is_active = :isActive', { isActive: query.isActive ?? true });
+    if (query.isActive !== undefined) {
+      builder.andWhere('user.is_active = :isActive', { isActive: query.isActive });
+    }
 
     if (query.search !== undefined && query.search.trim().length > 0) {
       builder.andWhere('(user.full_name ILIKE :search OR user.username ILIKE :search)', {

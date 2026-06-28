@@ -5,7 +5,16 @@ import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } f
 import { RouteStatus } from '../enums/route-status';
 import { PaginationDto } from './pagination.dto';
 
-const SHOP_SORT_FIELDS = ['createdAt:desc', 'createdAt:asc', 'name:asc', 'name:desc', 'routeStatus:asc', 'routeStatus:desc'] as const;
+const SHOP_SORT_FIELDS = [
+  'createdAt:desc',
+  'createdAt:asc',
+  'isActive:asc',
+  'isActive:desc',
+  'name:asc',
+  'name:desc',
+  'routeStatus:asc',
+  'routeStatus:desc',
+] as const;
 const ROUTE_STATUSES = Object.values(RouteStatus);
 
 export class CreateShopDto {

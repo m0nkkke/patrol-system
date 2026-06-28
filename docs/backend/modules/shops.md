@@ -5,7 +5,7 @@
 ## Эндпоинты
 
 - `POST /api/v1/shops` создаёт магазин.
-- `GET /api/v1/shops` возвращает список активных магазинов с пагинацией.
+- `GET /api/v1/shops` возвращает список магазинов с пагинацией. Если `isActive` не передан, backend возвращает и активные, и неактивные магазины.
 - `GET /api/v1/shops/:id` возвращает информацию об одном магазине.
 - `POST /api/v1/shops/:id/route-setup/start` начинает настройку маршрута и создаёт каркас точек `1..N`.
 - `GET /api/v1/shops/:id/route-setup` возвращает состояние настройки маршрута, список точек и следующий номер для привязки.
@@ -23,7 +23,7 @@
 ## Бизнес-правила
 
 - Магазины поддерживают мягкое удаление через `deleted_at`.
-- Запросы активных магазинов возвращают только записи с `is_active = true`.
+- Фильтр `isActive` применяется только когда явно передан в запросе. Без него список магазинов включает и активные, и неактивные записи.
 - Если часовой пояс не указан, backend использует значение по умолчанию `Europe/Moscow`, заданное в базе данных.
 - Ссылки на регион необязательны и используют `ON DELETE SET NULL`.
 - `external_id` хранит ID магазина из операционного контура заказчика и уникален, если указан.
@@ -36,6 +36,6 @@
 
 ## Релизная готовность mobile
 
-- `GET /api/v1/shops` поддерживает `page`, `limit`, `search`, `routeStatus`, `isActive`, `sort`. Поиск идет по названию, адресу и `externalId`; сортировки: `createdAt:desc`, `createdAt:asc`, `name:asc`, `name:desc`, `routeStatus:asc`, `routeStatus:desc`.
+- `GET /api/v1/shops` поддерживает `page`, `limit`, `search`, `routeStatus`, `isActive`, `sort`. Поиск идет по названию, адресу и `externalId`; если `isActive` не передан, возвращаются и активные, и неактивные магазины. Сортировки: `createdAt:desc`, `createdAt:asc`, `isActive:asc`, `isActive:desc`, `name:asc`, `name:desc`, `routeStatus:asc`, `routeStatus:desc`.
 - `PATCH /api/v1/shops/:id` доступен роли `admin` и обновляет название, адрес, timezone, регион, активность и внешний ID.
 - При попытке создать или обновить магазин с уже занятым `externalId` backend возвращает `409` с кодом `SHOP_EXTERNAL_ID_TAKEN`, а не сырую ошибку PostgreSQL.
