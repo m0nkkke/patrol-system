@@ -12,6 +12,7 @@
 
 - [Локальный запуск](guides/local-setup.md)
 - [Seed-данные](guides/seed-data.md)
+- [Production-деплой backend](../deployment/backend-production.md)
 - [Auth](modules/auth.md)
 - [Mobile API backend-модуль](modules/mobile-api.md)
 - [Notifications](modules/notifications.md)
