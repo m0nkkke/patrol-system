@@ -1,28 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
+import { memo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { Shop } from '@/api/types';
-import { routeStatusLabel, routeStatusTone } from '@/features/route-setup/route-status';
+import { routeStatusColor, routeStatusLabel } from '@/features/route-setup/route-status';
 import { colors, radius, spacing } from '@/theme';
-import { AppText, Badge } from '@/ui';
+import { AppText } from '@/ui';
 
 type ShopCardProps = {
   shop: Shop;
-  onPress: () => void;
+  onPress: (shop: Shop) => void;
   showPoints?: boolean;
+  showStatus?: boolean;
+  showActive?: boolean;
 };
 
-export function ShopCard({ shop, onPress, showPoints = false }: ShopCardProps): React.ReactElement {
+function ShopCardComponent({
+  shop,
+  onPress,
+  showPoints = false,
+  showStatus = true,
+  showActive = false,
+}: ShopCardProps): React.ReactElement {
+  const statusColor = routeStatusColor(shop.routeStatus);
+  const inactive = showActive && !shop.isActive;
+  const activeColor = shop.isActive ? colors.success : colors.danger;
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[styles.card, inactive && styles.cardInactive]}
+      onPress={() => onPress(shop)}
+      activeOpacity={0.7}
+    >
       <View style={styles.info}>
-        <AppText variant="label">{shop.name}</AppText>
-        
-        {shop.externalId ? (
-          <AppText variant="label" muted style={styles.meta}>
-            ID: {shop.externalId}
-          </AppText>
-        ) : null}
+        <AppText variant="label" color={inactive ? colors.textMuted : colors.text}>
+          {shop.name}
+        </AppText>
         {shop.address ? (
           <AppText variant="caption" muted style={styles.meta}>
             {shop.address}
@@ -33,14 +46,32 @@ export function ShopCard({ shop, onPress, showPoints = false }: ShopCardProps): 
             Точек: {shop.routeRegisteredPoints} из {shop.routeExpectedPoints}
           </AppText>
         ) : null}
-        <View style={styles.statusRow}>
-          <Badge label={routeStatusLabel(shop.routeStatus)} tone={routeStatusTone(shop.routeStatus)} />
-        </View>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+
+      <View style={styles.right}>
+        {showActive ? (
+          <View style={styles.statusRow}>
+            <View style={[styles.dot, { backgroundColor: activeColor }]} />
+            <AppText variant="caption" color={activeColor} style={styles.statusText}>
+              {shop.isActive ? 'Активен' : 'Неактивен'}
+            </AppText>
+          </View>
+        ) : null}
+        {showStatus ? (
+          <View style={styles.statusRow}>
+            <View style={[styles.dot, { backgroundColor: statusColor }]} />
+            <AppText variant="caption" color={statusColor} style={styles.statusText}>
+              {routeStatusLabel(shop.routeStatus)}
+            </AppText>
+          </View>
+        ) : null}
+        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+      </View>
     </TouchableOpacity>
   );
 }
+
+export const ShopCard = memo(ShopCardComponent);
 
 const styles = StyleSheet.create({
   card: {
@@ -53,14 +84,32 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     padding: spacing.lg,
   },
+  cardInactive: {
+    backgroundColor: colors.surfaceMuted,
+  },
   info: {
     flex: 1,
-    marginRight: spacing.lg,
-  },
-  statusRow: {
-    marginTop: spacing.xs,
+    marginRight: spacing.md,
   },
   meta: {
     marginTop: spacing.xs,
+  },
+  right: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  statusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginRight: spacing.sm,
+  },
+  dot: {
+    borderRadius: 4,
+    height: 8,
+    marginRight: spacing.xs,
+    width: 8,
+  },
+  statusText: {
+    fontWeight: '600',
   },
 });

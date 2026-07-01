@@ -9,6 +9,11 @@ web-build/
 .env
 .env.local
 
+GoogleService-Info.plist
+google-services.json
+*-service-account*.json
+api-*.json
+
 android/
 ios/
 

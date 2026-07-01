@@ -9,7 +9,10 @@ export class NfcUnavailableError extends Error {
 
 export type NfcReader = {
   isAvailable: () => Promise<boolean>;
+  isEnabled: () => Promise<boolean>;
+  openSettings: () => Promise<boolean>;
   readUid: () => Promise<string>;
+  cancel: () => Promise<void>;
 };
 
 let initialized = false;
@@ -31,6 +34,22 @@ export const nfcReader: NfcReader = {
     }
   },
 
+  async isEnabled(): Promise<boolean> {
+    try {
+      return await NfcManager.isEnabled();
+    } catch {
+      return false;
+    }
+  },
+
+  async openSettings(): Promise<boolean> {
+    try {
+      return await NfcManager.goToNfcSetting();
+    } catch {
+      return false;
+    }
+  },
+
   async readUid(): Promise<string> {
     await ensureInitialized();
     try {
@@ -43,6 +62,14 @@ export const nfcReader: NfcReader = {
       return uid.toLowerCase();
     } finally {
       void NfcManager.cancelTechnologyRequest();
+    }
+  },
+
+  async cancel(): Promise<void> {
+    try {
+      await NfcManager.cancelTechnologyRequest();
+    } catch {
+      return;
     }
   },
 };

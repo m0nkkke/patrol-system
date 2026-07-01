@@ -29,3 +29,11 @@ export async function scanRoutePoint(
   );
   return response.data;
 }
+
+export async function resetRouteSetup(shopId: string): Promise<RouteSetupState> {
+  const response = await apiClient.post<RouteSetupState>(
+    `/mobile/shops/${shopId}/route-setup/reset`,
+    {},
+  );
+  return response.data;
+}

@@ -1,3 +1,4 @@
+import { PatrolIncidentType } from '../enums/patrol-incident-type';
 import { PatrolStatus } from '../enums/patrol-status';
 import { RouteStatus } from '../enums/route-status';
 import { UserRole } from '../enums/user-role';
@@ -41,6 +42,8 @@ export interface AdminUser {
   role: UserRole;
   username: string;
   shopId?: string;
+  shopIds?: string[];
+  shops?: Shop[];
   isActive: boolean;
   accessKey?: string;
   lastLoginAt?: string;
@@ -102,6 +105,7 @@ export interface PatrolEmployee {
 export interface PatrolShop {
   id: string;
   name: string;
+  timezone?: string;
 }
 
 export interface Patrol {
@@ -113,11 +117,53 @@ export interface Patrol {
   status: PatrolStatus;
   startedAt?: string;
   completedAt?: string;
+  cancelledAt?: string;
   dueAt?: string;
   notes?: string;
+  completionReport?: string;
+  cancellationReason?: string;
   totalPoints: number;
   scannedPoints: number;
   events?: PatrolEvent[];
+  schedule?: PatrolSchedule;
+}
+
+export interface PatrolSchedule {
+  id: string;
+  shopId: string;
+  name: string;
+  weekdays: number[];
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface AvailablePatrolSchedule extends PatrolSchedule {
+  isAvailable: boolean;
+  dueAt?: string;
+  nextStartAt?: string;
+  nextWeekday?: number;
+}
+
+export interface IncidentPoint {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface PatrolIncident {
+  id: string;
+  type: PatrolIncidentType;
+  message: string;
+  createdAt: string;
+  patrolId: string;
+  shopId: string;
+  expectedSeconds?: number;
+  actualSeconds?: number;
+  shop?: { id: string; name: string };
+  patrol?: { id: string; employee?: PatrolEmployee; shop?: PatrolShop };
+  fromPatrolPoint?: IncidentPoint;
+  toPatrolPoint?: IncidentPoint;
 }
 
 export interface RouteSetupState {

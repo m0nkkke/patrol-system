@@ -26,7 +26,7 @@ export function SegmentedControl<T extends string>({
     <View style={styles.row}>
       {options.map((option) => {
         const selected = option.value === value;
-        const contentColor = selected ? colors.textInverse : colors.text;
+        const contentColor = selected ? colors.primary : colors.text;
         return (
           <TouchableOpacity
             key={option.value}
@@ -38,7 +38,7 @@ export function SegmentedControl<T extends string>({
               <Ionicons
                 name={option.icon}
                 size={16}
-                color={selected ? colors.textInverse : colors.textMuted}
+                color={selected ? colors.primary : colors.textMuted}
                 style={styles.icon}
               />
             ) : null}
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   chipSelected: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.iconBlueBackground,
     borderColor: colors.primary,
   },
   icon: {

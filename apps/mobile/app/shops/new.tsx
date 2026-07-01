@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
+import { ApiError } from '@/api/errors';
 import type { Shop } from '@/api/types';
 import { useCreateShop } from '@/features/shops/queries';
 import { RUSSIAN_TIMEZONES, timezoneCurrentTime } from '@/lib/timezones';
@@ -20,7 +21,7 @@ import {
   TextField,
 } from '@/ui';
 
-const DEFAULT_TIMEZONE = 'Europe/Moscow';
+const DEFAULT_TIMEZONE = 'Asia/Irkutsk';
 
 export default function CreateShopScreen(): React.ReactElement {
   const router = useRouter();
@@ -31,6 +32,11 @@ export default function CreateShopScreen(): React.ReactElement {
   const [createdShop, setCreatedShop] = useState<Shop | null>(null);
 
   const { mutate, isPending, isError, error } = useCreateShop();
+
+  const externalIdError =
+    isError && error instanceof ApiError && error.code === 'SHOP_EXTERNAL_ID_TAKEN'
+      ? describeError(error)
+      : null;
 
   const timezoneOptions = useMemo(
     () =>
@@ -55,7 +61,11 @@ export default function CreateShopScreen(): React.ReactElement {
 
   if (createdShop) {
     return (
-      <CreatedShopResult shop={createdShop} onCreateMore={resetForm} onDone={() => router.back()} />
+      <CreatedShopResult
+        shop={createdShop}
+        onCreateMore={resetForm}
+        onDone={() => router.replace('/shops')}
+      />
     );
   }
 
@@ -115,6 +125,7 @@ export default function CreateShopScreen(): React.ReactElement {
             placeholder="00234343"
             autoCapitalize="none"
             autoCorrect={false}
+            error={externalIdError}
           />
           <View style={styles.gapLg}>
             <TextField
@@ -137,7 +148,7 @@ export default function CreateShopScreen(): React.ReactElement {
             />
           </View>
 
-          {isError ? (
+          {isError && !externalIdError ? (
             <AppText variant="caption" color={colors.danger} style={styles.gapLg}>
               {describeError(error)}
             </AppText>

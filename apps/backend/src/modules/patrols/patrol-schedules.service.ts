@@ -9,7 +9,12 @@ import { PatrolScheduleEntity } from './entities/patrol-schedule.entity';
 import { PatrolSchedulesRepository } from './patrol-schedules.repository';
 import { PatrolsRepository } from './patrols.repository';
 
-type AvailablePatrolSchedule = PatrolScheduleEntity & { dueAt: Date };
+type AvailablePatrolSchedule = PatrolScheduleEntity & {
+  isAvailable: boolean;
+  dueAt?: Date;
+  nextStartAt?: Date;
+  nextWeekday?: number;
+};
 
 type LocalDateTime = {
   day: number;
@@ -82,27 +87,42 @@ export class PatrolSchedulesService {
     const shop = await this.shopsService.findOne(shopId);
     assertCanAccessShop(actor, shopId);
     const local = getLocalDateTime(now, shop.timezone);
-    const schedules = await this.schedulesRepository.findActiveByShopAndLocalTime(
-      shopId,
-      local.weekday,
-      formatTime(local),
+    const localTime = formatTime(local);
+    const schedules = (await this.schedulesRepository.findByShop(shopId)).filter(
+      (schedule) => schedule.isActive,
     );
 
     const available: AvailablePatrolSchedule[] = [];
 
     for (const schedule of schedules) {
+      const nextStart = getNextScheduleStart(schedule, local, localTime, shop.timezone);
+
+      if (!isScheduleInCurrentWindow(schedule, local.weekday, localTime)) {
+        available.push({
+          ...schedule,
+          isAvailable: false,
+          nextStartAt: nextStart?.date,
+          nextWeekday: nextStart?.weekday,
+        });
+        continue;
+      }
+
       const dueAt = localDateTimeToUtc(local, schedule.endTime, shop.timezone);
       const existingPatrol = await this.patrolsRepository.findExistingScheduledPatrol(
         schedule.id,
         dueAt,
       );
 
-      if (existingPatrol === null) {
-        available.push({ ...schedule, dueAt });
-      }
+      available.push({
+        ...schedule,
+        dueAt,
+        isAvailable: existingPatrol === null,
+        nextStartAt: nextStart?.date,
+        nextWeekday: nextStart?.weekday,
+      });
     }
 
-    return available;
+    return available.sort(compareAvailableSchedules);
   }
 
   async resolveDueAt(
@@ -240,6 +260,98 @@ function validateTimeWindow(startTime: string, endTime: string): void {
 
 function normalizeTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
+}
+
+function isScheduleInCurrentWindow(
+  schedule: PatrolScheduleEntity,
+  weekday: number,
+  localTime: string,
+): boolean {
+  return (
+    schedule.weekdays.includes(weekday) &&
+    localTime >= normalizeTime(schedule.startTime) &&
+    localTime < normalizeTime(schedule.endTime)
+  );
+}
+
+function getNextScheduleStart(
+  schedule: PatrolScheduleEntity,
+  local: LocalDateTime,
+  localTime: string,
+  timeZone: string,
+): { date: Date; weekday: number } | undefined {
+  const startTime = normalizeTime(schedule.startTime);
+
+  for (let daysAhead = 0; daysAhead < 7; daysAhead += 1) {
+    const weekday = getWeekdayAfter(local.weekday, daysAhead);
+    if (!schedule.weekdays.includes(weekday)) {
+      continue;
+    }
+    if (daysAhead === 0 && localTime >= startTime) {
+      continue;
+    }
+
+    const targetLocal = addDaysToLocalDate(local, daysAhead);
+    return {
+      date: localDateTimeToUtc(targetLocal, startTime, timeZone),
+      weekday,
+    };
+  }
+
+  return undefined;
+}
+
+function getWeekdayAfter(weekday: number, daysAhead: number): number {
+  return ((weekday - 1 + daysAhead) % 7) + 1;
+}
+
+function addDaysToLocalDate(local: LocalDateTime, daysAhead: number): LocalDateTime {
+  const date = new Date(Date.UTC(local.year, local.month - 1, local.day + daysAhead));
+
+  return {
+    day: date.getUTCDate(),
+    hour: local.hour,
+    minute: local.minute,
+    month: date.getUTCMonth() + 1,
+    second: local.second,
+    weekday: getWeekdayAfter(local.weekday, daysAhead),
+    year: date.getUTCFullYear(),
+  };
+}
+
+function compareAvailableSchedules(
+  left: AvailablePatrolSchedule,
+  right: AvailablePatrolSchedule,
+): number {
+  const availability = Number(right.isAvailable) - Number(left.isAvailable);
+  if (availability !== 0) {
+    return availability;
+  }
+
+  if (left.isAvailable && right.isAvailable) {
+    return compareByStartTimeThenName(left, right);
+  }
+
+  const leftNextStart = left.nextStartAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const rightNextStart = right.nextStartAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+  const nextStart = leftNextStart - rightNextStart;
+  if (nextStart !== 0) {
+    return nextStart;
+  }
+
+  return compareByStartTimeThenName(left, right);
+}
+
+function compareByStartTimeThenName(
+  left: PatrolScheduleEntity,
+  right: PatrolScheduleEntity,
+): number {
+  const startTime = normalizeTime(left.startTime).localeCompare(normalizeTime(right.startTime));
+  if (startTime !== 0) {
+    return startTime;
+  }
+
+  return left.name.localeCompare(right.name);
 }
 
 function getLocalDateTime(date: Date, timeZone: string): LocalDateTime {

@@ -1,46 +1,79 @@
-import type { RouteStatus } from '@patrol/shared';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import { useShops } from '@/features/route-setup/queries';
+import type { Shop } from '@/api/types';
+import { useInfiniteShops } from '@/features/route-setup/queries';
 import { ShopCard } from '@/features/shops/ShopCard';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { colors, spacing } from '@/theme';
-import { AppText, Button, type FilterOption, FilterChips, Header, Screen, TextField } from '@/ui';
+import {
+  AppText,
+  Button,
+  FilterSheet,
+  type FilterSheetGroup,
+  FilterSortBar,
+  Header,
+  ListFooter,
+  Screen,
+  SheetButton,
+  type SheetButtonOption,
+  TextField,
+} from '@/ui';
 
-type StatusFilter = RouteStatus | 'all';
+type StatusFilter = 'all' | 'active' | 'inactive';
 
-const STATUS_FILTERS: FilterOption<StatusFilter>[] = [
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
-  { value: 'ready', label: 'Готов' },
-  { value: 'setup_in_progress', label: 'Настраивается' },
-  { value: 'not_configured', label: 'Не настроен' },
+  { value: 'active', label: 'Активные' },
+  { value: 'inactive', label: 'Неактивные' },
+];
+
+const SORT_OPTIONS: SheetButtonOption<string>[] = [
+  { value: 'isActive:desc', label: 'Сначала активные' },
+  { value: 'isActive:asc', label: 'Сначала неактивные' },
+  { value: 'name:asc', label: 'Название (А–Я)' },
+  { value: 'name:desc', label: 'Название (Я–А)' },
+  { value: 'createdAt:desc', label: 'Сначала новые' },
 ];
 
 export default function ShopsListScreen(): React.ReactElement {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
-  const { data: shops, isPending, isError, error, refetch } = useShops();
+  const [sort, setSort] = useState('name:asc');
+  const debouncedSearch = useDebouncedValue(search);
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return (shops ?? [])
-      .filter((shop) => {
-        const matchesQuery =
-          !query ||
-          shop.name.toLowerCase().includes(query) ||
-          (shop.externalId?.toLowerCase().includes(query) ?? false);
-        const matchesStatus = status === 'all' || shop.routeStatus === status;
-        return matchesQuery && matchesStatus;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  }, [shops, search, status]);
+  const {
+    items,
+    isPending,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useInfiniteShops({
+    search: debouncedSearch,
+    isActive: status === 'all' ? undefined : status === 'active',
+    sort,
+  });
 
-  function openShop(shopId: string): void {
-    router.push({ pathname: '/history/[shopId]', params: { shopId } });
-  }
+  const filterGroups: FilterSheetGroup[] = [
+    {
+      title: 'Статус',
+      options: STATUS_OPTIONS,
+      value: status,
+      onChange: (value) => setStatus(value as StatusFilter),
+    },
+  ];
+
+  const openShop = useCallback(
+    (shop: Shop) => router.push({ pathname: '/shops/[id]', params: { id: shop.id } }),
+    [router],
+  );
 
   return (
     <Screen padded={false}>
@@ -51,10 +84,19 @@ export default function ShopsListScreen(): React.ReactElement {
           onChangeText={setSearch}
           placeholder="Поиск по названию или ID"
           icon="search"
+          tone="control"
         />
-        <View style={styles.filters}>
-          <FilterChips options={STATUS_FILTERS} value={status} onChange={setStatus} />
-        </View>
+        <FilterSortBar>
+          <FilterSheet groups={filterGroups} activeCount={status === 'all' ? 0 : 1} />
+          <SheetButton
+            label="Сортировать"
+            icon="swap-vertical-outline"
+            title="Сортировка"
+            options={SORT_OPTIONS}
+            value={sort}
+            onChange={setSort}
+          />
+        </FilterSortBar>
       </View>
 
       {isPending ? (
@@ -71,12 +113,29 @@ export default function ShopsListScreen(): React.ReactElement {
       ) : (
         <FlatList
           style={styles.list}
-          data={filtered}
+          data={items}
           keyExtractor={(shop) => shop.id}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          onEndReachedThreshold={0.4}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) {
+              void fetchNextPage();
+            }
+          }}
+          ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
           ListEmptyComponent={<AppText muted>Магазины не найдены.</AppText>}
-          renderItem={({ item }) => <ShopCard shop={item} onPress={() => openShop(item.id)} />}
+          renderItem={({ item }) => (
+            <ShopCard shop={item} onPress={openShop} showStatus={false} showActive />
+          )}
         />
       )}
 
@@ -95,9 +154,6 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
-  },
-  filters: {
-    marginTop: spacing.md,
   },
   center: {
     alignItems: 'center',

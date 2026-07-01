@@ -1,7 +1,20 @@
-import type { SyncPatrolEventsDto, SyncPatrolEventsResultDto } from '@patrol/shared';
+import type {
+  PatrolStatus,
+  ReportMissedPointAttemptDto,
+  SyncPatrolEventsDto,
+  SyncPatrolEventsResultDto,
+} from '@patrol/shared';
 
 import { apiClient } from './client';
-import type { Paginated, Patrol, RoutePoint } from './types';
+import { PAGE_SIZE } from './use-infinite-paginated';
+import type { AvailablePatrolSchedule, Paginated, Patrol, RoutePoint } from './types';
+
+export type PatrolsQuery = {
+  page?: number;
+  limit?: number;
+  status?: PatrolStatus;
+  sort?: string;
+};
 
 export async function getRoute(): Promise<RoutePoint[]> {
   const response = await apiClient.get<RoutePoint[]>('/mobile/route');
@@ -13,9 +26,42 @@ export async function getActivePatrol(): Promise<Patrol | null> {
   return response.data;
 }
 
-export async function startPatrol(): Promise<Patrol> {
-  const response = await apiClient.post<Patrol>('/mobile/patrols/start');
+export async function getAvailableSchedules(): Promise<AvailablePatrolSchedule[]> {
+  const response = await apiClient.get<AvailablePatrolSchedule[]>(
+    '/mobile/patrol-schedules/available',
+  );
   return response.data;
+}
+
+export async function startPatrol(scheduleId?: string): Promise<Patrol> {
+  const response = await apiClient.post<Patrol>(
+    '/mobile/patrols/start',
+    scheduleId === undefined ? {} : { scheduleId },
+  );
+  return response.data;
+}
+
+export async function completePatrol(patrolId: string, completionReport?: string): Promise<Patrol> {
+  const response = await apiClient.post<Patrol>(
+    `/mobile/patrols/${patrolId}/complete`,
+    completionReport === undefined ? {} : { completionReport },
+  );
+  return response.data;
+}
+
+export async function cancelPatrol(patrolId: string, cancellationReason?: string): Promise<Patrol> {
+  const response = await apiClient.post<Patrol>(
+    `/mobile/patrols/${patrolId}/cancel`,
+    cancellationReason === undefined ? {} : { cancellationReason },
+  );
+  return response.data;
+}
+
+export async function reportMissedPointAttempt(
+  patrolId: string,
+  payload: ReportMissedPointAttemptDto,
+): Promise<void> {
+  await apiClient.post(`/mobile/patrols/${patrolId}/missed-point-attempts`, payload);
 }
 
 export async function syncPatrolEvents(
@@ -31,11 +77,22 @@ export async function syncPatrolEvents(
 
 export async function getShopPatrols(
   shopId: string,
-  page = 1,
-  limit = 20,
+  query: PatrolsQuery = {},
 ): Promise<Paginated<Patrol>> {
+  const { page = 1, limit = PAGE_SIZE, status, sort } = query;
   const response = await apiClient.get<Paginated<Patrol>>(`/patrols/shop/${shopId}`, {
-    params: { page, limit },
+    params: { page, limit, status, sort },
+  });
+  return response.data;
+}
+
+export async function getEmployeePatrols(
+  employeeId: string,
+  query: PatrolsQuery = {},
+): Promise<Paginated<Patrol>> {
+  const { page = 1, limit = PAGE_SIZE, status, sort } = query;
+  const response = await apiClient.get<Paginated<Patrol>>(`/patrols/employee/${employeeId}`, {
+    params: { page, limit, status, sort },
   });
   return response.data;
 }

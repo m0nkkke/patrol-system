@@ -50,7 +50,7 @@ describe('PatrolSchedulesService', () => {
   it('calculates schedule deadline in shop timezone', async () => {
     const schedule = createSchedule({ endTime: '11:00:00' });
     shopsService.findOne.mockResolvedValue(createShop());
-    repository.findActiveByShopAndLocalTime.mockResolvedValue([schedule]);
+    repository.findByShop.mockResolvedValue([schedule]);
 
     const result = await service.findAvailableByShop(
       'shop-id',
@@ -58,22 +58,17 @@ describe('PatrolSchedulesService', () => {
       new Date('2026-06-22T03:30:00.000Z'),
     );
 
-    expect(repository.findActiveByShopAndLocalTime).toHaveBeenCalledWith(
-      'shop-id',
-      1,
-      '10:30:00',
-    );
+    expect(result[0]?.isAvailable).toBe(true);
     expect(result[0]?.dueAt).toEqual(new Date('2026-06-22T04:00:00.000Z'));
+    expect(result[0]?.nextStartAt).toEqual(new Date('2026-06-23T03:00:00.000Z'));
+    expect(result[0]?.nextWeekday).toBe(2);
   });
 
-  it('excludes schedules already started for the current window', async () => {
+  it('keeps started schedules unavailable for the current window', async () => {
     const availableSchedule = createSchedule({ id: 'available-schedule-id' });
     const startedSchedule = createSchedule({ id: 'started-schedule-id' });
     shopsService.findOne.mockResolvedValue(createShop());
-    repository.findActiveByShopAndLocalTime.mockResolvedValue([
-      availableSchedule,
-      startedSchedule,
-    ]);
+    repository.findByShop.mockResolvedValue([availableSchedule, startedSchedule]);
     patrolsRepository.findExistingScheduledPatrol
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(createPatrol({ scheduleId: startedSchedule.id }));
@@ -84,12 +79,39 @@ describe('PatrolSchedulesService', () => {
       new Date('2026-06-22T03:30:00.000Z'),
     );
 
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
     expect(result[0]?.id).toBe(availableSchedule.id);
+    expect(result[0]?.isAvailable).toBe(true);
+    expect(result[1]?.id).toBe(startedSchedule.id);
+    expect(result[1]?.isAvailable).toBe(false);
     expect(patrolsRepository.findExistingScheduledPatrol).toHaveBeenCalledWith(
       startedSchedule.id,
       new Date('2026-06-22T04:00:00.000Z'),
     );
+  });
+
+  it('sorts unavailable schedules by nearest next start in shop timezone', async () => {
+    const fridaySchedule = createSchedule({
+      id: 'friday-schedule-id',
+      weekdays: [5],
+    });
+    const wednesdaySchedule = createSchedule({
+      id: 'wednesday-schedule-id',
+      weekdays: [3, 4],
+    });
+    shopsService.findOne.mockResolvedValue(createShop());
+    repository.findByShop.mockResolvedValue([fridaySchedule, wednesdaySchedule]);
+
+    const result = await service.findAvailableByShop(
+      'shop-id',
+      createActor({ shopId: 'shop-id' }),
+      new Date('2026-06-23T03:30:00.000Z'),
+    );
+
+    expect(result[0]?.id).toBe(wednesdaySchedule.id);
+    expect(result[0]?.nextStartAt).toEqual(new Date('2026-06-24T03:00:00.000Z'));
+    expect(result[0]?.nextWeekday).toBe(3);
+    expect(result[1]?.id).toBe(fridaySchedule.id);
   });
 
   it('rejects start outside configured time window', async () => {

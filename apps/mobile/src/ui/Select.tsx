@@ -88,7 +88,13 @@ export function Select({
 
             {searchable ? (
               <View style={styles.search}>
-                <TextField value={search} onChangeText={setSearch} placeholder="Поиск" icon="search" />
+                <TextField
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Поиск"
+                  icon="search"
+                  tone="control"
+                />
               </View>
             ) : null}
 

@@ -1,22 +1,28 @@
 import { CreateUserDto } from '@patrol/shared';
 
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
+import { SessionRevocationService } from '../auth/session-revocation.service';
 import { ShopsService } from '../shops/shops.service';
 import { UserEntity } from './entities/user.entity';
 import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
+type SessionRevocationServiceMock = Pick<SessionRevocationService, 'revokeUserSessions'>;
 type UsersRepositoryMock = Pick<UsersRepository, 'assignShops' | 'create' | 'findById' | 'update'>;
 
 describe('UsersService', () => {
   let shopsService: jest.Mocked<ShopsServiceMock>;
+  let sessionRevocationService: jest.Mocked<SessionRevocationServiceMock>;
   let usersRepository: jest.Mocked<UsersRepositoryMock>;
   let service: UsersService;
 
   beforeEach(() => {
     shopsService = {
       findOne: jest.fn(),
+    };
+    sessionRevocationService = {
+      revokeUserSessions: jest.fn(),
     };
     usersRepository = {
       assignShops: jest.fn(),
@@ -27,6 +33,7 @@ describe('UsersService', () => {
 
     service = new UsersService(
       shopsService as unknown as ShopsService,
+      sessionRevocationService as unknown as SessionRevocationService,
       usersRepository as unknown as UsersRepository,
     );
   });
@@ -60,6 +67,7 @@ describe('UsersService', () => {
         ...data,
         createdAt: new Date(),
         id: 'user-id',
+        sessionVersion: 0,
         updatedAt: new Date(),
       }),
     );
@@ -126,6 +134,7 @@ describe('UsersService', () => {
       isActive: true,
       passwordHash: 'hash',
       role: 'employee',
+      sessionVersion: 2,
       updatedAt: new Date(),
       username: 'mobile.employee',
     } as UserEntity;
@@ -140,8 +149,13 @@ describe('UsersService', () => {
 
     expect(usersRepository.update).toHaveBeenCalledWith(
       'user-id',
-      expect.objectContaining({ fullName: 'Updated Employee', isActive: false }),
+      expect.objectContaining({
+        fullName: 'Updated Employee',
+        isActive: false,
+        sessionVersion: 3,
+      }),
     );
+    expect(sessionRevocationService.revokeUserSessions).toHaveBeenCalledWith('user-id');
     expect(result.fullName).toBe('Updated Employee');
     expect(result.isActive).toBe(false);
   });
@@ -154,6 +168,7 @@ describe('UsersService', () => {
       isActive: true,
       passwordHash: 'hash',
       role: 'employee',
+      sessionVersion: 4,
       updatedAt: new Date(),
       username: 'mobile.employee',
     } as UserEntity;
@@ -168,6 +183,8 @@ describe('UsersService', () => {
     expect(typeof updateCall?.[1].accessKey).toBe('string');
     expect(typeof updateCall?.[1].accessKeyHash).toBe('string');
     expect(typeof updateCall?.[1].passwordHash).toBe('string');
+    expect(updateCall?.[1].sessionVersion).toBe(5);
+    expect(sessionRevocationService.revokeUserSessions).toHaveBeenCalledWith('user-id');
     expect(typeof result.accessKey).toBe('string');
   });
 });

@@ -28,7 +28,11 @@ export class JwtAuthGuard implements CanActivate {
     );
     const user = await this.usersService.findEntityById(payload.sub);
 
-    if (user === null || !user.isActive) {
+    if (
+      user === null ||
+      !user.isActive ||
+      user.sessionVersion !== payload.sessionVersion
+    ) {
       throw new UnauthorizedException('User is inactive or not found');
     }
 
@@ -84,8 +88,10 @@ function isJwtPayload(payload: unknown): payload is JwtPayload {
     'sub' in payload &&
     'role' in payload &&
     'username' in payload &&
+    'sessionVersion' in payload &&
     typeof payload.sub === 'string' &&
     typeof payload.role === 'string' &&
+    typeof payload.sessionVersion === 'number' &&
     typeof payload.username === 'string'
   );
 }

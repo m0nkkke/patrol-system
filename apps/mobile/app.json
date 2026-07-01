@@ -6,19 +6,40 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "assetBundlePatterns": ["**/*"],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/92154afb-f1b2-456a-a768-f74ed3900f23"
+    },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.patrolsystem.mobile"
+      "bundleIdentifier": "com.patrolsystem.mobile",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.patrolsystem.mobile",
-      "permissions": ["NFC", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "versionCode": 1,
+      "permissions": ["NFC", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-router",
+      "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
       [
         "react-native-nfc-manager",
         {
@@ -30,10 +51,21 @@
         {
           "locationWhenInUsePermission": "Геолокация прикрепляется к событиям обхода для контроля маршрута."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#1f6feb"
+        }
       ]
     ],
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:3000/api/v1"
-    }
+      "apiBaseUrl": "https://api.your-domain.ru/api/v1",
+      "router": {},
+      "eas": {
+        "projectId": "92154afb-f1b2-456a-a768-f74ed3900f23"
+      }
+    },
+    "owner": "mi-kod"
   }
 }

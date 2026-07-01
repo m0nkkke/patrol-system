@@ -1,5 +1,6 @@
 export type {
   AdminUser,
+  AvailablePatrolSchedule,
   CreatedUser,
   LoginResponse,
   MobileCapabilities,
@@ -10,6 +11,8 @@ export type {
   Patrol,
   PatrolEmployee,
   PatrolEvent,
+  PatrolIncident,
+  PatrolSchedule,
   RoutePoint,
   RouteSetupState,
   Shop,

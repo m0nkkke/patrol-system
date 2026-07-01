@@ -6,6 +6,7 @@ import {
   FindPatrolIncidentsDto,
   FindPatrolsDto,
   PatrolIncidentType,
+  ReportMissedPointAttemptDto,
   RouteStatus,
   StartPatrolDto,
   SyncPatrolEventStatus,
@@ -395,6 +396,45 @@ export class PatrolsService {
     });
 
     return this.findOne(id);
+  }
+
+  async recordMissedPointAttempt(
+    patrolId: string,
+    dto: ReportMissedPointAttemptDto,
+  ): Promise<void> {
+    const patrol = await this.findOne(patrolId);
+
+    if (patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
+      throw new DomainValidationError(
+        'PATROL_NOT_IN_PROGRESS',
+        'Cannot report missed point attempt for inactive patrol',
+      );
+    }
+
+    const expectedPoint = await this.patrolPointsService.findOne(dto.expectedPatrolPointId);
+    const attemptedPoint = await this.patrolPointsService.findOne(dto.attemptedPatrolPointId);
+
+    if (expectedPoint.shopId !== patrol.shopId || attemptedPoint.shopId !== patrol.shopId) {
+      throw new DomainValidationError(
+        'PATROL_POINT_WRONG_SHOP',
+        'Patrol point does not belong to patrol shop',
+      );
+    }
+
+    if (attemptedPoint.sortOrder <= expectedPoint.sortOrder) {
+      return;
+    }
+
+    const incident = await this.patrolsRepository.createPatrolIncident({
+      fromPatrolPointId: expectedPoint.id,
+      message: `Попытка пропуска точки: сотрудник сканировал точку ${attemptedPoint.sortOrder} вместо ${expectedPoint.sortOrder}`,
+      patrolId: patrol.id,
+      shopId: patrol.shopId,
+      toPatrolPointId: attemptedPoint.id,
+      type: PatrolIncidentType.MISSED_POINT,
+    });
+
+    await this.notifyIncidentCreated(patrol, incident);
   }
 
   private async analyzeTimingIncident(

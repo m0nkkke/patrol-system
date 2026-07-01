@@ -2,12 +2,16 @@ export const colors = {
   primary: '#2563eb',
   primaryDark: '#1d4ed8',
   primaryDisabled: '#93c5fd',
+  roleText: '#1e3a8a',
 
   background: '#f2f3f5',
   surface: '#ffffff',
   surfaceMuted: '#e8eaee',
   border: '#e5e7eb',
   inputBorder: '#d1d5db',
+  controlSurface: '#eaf1fd',
+  controlBorder: '#cbd9f6',
+  controlText: '#1d4ed8',
 
   text: '#111827',
   textMuted: '#6b7280',

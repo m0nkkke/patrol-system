@@ -112,7 +112,12 @@ describe('Mobile API contract', () => {
   it('returns mobile tokens from login endpoint', async () => {
     const accessToken = issueAccessToken(employeeUser);
     const refreshToken = sign(
-      { role: employeeUser.role, sub: employeeUser.id, username: employeeUser.username },
+      {
+        role: employeeUser.role,
+        sessionVersion: 0,
+        sub: employeeUser.id,
+        username: employeeUser.username,
+      },
       REFRESH_SECRET,
       { expiresIn: '7d' },
     );
@@ -290,9 +295,13 @@ function createUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUs
 }
 
 function issueAccessToken(user: AuthenticatedUser): string {
-  return sign({ role: user.role, sub: user.id, username: user.username }, ACCESS_SECRET, {
-    expiresIn: '15m',
-  });
+  return sign(
+    { role: user.role, sessionVersion: 0, sub: user.id, username: user.username },
+    ACCESS_SECRET,
+    {
+      expiresIn: '15m',
+    },
+  );
 }
 
 function createUserEntity(user: AuthenticatedUser): UserEntity {
@@ -301,6 +310,7 @@ function createUserEntity(user: AuthenticatedUser): UserEntity {
     fullName: user.fullName,
     id: user.id,
     isActive: true,
+    sessionVersion: 0,
     accessKey: 'MEMP-TEST-0001',
     accessKeyHash: 'hashed-access-key',
     passwordHash: 'hashed-password',

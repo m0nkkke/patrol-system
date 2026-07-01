@@ -2,11 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import { PatrolHomeWidget } from '@/features/patrol/PatrolHomeWidget';
+import { useShop } from '@/features/route-setup/queries';
 import { roleLabel } from '@/features/users/role';
-import { getInitials } from '@/lib/initials';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, spacing } from '@/theme';
-import { AppText, Avatar, MenuItem, Screen } from '@/ui';
+import { AppText, Card, MenuItem, Screen } from '@/ui';
 
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
@@ -22,65 +23,86 @@ export default function HomeScreen(): React.ReactElement {
   function openHistory(): void {
     if (user?.shopId) {
       router.push({ pathname: '/history/[shopId]', params: { shopId: user.shopId } });
+    } else {
+      router.push('/history');
+    }
+  }
+
+  function openSchedules(): void {
+    if (user?.shopId) {
+      router.push({ pathname: '/schedules/[shopId]', params: { shopId: user.shopId } });
+    } else {
+      router.push('/schedules/shops');
+    }
+  }
+
+  function openRouteSetup(): void {
+    if (user?.shopId) {
+      router.push({ pathname: '/route-setup/[shopId]', params: { shopId: user.shopId } });
+    } else {
+      router.push('/route-setup/shops');
+    }
+  }
+
+  function openNfcReplace(): void {
+    if (user?.shopId) {
+      router.push({ pathname: '/nfc-replace/[shopId]', params: { shopId: user.shopId } });
+    } else {
+      router.push('/nfc-replace/shops');
     }
   }
 
   return (
     <Screen padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.profile}>
-          <Avatar initials={getInitials(user?.fullName)} />
+        <TouchableOpacity
+          style={styles.profile}
+          onPress={() => router.push('/profile')}
+          activeOpacity={0.7}
+        >
           <View style={styles.profileText}>
             <AppText variant="caption" muted>
               Добрый день,
             </AppText>
             <AppText variant="heading">{user?.fullName ?? ''}</AppText>
             {role ? (
-              <View style={styles.chip}>
-                <Ionicons name="shield-checkmark" size={14} color={colors.primary} />
-                <AppText variant="caption" color={colors.primary} style={styles.chipText}>
-                  {roleLabel(role)}
-                </AppText>
-              </View>
+              <AppText variant="caption" color={colors.roleText} style={styles.chipText}>
+                {roleLabel(role)}
+              </AppText>
             ) : null}
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </TouchableOpacity>
+
+        {(isManager || isEmployee) && user?.shopId ? (
+          <PrimaryShopCard shopId={user.shopId} />
+        ) : null}
 
         {isAdmin ? (
           <View>
-            <SectionLabel title="Создать" />
+            <SectionLabel title="Управление" />
             <MenuItem
               icon="business-outline"
               iconColor={colors.iconBlue}
               iconBackground={colors.iconBlueBackground}
-              title="Регистрация магазина"
-              subtitle="Добавить новую торговую точку"
+              title="Новый магазин"
+              subtitle="Регистрация торговой точки"
               onPress={() => router.push('/shops/new')}
             />
             <MenuItem
               icon="person-add-outline"
               iconColor={colors.iconBlue}
               iconBackground={colors.iconBlueBackground}
-              title="Регистрация пользователя"
+              title="Новый пользователь"
               subtitle="Создать сотрудника, выдать ключ"
               onPress={() => router.push('/users/new')}
             />
             <MenuItem
-              icon="git-network-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Регистрация маршрута"
-              subtitle="Привязка NFC-меток к точкам"
-              onPress={() => router.push('/route-setup/shops')}
-            />
-
-            <SectionLabel title="Данные" />
-            <MenuItem
               icon="storefront-outline"
-              iconColor={colors.iconOrange}
-              iconBackground={colors.iconOrangeBackground}
+              iconColor={colors.iconSlate}
+              iconBackground={colors.iconSlateBackground}
               title="Магазины"
-              subtitle="Список магазинов и история обходов"
+              subtitle="Список магазинов и редактирование"
               onPress={() => router.push('/shops')}
             />
             <MenuItem
@@ -91,19 +113,95 @@ export default function HomeScreen(): React.ReactElement {
               subtitle="Список сотрудников и их данные"
               onPress={() => router.push('/users')}
             />
-          </View>
-        ) : null}
+            <MenuItem
+              icon="git-network-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="Маршруты"
+              subtitle="Настройка точек и NFC-меток"
+              onPress={openRouteSetup}
+            />
+            <MenuItem
+              icon="swap-horizontal-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="Замена NFC-метки"
+              subtitle="Перепривязать метку у точки"
+              onPress={openNfcReplace}
+            />
+            <MenuItem
+              icon="calendar-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="Расписания"
+              subtitle="График обходов по магазинам"
+              onPress={openSchedules}
+            />
 
-        {isManager ? (
-          <View>
-            <SectionLabel title="Обходы" />
+            <SectionLabel title="Контроль обходов" />
             <MenuItem
               icon="document-text-outline"
               iconColor={colors.iconBlue}
               iconBackground={colors.iconBlueBackground}
               title="История обходов"
-              subtitle="Обходы и нарушения вашего магазина"
+              subtitle="По магазинам или сотрудникам"
               onPress={openHistory}
+            />
+            <MenuItem
+              icon="warning-outline"
+              iconColor={colors.danger}
+              iconBackground={colors.dangerSurface}
+              title="Нарушения"
+              subtitle="Подозрительные обходы по всем магазинам"
+              onPress={() => router.push('/incidents')}
+            />
+          </View>
+        ) : null}
+
+        {isManager ? (
+          <View>
+            <SectionLabel title="Управление" />
+            <MenuItem
+              icon="git-network-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="Маршруты"
+              subtitle="Настройка маршрута вашего магазина"
+              onPress={openRouteSetup}
+            />
+            <MenuItem
+              icon="swap-horizontal-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="Замена NFC-метки"
+              subtitle="Замена метки в вашем магазине"
+              onPress={openNfcReplace}
+            />
+            <MenuItem
+              icon="calendar-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="Расписания"
+              subtitle="График обходов вашего магазина"
+              onPress={openSchedules}
+            />
+
+            <SectionLabel title="Контроль обходов" />
+            <MenuItem
+              icon="document-text-outline"
+              iconColor={colors.iconBlue}
+              iconBackground={colors.iconBlueBackground}
+              title="История обходов"
+              subtitle="Обходы вашего магазина"
+              onPress={openHistory}
+            />
+            <MenuItem
+              icon="warning-outline"
+              iconColor={colors.danger}
+              iconBackground={colors.dangerSurface}
+              title="Нарушения"
+              subtitle="Подозрительные обходы вашего магазина"
+              onPress={() => router.push('/incidents')}
             />
           </View>
         ) : null}
@@ -111,14 +209,7 @@ export default function HomeScreen(): React.ReactElement {
         {isEmployee ? (
           <View>
             <SectionLabel title="Обход" />
-            <MenuItem
-              icon="navigate-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Обход"
-              subtitle="Прохождение маршрута и сканирование меток"
-              onPress={() => router.push('/patrol')}
-            />
+            <PatrolHomeWidget />
           </View>
         ) : null}
 
@@ -149,6 +240,33 @@ function SectionLabel({ title }: { title: string }): React.ReactElement {
   );
 }
 
+function PrimaryShopCard({ shopId }: { shopId: string }): React.ReactElement | null {
+  const { data: shop } = useShop(shopId);
+
+  if (!shop) {
+    return null;
+  }
+
+  return (
+    <Card style={styles.shopCard}>
+      <View style={styles.shopIcon}>
+        <Ionicons name="storefront-outline" size={20} color={colors.primary} />
+      </View>
+      <View style={styles.shopInfo}>
+        <AppText variant="caption" muted>
+          Основной магазин
+        </AppText>
+        <AppText variant="label">{shop.name}</AppText>
+        {shop.address ? (
+          <AppText variant="caption" muted style={styles.shopAddress}>
+            {shop.address}
+          </AppText>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: spacing.xl,
@@ -162,21 +280,30 @@ const styles = StyleSheet.create({
   },
   profileText: {
     flex: 1,
-    marginLeft: spacing.lg,
   },
-  chip: {
+  shopCard: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: colors.chipBackground,
-    borderRadius: 999,
     flexDirection: 'row',
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  shopIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.iconBlueBackground,
+    borderRadius: 999,
+    height: 40,
+    justifyContent: 'center',
+    marginRight: spacing.md,
+    width: 40,
+  },
+  shopInfo: {
+    flex: 1,
+  },
+  shopAddress: {
+    marginTop: spacing.xs,
   },
   chipText: {
     fontWeight: '600',
-    marginLeft: spacing.xs,
+    marginTop: spacing.sm,
   },
   section: {
     fontWeight: '600',

@@ -59,6 +59,9 @@ export class UserEntity {
   @Column({ default: true, name: 'is_active' })
   isActive: boolean = true;
 
+  @Column({ default: 0, name: 'session_version' })
+  sessionVersion: number = 0;
+
   @Column({ name: 'last_login_at', nullable: true, type: 'timestamptz' })
   lastLoginAt?: Date;
 

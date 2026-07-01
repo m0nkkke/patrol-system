@@ -12,6 +12,7 @@ export * from './dto/mobile-responses';
 export * from './dto/pagination.dto';
 export * from './dto/patrol-schedule.dto';
 export * from './dto/replace-nfc-tag.dto';
+export * from './dto/report-missed-point-attempt.dto';
 export * from './dto/start-route-setup.dto';
 export * from './dto/start-patrol.dto';
 export * from './dto/sync-patrol-events.dto';

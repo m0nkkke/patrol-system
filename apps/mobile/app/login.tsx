@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+
+import logoSource from '../assets/icon.png';
 
 import { ApiError } from '@/api/errors';
 import {
@@ -30,16 +32,22 @@ export default function LoginScreen(): React.ReactElement {
       await signIn(accessKey);
     } catch (caught) {
       const apiError = caught instanceof ApiError ? caught : null;
-      setError(apiError ? mapLoginError(apiError) : 'Не удалось войти. Попробуйте ещё раз.');
+      setError(
+        apiError ? mapLoginError(apiError) : 'Не удалось войти. Попробуйте еще раз.',
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Screen centered>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <Screen style={styles.screen}>
+      <KeyboardAvoidingView
+        style={styles.keyboard}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.header}>
+          <Image source={logoSource} style={styles.logo} />
           <AppText variant="title" style={styles.title}>
             Patrol System
           </AppText>
@@ -63,7 +71,12 @@ export default function LoginScreen(): React.ReactElement {
         />
 
         <View style={styles.action}>
-          <Button label="Войти" onPress={() => void handleSubmit()} loading={submitting} disabled={!canSubmit} />
+          <Button
+            label="Войти"
+            onPress={() => void handleSubmit()}
+            loading={submitting}
+            disabled={!canSubmit}
+          />
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -81,7 +94,23 @@ function mapLoginError(error: ApiError): string {
 
 const styles = StyleSheet.create({
   header: {
-    marginBottom: spacing.xxl,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  screen: {
+    justifyContent: 'center',
+    paddingBottom: spacing.xxl,
+  },
+  keyboard: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: spacing.xxl,
+  },
+  logo: {
+    borderRadius: 18,
+    height: 76,
+    marginBottom: spacing.md,
+    width: 76,
   },
   title: {
     textAlign: 'center',
@@ -91,6 +120,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   action: {
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
   },
 });

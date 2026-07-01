@@ -1,27 +1,78 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import { patrolStatusLabel, patrolStatusTone } from '@/features/patrol/patrol-status';
-import { useShopPatrols } from '@/features/history/queries';
-import { formatDateTime } from '@/lib/format';
+import type { Patrol } from '@/api/types';
+import {
+  PATROL_SORT_OPTIONS,
+  PATROL_STATUS_OPTIONS,
+  type PatrolStatusFilter,
+} from '@/features/history/patrol-filters';
+import { PatrolCard } from '@/features/history/PatrolCard';
+import { useInfiniteShopPatrols } from '@/features/history/queries';
+import { useShop } from '@/features/route-setup/queries';
 import { colors, spacing } from '@/theme';
-import { AppText, Badge, Button, Card, Header, Screen } from '@/ui';
+import {
+  AppText,
+  Button,
+  FilterSheet,
+  type FilterSheetGroup,
+  FilterSortBar,
+  Header,
+  ListFooter,
+  Screen,
+  SheetButton,
+} from '@/ui';
 
 export default function ShopHistoryScreen(): React.ReactElement {
   const router = useRouter();
   const { shopId } = useLocalSearchParams<{ shopId: string }>();
-  const { data, isPending, isError, error, refetch } = useShopPatrols(shopId);
+  const { data: shop } = useShop(shopId);
+  const [status, setStatus] = useState<PatrolStatusFilter>('all');
+  const [sort, setSort] = useState('startedAt:desc');
 
-  function openPatrol(patrolId: string): void {
-    router.push({ pathname: '/history/patrol/[id]', params: { id: patrolId } });
-  }
+  const {
+    items,
+    isPending,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useInfiniteShopPatrols(shopId, { status: status === 'all' ? undefined : status, sort });
+
+  const filterGroups: FilterSheetGroup[] = [
+    {
+      title: 'Статус',
+      options: PATROL_STATUS_OPTIONS,
+      value: status,
+      onChange: (value) => setStatus(value as PatrolStatusFilter),
+    },
+  ];
+
+  const openPatrol = useCallback(
+    (patrol: Patrol) => router.push({ pathname: '/history/patrol/[id]', params: { id: patrol.id } }),
+    [router],
+  );
 
   return (
     <Screen padded={false}>
       <View style={styles.header}>
-        <Header title="История обходов" onBack={() => router.back()} />
+        <Header title="История обходов" subtitle={shop?.name} onBack={() => router.back()} />
+        <FilterSortBar>
+          <FilterSheet groups={filterGroups} activeCount={status === 'all' ? 0 : 1} />
+          <SheetButton
+            label="Сортировать"
+            icon="swap-vertical-outline"
+            title="Сортировка"
+            options={PATROL_SORT_OPTIONS}
+            value={sort}
+            onChange={setSort}
+          />
+        </FilterSortBar>
       </View>
 
       {isPending ? (
@@ -37,28 +88,27 @@ export default function ShopHistoryScreen(): React.ReactElement {
         </View>
       ) : (
         <FlatList
-          data={data.items}
+          data={items}
           keyExtractor={(patrol) => patrol.id}
           contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          onEndReachedThreshold={0.4}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) {
+              void fetchNextPage();
+            }
+          }}
+          ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
           ListEmptyComponent={<AppText muted>Обходов пока нет.</AppText>}
           renderItem={({ item }) => (
-            <Card style={styles.card} onPress={() => openPatrol(item.id)}>
-              <View style={styles.cardRow}>
-                <View style={styles.info}>
-                  <AppText variant="label">{item.employee?.fullName ?? 'Сотрудник'}</AppText>
-                  <AppText variant="caption" muted style={styles.meta}>
-                    {formatDateTime(item.startedAt)} · {item.scannedPoints} / {item.totalPoints} точек
-                  </AppText>
-                  <View style={styles.statusRow}>
-                    <Badge
-                      label={patrolStatusLabel(item.status)}
-                      tone={patrolStatusTone(item.status)}
-                    />
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-              </View>
-            </Card>
+            <PatrolCard patrol={item} showEmployee timezone={shop?.timezone} onPress={openPatrol} />
           )}
         />
       )}
@@ -83,23 +133,7 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.xl,
-  },
-  card: {
-    marginBottom: spacing.md,
-  },
-  cardRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  info: {
-    flex: 1,
-    marginRight: spacing.md,
-  },
-  meta: {
-    marginTop: spacing.xs,
-  },
-  statusRow: {
-    marginTop: spacing.sm,
   },
 });

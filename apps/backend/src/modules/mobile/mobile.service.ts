@@ -5,6 +5,7 @@ import {
   CompletePatrolDto,
   CreatePatrolEventDto,
   RegisterDevicePushTokenDto,
+  ReportMissedPointAttemptDto,
   StartRouteSetupDto,
   StartMobilePatrolDto,
   SyncPatrolEventsDto,
@@ -141,6 +142,16 @@ export class MobileService {
     await this.assertPatrolBelongsToUser(user, patrolId);
 
     return this.patrolsService.cancel(patrolId, dto);
+  }
+
+  async reportMissedPointAttempt(
+    user: AuthenticatedUser,
+    patrolId: string,
+    dto: ReportMissedPointAttemptDto,
+  ): Promise<void> {
+    await this.assertPatrolBelongsToUser(user, patrolId);
+
+    await this.patrolsService.recordMissedPointAttempt(patrolId, dto);
   }
 
   async syncPatrolEvents(

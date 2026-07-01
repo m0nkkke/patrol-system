@@ -26,6 +26,7 @@ type UpdateUserRecord = {
   isActive?: boolean;
   passwordHash?: string;
   role?: UserRole;
+  sessionVersion?: number;
   shopId?: string | null;
   shops?: ShopEntity[];
   username?: string;

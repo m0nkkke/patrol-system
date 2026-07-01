@@ -122,6 +122,15 @@ export class PatrolScheduleDto {
 }
 
 export class AvailablePatrolScheduleDto extends PatrolScheduleDto {
-  @ApiProperty({ format: 'date-time' })
-  dueAt: Date = new Date();
+  @ApiProperty()
+  isAvailable: boolean = false;
+
+  @ApiPropertyOptional({ format: 'date-time' })
+  dueAt?: Date;
+
+  @ApiPropertyOptional({ format: 'date-time' })
+  nextStartAt?: Date;
+
+  @ApiPropertyOptional({ example: 3, minimum: 1, maximum: 7 })
+  nextWeekday?: number;
 }

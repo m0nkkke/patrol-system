@@ -6,6 +6,22 @@ export type Coords = {
   gpsAccuracy?: number;
 };
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+    );
+  });
+}
+
 export async function getCurrentCoords(): Promise<Coords | null> {
   try {
     const existing = await Location.getForegroundPermissionsAsync();
@@ -20,9 +36,20 @@ export async function getCurrentCoords(): Promise<Coords | null> {
       return null;
     }
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
+    // Сначала берём последний известный фикс — он мгновенный.
+    // Свежий фикс запрашиваем только если кэша нет, и то с таймаутом,
+    // чтобы отметка точки не зависала на ожидании GPS в помещении.
+    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 300000 });
+    const position =
+      lastKnown ??
+      (await withTimeout(
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        5000,
+      ));
+
+    if (!position) {
+      return null;
+    }
 
     return {
       lat: position.coords.latitude,

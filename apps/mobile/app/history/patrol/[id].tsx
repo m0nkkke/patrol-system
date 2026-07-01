@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import type { Patrol, PatrolEvent } from '@/api/types';
+import type { Patrol, PatrolEvent, RoutePoint } from '@/api/types';
 import { usePatrol, usePatrolPoints } from '@/features/history/queries';
 import { patrolStatusLabel, patrolStatusTone } from '@/features/patrol/patrol-status';
 import { formatDateTime, formatDuration, formatTime } from '@/lib/format';
@@ -18,14 +18,6 @@ export default function PatrolDetailScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: patrol, isPending, isError, error, refetch } = usePatrol(id);
   const { data: points } = usePatrolPoints(patrol?.shopId);
-
-  const pointNames = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const point of points ?? []) {
-      map.set(point.id, point.name);
-    }
-    return map;
-  }, [points]);
 
   if (isPending) {
     return (
@@ -53,7 +45,8 @@ export default function PatrolDetailScreen(): React.ReactElement {
 
         <SummaryCard patrol={patrol} />
         <DetailsCard patrol={patrol} />
-        <EventsList patrol={patrol} pointNames={pointNames} />
+        {patrol.completionReport ? <ReportCard report={patrol.completionReport} /> : null}
+        <PointsList patrol={patrol} points={points ?? []} timezone={patrol.shop?.timezone} />
       </ScrollView>
     </Screen>
   );
@@ -85,45 +78,81 @@ function SummaryCard({ patrol }: { patrol: Patrol }): React.ReactElement {
 }
 
 function DetailsCard({ patrol }: { patrol: Patrol }): React.ReactElement {
+  const tz = patrol.shop?.timezone;
   return (
     <Card style={styles.gapLg}>
-      <InfoRow label="Начат" value={formatDateTime(patrol.startedAt)} first />
-      <InfoRow label="Завершён" value={formatDateTime(patrol.completedAt)} />
+      <InfoRow label="Начат" value={formatDateTime(patrol.startedAt, tz)} first />
+      <InfoRow label="Завершён" value={formatDateTime(patrol.completedAt, tz)} />
       <InfoRow label="Длительность" value={formatDuration(patrol.startedAt, patrol.completedAt)} />
-      {patrol.dueAt ? <InfoRow label="Срок до" value={formatDateTime(patrol.dueAt)} /> : null}
+      {patrol.dueAt ? <InfoRow label="Срок до" value={formatDateTime(patrol.dueAt, tz)} /> : null}
+      {patrol.cancelledAt ? (
+        <InfoRow label="Отменён" value={formatDateTime(patrol.cancelledAt, tz)} />
+      ) : null}
+      {patrol.cancellationReason ? (
+        <InfoRow label="Причина отмены" value={patrol.cancellationReason} />
+      ) : null}
       {patrol.notes ? <InfoRow label="Заметки" value={patrol.notes} /> : null}
     </Card>
   );
 }
 
-function EventsList({
+function ReportCard({ report }: { report: string }): React.ReactElement {
+  return (
+    <Card style={styles.gapLg}>
+      <View style={styles.reportTitleRow}>
+        <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+        <AppText variant="label" style={styles.reportTitle}>
+          Отчёт сотрудника
+        </AppText>
+      </View>
+      <AppText variant="body" style={styles.gapSm}>
+        {report}
+      </AppText>
+    </Card>
+  );
+}
+
+function PointsList({
   patrol,
-  pointNames,
+  points,
+  timezone,
 }: {
   patrol: Patrol;
-  pointNames: Map<string, string>;
+  points: RoutePoint[];
+  timezone?: string;
 }): React.ReactElement {
-  const events = useMemo(
-    () => [...(patrol.events ?? [])].sort((a, b) => a.scannedAt.localeCompare(b.scannedAt)),
-    [patrol.events],
+  const eventByPoint = useMemo(() => {
+    const map = new Map<string, PatrolEvent>();
+    for (const event of patrol.events ?? []) {
+      map.set(event.patrolPointId, event);
+    }
+    return map;
+  }, [patrol.events]);
+
+  const sorted = useMemo(
+    () => [...points].sort((a, b) => a.sortOrder - b.sortOrder),
+    [points],
   );
+
+  const passedCount = sorted.filter((point) => eventByPoint.has(point.id)).length;
 
   return (
     <View>
       <AppText variant="label" style={styles.gapLg}>
-        Пройденные точки ({events.length})
+        Точки маршрута ({passedCount} / {sorted.length})
       </AppText>
-      {events.length === 0 ? (
+      {sorted.length === 0 ? (
         <AppText muted style={styles.gapSm}>
-          Точек не отмечено.
+          Нет точек маршрута.
         </AppText>
       ) : (
-        events.map((event, index) => (
-          <EventCard
-            key={event.id}
-            order={index + 1}
-            name={pointName(pointNames, event.patrolPointId)}
-            event={event}
+        sorted.map((point) => (
+          <PointCard
+            key={point.id}
+            order={point.sortOrder}
+            name={point.name.trim().length > 0 ? point.name : 'Без названия'}
+            event={eventByPoint.get(point.id)}
+            timezone={timezone}
           />
         ))
       )}
@@ -131,22 +160,29 @@ function EventsList({
   );
 }
 
-function EventCard({
+function PointCard({
   order,
   name,
   event,
+  timezone,
 }: {
   order: number;
   name: string;
-  event: PatrolEvent;
+  event?: PatrolEvent;
+  timezone?: string;
 }): React.ReactElement {
-  const flags = eventFlags(event);
+  const passed = event !== undefined;
+  const flags = event ? eventFlags(event) : [];
   return (
     <Card style={styles.eventCard}>
       <View style={styles.eventRow}>
-        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+        <Ionicons
+          name={passed ? 'checkmark-circle' : 'close-circle'}
+          size={22}
+          color={passed ? colors.success : colors.danger}
+        />
         <View style={styles.eventInfo}>
-          <AppText variant="body">
+          <AppText variant="body" color={passed ? colors.text : colors.textMuted}>
             {order}. {name}
           </AppText>
           {flags.length > 0 ? (
@@ -157,17 +193,12 @@ function EventCard({
             </View>
           ) : null}
         </View>
-        <AppText variant="caption" muted>
-          {formatTime(event.scannedAt)}
+        <AppText variant="caption" color={passed ? colors.textMuted : colors.danger}>
+          {event ? formatTime(event.scannedAt, timezone) : 'Не пройдена'}
         </AppText>
       </View>
     </Card>
   );
-}
-
-function pointName(pointNames: Map<string, string>, pointId: string): string {
-  const name = pointNames.get(pointId);
-  return name && name.trim().length > 0 ? name : 'Без названия';
 }
 
 function eventFlags(event: PatrolEvent): EventFlag[] {
@@ -214,6 +245,13 @@ const styles = StyleSheet.create({
   },
   gapLg: {
     marginTop: spacing.lg,
+  },
+  reportTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  reportTitle: {
+    marginLeft: spacing.xs,
   },
   eventCard: {
     marginTop: spacing.sm,

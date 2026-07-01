@@ -1,0 +1,37 @@
+# .easignore — что НЕ загружать в EAS Build.
+# Внимание: при наличии этого файла EAS игнорирует .gitignore и использует только его.
+# Поэтому здесь перечислено всё лишнее явно (включая node_modules и секреты).
+
+# Зависимости — EAS переустанавливает их на билдере
+node_modules/
+
+# Системы контроля версий и тулинг
+.git/
+.github/
+.vscode/
+.idea/
+
+# Кэши и артефакты сборки
+.expo/
+dist/
+build/
+web-build/
+*.log
+
+# Нативные проекты (генерируются prebuild)
+apps/mobile/android/
+apps/mobile/ios/
+
+# Не нужно для сборки мобильного приложения
+apps/backend/
+docs/
+
+# Секреты (никогда не загружать)
+.env
+.env.local
+**/.env
+**/.env.local
+*-service-account*.json
+**/google-services.json
+apps/mobile/api-*.json
+GoogleService-Info.plist

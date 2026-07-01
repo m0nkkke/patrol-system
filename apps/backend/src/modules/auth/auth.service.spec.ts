@@ -127,6 +127,23 @@ describe('AuthService', () => {
     ).rejects.toBeInstanceOf(InvalidCredentialsError);
   });
 
+  it('rejects refresh token when user session version changed', async () => {
+    const user = createUser({ sessionVersion: 2 });
+    const refreshToken = createRefreshToken(createUser({ sessionVersion: 1 }));
+    const refreshTokenHash = hashToken(refreshToken);
+
+    refreshTokenStore.get.mockResolvedValue(refreshTokenHash);
+    refreshTokensRepository.findValidByHash.mockResolvedValue({
+      tokenHash: refreshTokenHash,
+      userId: user.id,
+    } as Awaited<ReturnType<RefreshTokensRepository['findValidByHash']>>);
+    usersService.findEntityById.mockResolvedValue(user);
+
+    await expect(
+      service.refresh({ deviceId: 'device-1', refreshToken }),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+  });
+
   it('revokes refresh token on logout', async () => {
     const user = createUser();
     const refreshToken = createRefreshToken(user);
@@ -156,6 +173,7 @@ function createRefreshToken(user: UserEntity): string {
   return sign(
     {
       role: user.role,
+      sessionVersion: user.sessionVersion,
       sub: user.id,
       username: user.username,
     },
@@ -172,6 +190,7 @@ function createUser(overrides: Partial<UserEntity> = {}): UserEntity {
     isActive: true,
     passwordHash: 'hash',
     role: 'employee',
+    sessionVersion: 0,
     updatedAt: new Date(),
     username: 'mobile.employee',
     ...overrides,

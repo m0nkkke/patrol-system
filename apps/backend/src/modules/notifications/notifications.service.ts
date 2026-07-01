@@ -68,7 +68,7 @@ export class NotificationsService {
   }
 
   async notifyPatrolIncident(context: PatrolIncidentNotificationContext): Promise<void> {
-    const tokens = await this.notificationsRepository.findActiveManagerAndAdminPushTokensByShop(
+    const tokens = await this.notificationsRepository.findActiveManagerPushTokensByShop(
       context.shopId,
     );
 
@@ -85,7 +85,7 @@ export class NotificationsService {
   }
 
   async notifyPatrolOverdue(context: PatrolNotificationContext): Promise<void> {
-    const tokens = await this.notificationsRepository.findActiveManagerAndAdminPushTokensByShop(
+    const tokens = await this.notificationsRepository.findActiveManagerPushTokensByShop(
       context.shopId,
     );
 
@@ -103,7 +103,7 @@ export class NotificationsService {
   async notifyPatrolCancelled(
     context: PatrolNotificationContext & { cancellationReason?: string },
   ): Promise<void> {
-    const tokens = await this.notificationsRepository.findActiveManagerAndAdminPushTokensByShop(
+    const tokens = await this.notificationsRepository.findActiveManagerPushTokensByShop(
       context.shopId,
     );
 

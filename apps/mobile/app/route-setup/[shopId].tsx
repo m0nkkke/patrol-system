@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,15 +13,24 @@ import {
 
 import { describeError } from '@/api/error-messages';
 import type { RouteSetupState } from '@/api/types';
-import { useRouteSetup, useScanRoutePoint, useStartRouteSetup } from '@/features/route-setup/queries';
+import {
+  useResetRouteSetup,
+  useRouteSetup,
+  useScanRoutePoint,
+  useStartRouteSetup,
+} from '@/features/route-setup/queries';
 import { nfcReader } from '@/nfc';
+import { useAuthStore } from '@/store/auth-store';
 import { colors, radius, spacing } from '@/theme';
 import {
   AppText,
+  AppDialog,
+  AppToast,
   Button,
   Card,
   FormHeader,
   Header,
+  NfcScanOverlay,
   ProgressBar,
   ResultHeader,
   ResultScreen,
@@ -31,7 +41,17 @@ import {
 export default function RouteSetupScreen(): React.ReactElement {
   const router = useRouter();
   const { shopId } = useLocalSearchParams<{ shopId: string }>();
+  const userRole = useAuthStore((state) => state.user?.role);
   const { data: state, isPending, isError, error, refetch } = useRouteSetup(shopId);
+
+  function leaveCompletedRouteSetup(): void {
+    if (userRole === 'admin') {
+      router.replace('/route-setup/shops');
+      return;
+    }
+
+    router.replace('/');
+  }
 
   if (isPending) {
     return (
@@ -57,7 +77,7 @@ export default function RouteSetupScreen(): React.ReactElement {
   }
 
   if (state.nextSortOrder === undefined) {
-    return <DoneStep total={state.expectedPoints} onDone={() => router.back()} />;
+    return <DoneStep shopId={shopId} state={state} onDone={leaveCompletedRouteSetup} />;
   }
 
   return <PointStep shopId={shopId} state={state} onBack={() => router.back()} />;
@@ -75,6 +95,7 @@ function NumberStep({
 
   const expectedPoints = Number.parseInt(value, 10);
   const isValid = Number.isInteger(expectedPoints) && expectedPoints >= 1 && expectedPoints <= 32767;
+  const formError = isError ? describeError(error) : null;
 
   function handleStart(): void {
     if (!isValid || isPending) {
@@ -85,6 +106,7 @@ function NumberStep({
 
   return (
     <Screen padded={false}>
+      <AppToast message={formError} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -104,7 +126,7 @@ function NumberStep({
             onChangeText={setValue}
             placeholder="например, 12"
             keyboardType="number-pad"
-            error={isError ? describeError(error) : null}
+            error={formError}
           />
           <AppText variant="caption" muted style={styles.hint}>
             После старта точки регистрируются по очереди — по одной.
@@ -140,28 +162,28 @@ function PointStep({
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [uid, setUid] = useState('');
-  const [nfcAvailable, setNfcAvailable] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [nfcError, setNfcError] = useState<string | null>(null);
   const [justBound, setJustBound] = useState<number | null>(null);
+  const [dialog, setDialog] = useState<{
+    actions: { label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }[];
+    message: string;
+    title: string;
+    tone: 'danger' | 'info' | 'success' | 'warning';
+  } | null>(null);
 
   const { mutate, isPending, isError, error } = useScanRoutePoint(shopId);
-
-  useEffect(() => {
-    void nfcReader.isAvailable().then(setNfcAvailable);
-  }, []);
+  const reset = useResetRouteSetup(shopId);
 
   useEffect(() => {
     if (justBound === null) {
       return;
     }
-    const timer = setTimeout(() => setJustBound(null), 2000);
+    const timer = setTimeout(() => setJustBound(null), 4000);
     return () => clearTimeout(timer);
   }, [justBound]);
 
   const nameValid = name.trim().length >= 1;
-  const trimmedUid = uid.trim();
-  const uidValid = trimmedUid.length >= 4 && trimmedUid.length <= 32;
   const busy = isPending;
 
   function bind(rawUid: string): void {
@@ -177,9 +199,9 @@ function PointStep({
       },
       {
         onSuccess: () => {
+          Keyboard.dismiss();
           setName('');
           setDescription('');
-          setUid('');
           setNfcError(null);
           setJustBound(boundNumber);
         },
@@ -192,47 +214,115 @@ function PointStep({
       return;
     }
     setNfcError(null);
+    const supported = await nfcReader.isAvailable();
+    if (!supported) {
+      setNfcError('NFC недоступен на этом устройстве.');
+      return;
+    }
+
+    const enabled = await nfcReader.isEnabled();
+    if (!enabled) {
+      setDialog({
+        actions: [
+          {
+            label: 'Открыть настройки',
+            onPress: () => {
+              setDialog(null);
+              void nfcReader.openSettings();
+            },
+          },
+          { label: 'Позже', onPress: () => setDialog(null), variant: 'ghost' },
+        ],
+        message: 'Включите NFC в настройках телефона и повторите сканирование.',
+        title: 'NFC выключен',
+        tone: 'warning',
+      });
+      return;
+    }
+
+    setScanning(true);
     try {
       const scannedUid = await nfcReader.readUid();
       bind(scannedUid);
     } catch {
       setNfcError('Не удалось считать NFC-метку.');
+    } finally {
+      setScanning(false);
     }
   }
 
   const formError = nfcError ?? (isError ? describeError(error) : null);
 
+  function confirmReset(): void {
+    setDialog({
+      actions: [
+        {
+          label: 'Начать заново',
+          onPress: () => {
+            setDialog(null);
+            reset.mutate();
+          },
+          variant: 'danger',
+        },
+        { label: 'Отмена', onPress: () => setDialog(null), variant: 'ghost' },
+      ],
+      message: 'Все уже зарегистрированные точки этого маршрута будут удалены.',
+      title: 'Начать настройку заново?',
+      tone: 'danger',
+    });
+  }
+
   return (
     <Screen padded={false}>
+      <AppToast message={formError} />
+      {dialog ? (
+        <AppDialog
+          visible
+          title={dialog.title}
+          message={dialog.message}
+          tone={dialog.tone}
+          actions={dialog.actions}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+      <NfcScanOverlay
+        visible={scanning}
+        title={`Сканируем точку №${current}`}
+        subtitle="Поднесите телефон к NFC-метке этой контрольной точки."
+        onCancel={() => void nfcReader.cancel()}
+      />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.topArea}>
           <Header onBack={onBack} />
-          <Card>
-            <AppText variant="label">
-              Точка {current} из {state.expectedPoints}
-            </AppText>
-            <View style={styles.progressWrap}>
-              <ProgressBar value={state.registeredPoints} max={state.expectedPoints} />
-            </View>
-            <AppText variant="caption" muted style={styles.gapSm}>
-              Зарегистрировано {state.registeredPoints} из {state.expectedPoints}
-            </AppText>
-          </Card>
+          <View>
+            <Card>
+              <AppText variant="label">
+                Точка {current} из {state.expectedPoints}
+              </AppText>
+              <View style={styles.progressWrap}>
+                <ProgressBar value={state.registeredPoints} max={state.expectedPoints} />
+              </View>
+              <AppText variant="caption" muted style={styles.gapSm}>
+                Зарегистрировано {state.registeredPoints} из {state.expectedPoints}
+              </AppText>
+            </Card>
+            {justBound !== null ? (
+              <View style={styles.toastOverlay} pointerEvents="none">
+                <View style={styles.toast}>
+                  <Ionicons name="checkmark-circle" size={28} color={colors.success} />
+                  <AppText variant="label" color={colors.success} style={styles.toastText}>
+                    Точка №{justBound} привязана
+                  </AppText>
+                </View>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          {justBound !== null ? (
-            <View style={styles.successBanner}>
-              <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-              <AppText variant="caption" color={colors.success} style={styles.successText}>
-                Точка №{justBound} привязана
-              </AppText>
-            </View>
-          ) : null}
-
           <TextField
             label="Название точки"
             required
@@ -260,36 +350,17 @@ function PointStep({
             </View>
           ) : (
             <View style={styles.gapXl}>
-              {nfcAvailable ? (
-                <Button
-                  label="Сканировать NFC метку"
-                  icon="scan-outline"
-                  onPress={() => void handleScanNfc()}
-                  disabled={!nameValid}
-                />
-              ) : null}
-
-              <View style={nfcAvailable ? styles.manualBlock : undefined}>
-                <TextField
-                  label="UID метки (для теста)"
-                  icon="qr-code-outline"
-                  value={uid}
-                  onChangeText={setUid}
-                  placeholder="04a1b2c3d4e5f6"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <View style={styles.gapLg}>
-                  <Button
-                    label="Привязать точку"
-                    icon="link-outline"
-                    variant={nfcAvailable ? 'secondary' : 'primary'}
-                    onPress={() => bind(trimmedUid)}
-                    disabled={!nameValid || !uidValid}
-                  />
-                </View>
-              </View>
-
+              <Button
+                label="Сканировать NFC метку"
+                icon="scan-outline"
+                onPress={() => void handleScanNfc()}
+                disabled={!nameValid || busy}
+              />
+              <AppText variant="caption" muted style={styles.gapLg}>
+                {nameValid
+                  ? 'При нажатии проверим NFC и подскажем, если его нужно включить.'
+                  : 'Сначала введите название точки.'}
+              </AppText>
               {formError ? (
                 <AppText variant="caption" color={colors.danger} style={styles.gapLg}>
                   {formError}
@@ -297,25 +368,92 @@ function PointStep({
               ) : null}
             </View>
           )}
+
+          <View style={styles.gapXl}>
+            <Button
+              label="Начать заново"
+              variant="ghost"
+              icon="refresh-outline"
+              onPress={confirmReset}
+              loading={reset.isPending}
+            />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
-function DoneStep({ total, onDone }: { total: number; onDone: () => void }): React.ReactElement {
+function DoneStep({
+  shopId,
+  state,
+  onDone,
+}: {
+  shopId: string;
+  state: RouteSetupState;
+  onDone: () => void;
+}): React.ReactElement {
+  const points = [...state.points].sort((a, b) => a.sortOrder - b.sortOrder);
+  const reset = useResetRouteSetup(shopId);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  function confirmReset(): void {
+    setDialogOpen(true);
+  }
+
   return (
     <ResultScreen
       onBack={onDone}
-      footer={<Button label="Готово" icon="checkmark-outline" onPress={onDone} />}
+      footer={
+        <>
+          <Button label="Готово" icon="checkmark-outline" onPress={onDone} />
+          <View style={styles.gapSm}>
+            <Button
+              label="Настроить заново"
+              variant="secondary"
+              icon="refresh-outline"
+              onPress={confirmReset}
+              loading={reset.isPending}
+            />
+          </View>
+        </>
+      }
     >
+      <AppDialog
+        visible={dialogOpen}
+        title="Настроить маршрут заново?"
+        message="Все точки этого маршрута будут удалены, настройку начнёте с начала."
+        tone="danger"
+        actions={[
+          {
+            label: 'Настроить заново',
+            onPress: () => {
+              setDialogOpen(false);
+              reset.mutate();
+            },
+            variant: 'danger',
+          },
+          { label: 'Отмена', onPress: () => setDialogOpen(false), variant: 'ghost' },
+        ]}
+        onClose={() => setDialogOpen(false)}
+      />
       <ResultHeader
         icon="checkmark"
         iconColor={colors.success}
         iconBackground={colors.successBackground}
         title="Маршрут готов!"
-        subtitle={`${total} точек зарегистрировано`}
+        subtitle={`${state.expectedPoints} точек в маршруте`}
       />
+      <AppText variant="label" style={styles.doneTitle}>
+        Точки маршрута
+      </AppText>
+      {points.map((point) => (
+        <Card key={point.id} style={styles.donePointCard}>
+          <AppText variant="body">
+            {point.sortOrder}. {point.name.trim().length > 0 ? point.name : 'Без названия'}
+          </AppText>
+        </Card>
+      ))}
     </ResultScreen>
   );
 }
@@ -351,18 +489,40 @@ const styles = StyleSheet.create({
   progressWrap: {
     marginTop: spacing.md,
   },
-  successBanner: {
+  toastOverlay: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  toast: {
     alignItems: 'center',
     backgroundColor: colors.successBackground,
+    borderColor: colors.success,
     borderRadius: radius.md,
+    borderWidth: 1,
+    elevation: 4,
     flexDirection: 'row',
-    marginBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
   },
-  successText: {
-    fontWeight: '600',
-    marginLeft: spacing.sm,
+  toastText: {
+    fontWeight: '700',
+    marginLeft: spacing.md,
+  },
+  doneTitle: {
+    marginBottom: spacing.sm,
+  },
+  donePointCard: {
+    marginBottom: spacing.sm,
+    padding: spacing.lg,
   },
   binding: {
     alignItems: 'center',
@@ -370,9 +530,6 @@ const styles = StyleSheet.create({
   },
   bindingText: {
     marginTop: spacing.md,
-  },
-  manualBlock: {
-    marginTop: spacing.lg,
   },
   gapSm: {
     marginTop: spacing.sm,

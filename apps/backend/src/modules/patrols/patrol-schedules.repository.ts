@@ -32,7 +32,7 @@ export class PatrolSchedulesRepository {
 
   findByShop(shopId: string): Promise<PatrolScheduleEntity[]> {
     return this.schedules.find({
-      order: { startTime: 'ASC', name: 'ASC' },
+      order: { isActive: 'DESC', startTime: 'ASC', name: 'ASC' },
       where: { shopId },
     });
   }

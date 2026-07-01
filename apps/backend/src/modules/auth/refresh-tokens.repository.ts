@@ -35,4 +35,14 @@ export class RefreshTokensRepository {
   async revokeByHash(tokenHash: string, revokedAt: Date): Promise<void> {
     await this.repo.update({ tokenHash }, { revokedAt });
   }
+
+  async revokeByUserId(userId: string, revokedAt: Date): Promise<void> {
+    await this.repo
+      .createQueryBuilder()
+      .update(RefreshTokenEntity)
+      .set({ revokedAt })
+      .where('user_id = :userId', { userId })
+      .andWhere('revoked_at IS NULL')
+      .execute();
+  }
 }

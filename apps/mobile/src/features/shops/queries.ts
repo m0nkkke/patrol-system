@@ -7,6 +7,9 @@ export function useCreateShop() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateShopDto) => createShop(payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shops'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['shops'] });
+      void queryClient.invalidateQueries({ queryKey: ['shops-infinite'] });
+    },
   });
 }

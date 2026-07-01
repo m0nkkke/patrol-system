@@ -36,7 +36,7 @@ export function FilterChips<T extends string>({
             onPress={() => onChange(option.value)}
             activeOpacity={0.8}
           >
-            <AppText variant="caption" color={selected ? colors.textInverse : colors.text}>
+            <AppText variant="caption" color={selected ? colors.textInverse : colors.controlText}>
               {option.label}
             </AppText>
           </TouchableOpacity>
@@ -52,8 +52,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   chip: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.controlSurface,
+    borderColor: colors.controlBorder,
     borderRadius: radius.full,
     borderWidth: 1,
     paddingHorizontal: spacing.lg,

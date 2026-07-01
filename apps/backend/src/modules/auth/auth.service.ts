@@ -36,6 +36,7 @@ export class AuthService {
 
     const payload: JwtPayload = {
       role: user.role,
+      sessionVersion: user.sessionVersion,
       sub: user.id,
       username: user.username,
     };
@@ -69,12 +70,13 @@ export class AuthService {
 
     const user = await this.usersService.findEntityById(payload.sub);
 
-    if (user === null || !user.isActive) {
+    if (user === null || !user.isActive || user.sessionVersion !== payload.sessionVersion) {
       throw new InvalidCredentialsError();
     }
 
     const nextPayload: JwtPayload = {
       role: user.role,
+      sessionVersion: user.sessionVersion,
       sub: user.id,
       username: user.username,
     };
@@ -169,8 +171,10 @@ function isJwtPayload(payload: string | object): payload is JwtPayload {
     'sub' in payload &&
     'username' in payload &&
     'role' in payload &&
+    'sessionVersion' in payload &&
     typeof payload.sub === 'string' &&
     typeof payload.username === 'string' &&
+    typeof payload.sessionVersion === 'number' &&
     (payload.role === 'admin' || payload.role === 'manager' || payload.role === 'employee')
   );
 }

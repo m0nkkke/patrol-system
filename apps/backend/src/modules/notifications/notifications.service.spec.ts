@@ -9,7 +9,7 @@ type NotificationsRepositoryMock = Pick<
   NotificationsRepository,
   | 'deactivateDevicePushToken'
   | 'deactivatePushTokens'
-  | 'findActiveManagerAndAdminPushTokensByShop'
+  | 'findActiveManagerPushTokensByShop'
   | 'upsertDevicePushToken'
 >;
 type ConfigServiceMock = {
@@ -36,7 +36,7 @@ describe('NotificationsService', () => {
     repository = {
       deactivateDevicePushToken: jest.fn(),
       deactivatePushTokens: jest.fn(),
-      findActiveManagerAndAdminPushTokensByShop: jest.fn(),
+      findActiveManagerPushTokensByShop: jest.fn(),
       upsertDevicePushToken: jest.fn(),
     };
     service = new NotificationsService(
@@ -66,7 +66,7 @@ describe('NotificationsService', () => {
   });
 
   it('does not call Expo when push notifications are disabled', async () => {
-    repository.findActiveManagerAndAdminPushTokensByShop.mockResolvedValue([
+    repository.findActiveManagerPushTokensByShop.mockResolvedValue([
       createDevicePushToken(),
     ]);
     const fetchMock = jest.spyOn(global, 'fetch');
@@ -90,7 +90,7 @@ describe('NotificationsService', () => {
 
       return values[key];
     });
-    repository.findActiveManagerAndAdminPushTokensByShop.mockResolvedValue([
+    repository.findActiveManagerPushTokensByShop.mockResolvedValue([
       createDevicePushToken({
         pushToken: 'ExponentPushToken[invalid]',
       }),

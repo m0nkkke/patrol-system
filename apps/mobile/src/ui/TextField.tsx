@@ -12,6 +12,7 @@ type TextFieldProps = TextInputProps & {
   error?: string | null;
   required?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  tone?: 'default' | 'control';
 };
 
 export function TextField({
@@ -19,6 +20,7 @@ export function TextField({
   error,
   required,
   icon,
+  tone = 'default',
   style,
   onFocus,
   onBlur,
@@ -32,12 +34,18 @@ export function TextField({
       <View
         style={[
           styles.inputRow,
+          tone === 'control' ? styles.inputRowControl : null,
           focused && styles.inputRowFocused,
           error ? styles.inputRowError : null,
         ]}
       >
         {icon ? (
-          <Ionicons name={icon} size={20} color={colors.textMuted} style={styles.icon} />
+          <Ionicons
+            name={icon}
+            size={20}
+            color={tone === 'control' ? colors.controlText : colors.textMuted}
+            style={styles.icon}
+          />
         ) : null}
         <TextInput
           style={[styles.input, style]}
@@ -78,6 +86,10 @@ const styles = StyleSheet.create({
   },
   inputRowFocused: {
     borderColor: colors.primary,
+  },
+  inputRowControl: {
+    backgroundColor: colors.controlSurface,
+    borderColor: colors.controlBorder,
   },
   inputRowError: {
     borderColor: colors.danger,

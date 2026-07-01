@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { memo } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { AdminUser } from '@/api/types';
@@ -9,16 +10,17 @@ import { RoleBadge } from './RoleBadge';
 
 type UserCardProps = {
   user: AdminUser;
-  onPress: () => void;
+  onPress: (user: AdminUser) => void;
 };
 
-export function UserCard({ user, onPress }: UserCardProps): React.ReactElement {
+function UserCardComponent({ user, onPress }: UserCardProps): React.ReactElement {
   const inactive = !user.isActive;
+  const statusColor = user.isActive ? colors.success : colors.danger;
 
   return (
     <TouchableOpacity
       style={[styles.card, inactive && styles.cardInactive]}
-      onPress={onPress}
+      onPress={() => onPress(user)}
       activeOpacity={0.7}
     >
       <View style={styles.info}>
@@ -28,16 +30,22 @@ export function UserCard({ user, onPress }: UserCardProps): React.ReactElement {
         <View style={styles.roleRow}>
           <RoleBadge role={user.role} />
         </View>
-        {inactive ? (
-          <AppText variant="caption" color={colors.danger} style={styles.status}>
-            Неактивен
-          </AppText>
-        ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+
+      <View style={styles.right}>
+        <View style={styles.statusRow}>
+          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+          <AppText variant="caption" color={statusColor} style={styles.statusText}>
+            {user.isActive ? 'Активен' : 'Неактивен'}
+          </AppText>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+      </View>
     </TouchableOpacity>
   );
 }
+
+export const UserCard = memo(UserCardComponent);
 
 const styles = StyleSheet.create({
   card: {
@@ -55,12 +63,27 @@ const styles = StyleSheet.create({
   },
   info: {
     flex: 1,
-    marginRight: spacing.lg,
+    marginRight: spacing.md,
   },
   roleRow: {
     marginTop: spacing.xs,
   },
-  status: {
-    marginTop: spacing.xs,
+  right: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  statusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginRight: spacing.sm,
+  },
+  dot: {
+    borderRadius: 4,
+    height: 8,
+    marginRight: spacing.xs,
+    width: 8,
+  },
+  statusText: {
+    fontWeight: '600',
   },
 });

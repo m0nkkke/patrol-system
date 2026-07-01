@@ -25,6 +25,23 @@ export class RefreshTokenStore {
     await this.redis.del(buildRefreshKey(userId, deviceId));
   }
 
+  async revokeAllForUser(userId: string): Promise<void> {
+    const stream = this.redis.scanStream({ match: buildRefreshUserPattern(userId) });
+    const pipeline = this.redis.pipeline();
+    let count = 0;
+
+    for await (const keys of stream) {
+      for (const key of keys as string[]) {
+        pipeline.del(key);
+        count += 1;
+      }
+    }
+
+    if (count > 0) {
+      await pipeline.exec();
+    }
+  }
+
   async assertLoginAllowed(ipAddress: string | undefined, deviceId: string): Promise<void> {
     const key = buildLoginAttemptsKey(ipAddress, deviceId);
     const attempts = Number((await this.redis.get(key)) ?? '0');
@@ -50,6 +67,10 @@ export class RefreshTokenStore {
 
 function buildRefreshKey(userId: string, deviceId: string): string {
   return `refresh:${userId}:${deviceId}`;
+}
+
+function buildRefreshUserPattern(userId: string): string {
+  return `refresh:${userId}:*`;
 }
 
 function buildLoginAttemptsKey(ipAddress: string | undefined, deviceId: string): string {

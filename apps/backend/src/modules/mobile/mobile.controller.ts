@@ -18,6 +18,7 @@ import {
   CreatePatrolEventDto,
   DevicePushTokenResponseDto,
   RegisterDevicePushTokenDto,
+  ReportMissedPointAttemptDto,
   StartRouteSetupDto,
   StartMobilePatrolDto,
   SyncPatrolEventsDto,
@@ -124,7 +125,7 @@ export class MobileController {
   @Roles('employee')
   @UseGuards(RolesGuard)
   @ApiOkResponse({
-    description: 'Patrol schedules available at current shop time',
+    description: 'Active patrol schedules for the employee shop with current availability flag',
     type: [AvailablePatrolScheduleDto],
   })
   getAvailablePatrolSchedules(
@@ -181,6 +182,19 @@ export class MobileController {
     @Body() dto: CancelPatrolDto,
   ): ReturnType<MobileService['cancelPatrol']> {
     return this.mobileService.cancelPatrol(user, id, dto);
+  }
+
+  @Post('patrols/:id/missed-point-attempts')
+  @HttpCode(204)
+  @Roles('employee')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Mobile missed route point attempt reported' })
+  reportMissedPointAttempt(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReportMissedPointAttemptDto,
+  ): ReturnType<MobileService['reportMissedPointAttempt']> {
+    return this.mobileService.reportMissedPointAttempt(user, id, dto);
   }
 
   @Post('patrols/:id/events/sync')

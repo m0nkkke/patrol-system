@@ -1,5 +1,7 @@
 import type { RouteStatus } from '@patrol/shared';
 
+import { colors } from '@/theme';
+
 type BadgeTone = 'neutral' | 'success' | 'warning';
 
 export function routeStatusLabel(status: RouteStatus): string {
@@ -21,5 +23,16 @@ export function routeStatusTone(status: RouteStatus): BadgeTone {
       return 'warning';
     default:
       return 'neutral';
+  }
+}
+
+export function routeStatusColor(status: RouteStatus): string {
+  switch (status) {
+    case 'ready':
+      return colors.success;
+    case 'setup_in_progress':
+      return colors.warning;
+    default:
+      return colors.textMuted;
   }
 }

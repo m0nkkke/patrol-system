@@ -82,7 +82,7 @@ export class NotificationsRepository {
     });
   }
 
-  findActiveManagerAndAdminPushTokensByShop(shopId: string): Promise<DevicePushTokenEntity[]> {
+  findActiveManagerPushTokensByShop(shopId: string): Promise<DevicePushTokenEntity[]> {
     return this.devicePushTokens
       .createQueryBuilder('token')
       .innerJoin('token.user', 'user')
@@ -90,9 +90,8 @@ export class NotificationsRepository {
       .where('token.is_active = :isActive', { isActive: true })
       .andWhere('user.is_active = :userIsActive', { userIsActive: true })
       .andWhere(
-        '(user.role = :adminRole OR (user.role = :managerRole AND (user.shop_id = :shopId OR assignedShop.id = :shopId)))',
+        'user.role = :managerRole AND (user.shop_id = :shopId OR assignedShop.id = :shopId)',
         {
-          adminRole: 'admin',
           managerRole: 'manager',
           shopId,
         },
