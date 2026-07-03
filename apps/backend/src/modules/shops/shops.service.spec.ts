@@ -17,7 +17,13 @@ type PatrolPointsServiceMock = Pick<
 
 type ShopsRepositoryMock = Pick<
   ShopsRepository,
-  'create' | 'findByExternalId' | 'findById' | 'findMany' | 'update' | 'updateRouteSetup'
+  | 'create'
+  | 'findByExternalId'
+  | 'findById'
+  | 'findMany'
+  | 'softDelete'
+  | 'update'
+  | 'updateRouteSetup'
 >;
 
 describe('ShopsService', () => {
@@ -38,6 +44,7 @@ describe('ShopsService', () => {
       findByExternalId: jest.fn(),
       findById: jest.fn(),
       findMany: jest.fn(),
+      softDelete: jest.fn(),
       update: jest.fn(),
       updateRouteSetup: jest.fn(),
     };
@@ -123,6 +130,14 @@ describe('ShopsService', () => {
       status: RouteStatus.NOT_CONFIGURED,
     });
     expect(result.routeStatus).toBe(RouteStatus.NOT_CONFIGURED);
+  });
+
+  it('soft deletes existing shop', async () => {
+    shopsRepository.findById.mockResolvedValue(createShop());
+
+    await service.delete('shop-id');
+
+    expect(shopsRepository.softDelete).toHaveBeenCalledWith('shop-id');
   });
 });
 

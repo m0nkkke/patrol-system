@@ -6,10 +6,11 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View } f
 import { describeError } from '@/api/error-messages';
 import { ShopMultiSelectList } from '@/features/shops/ShopMultiSelectList';
 import { ROLE_ICONS } from '@/features/users/role';
-import { useUpdateUser, useUser } from '@/features/users/queries';
+import { useDeleteUser, useUpdateUser, useUser } from '@/features/users/queries';
 import { colors, spacing } from '@/theme';
 import {
   AppText,
+  AppDialog,
   Button,
   FieldLabel,
   FormHeader,
@@ -38,12 +39,19 @@ export default function EditUserScreen(): React.ReactElement {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: user, isPending, isError, error, refetch } = useUser(id);
   const { mutate, isPending: isSaving, isError: isSaveError, error: saveError } = useUpdateUser(id);
+  const {
+    mutate: deleteUser,
+    isPending: isDeleting,
+    isError: isDeleteError,
+    error: deleteError,
+  } = useDeleteUser(id);
 
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<UserRole>('employee');
   const [status, setStatus] = useState<StatusValue>('active');
   const [shopIds, setShopIds] = useState<string[]>([]);
   const [seeded, setSeeded] = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
 
   useEffect(() => {
     if (!user || seeded) {
@@ -93,7 +101,7 @@ export default function EditUserScreen(): React.ReactElement {
   }
 
   function handleSubmit(): void {
-    if (!isValid || isSaving) {
+    if (!isValid || isSaving || isDeleting) {
       return;
     }
     mutate(
@@ -108,8 +116,37 @@ export default function EditUserScreen(): React.ReactElement {
     );
   }
 
+  function handleDelete(): void {
+    if (isDeleting) {
+      return;
+    }
+    deleteUser(undefined, {
+      onSuccess: () => router.replace('/users'),
+      onSettled: () => setDeleteDialogVisible(false),
+    });
+  }
+
   return (
     <Screen padded={false}>
+      <AppDialog
+        visible={deleteDialogVisible}
+        title="Удалить пользователя?"
+        message="Пользователь исчезнет из приложения и обычных списков. История обходов и отчеты останутся в базе, а активные сессии будут отозваны."
+        tone="danger"
+        actions={[
+          {
+            label: isDeleting ? 'Удаление...' : 'Удалить',
+            variant: 'danger',
+            onPress: handleDelete,
+          },
+          {
+            label: 'Отмена',
+            variant: 'ghost',
+            onPress: () => setDeleteDialogVisible(false),
+          },
+        ]}
+        onClose={() => setDeleteDialogVisible(false)}
+      />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -158,9 +195,9 @@ export default function EditUserScreen(): React.ReactElement {
         )}
 
         <View style={styles.footer}>
-          {isSaveError ? (
+          {isSaveError || isDeleteError ? (
             <AppText variant="caption" color={colors.danger} style={styles.footerError}>
-              {describeError(saveError)}
+              {describeError(saveError ?? deleteError)}
             </AppText>
           ) : null}
           <Button
@@ -168,8 +205,18 @@ export default function EditUserScreen(): React.ReactElement {
             icon="checkmark-circle-outline"
             onPress={handleSubmit}
             loading={isSaving}
-            disabled={!isValid}
+            disabled={!isValid || isDeleting}
           />
+          <View style={styles.deleteButton}>
+            <Button
+              label="Удалить пользователя"
+              icon="trash-outline"
+              variant="dangerSecondary"
+              onPress={() => setDeleteDialogVisible(true)}
+              loading={isDeleting}
+              disabled={isSaving}
+            />
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -202,6 +249,9 @@ const styles = StyleSheet.create({
   },
   footerError: {
     marginBottom: spacing.sm,
+  },
+  deleteButton: {
+    marginTop: spacing.md,
   },
   gapLg: {
     marginTop: spacing.lg,

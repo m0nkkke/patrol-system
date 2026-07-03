@@ -3,11 +3,14 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 
 import { colors, layout, radius, spacing, typography } from '@/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerSecondary' | 'ghost';
 
 function contentColorFor(variant: ButtonVariant): string {
   if (variant === 'secondary') {
     return colors.primary;
+  }
+  if (variant === 'dangerSecondary') {
+    return colors.danger;
   }
   if (variant === 'ghost') {
     return colors.text;
@@ -79,6 +82,11 @@ const styles = StyleSheet.create({
   },
   danger: {
     backgroundColor: colors.danger,
+  },
+  dangerSecondary: {
+    backgroundColor: colors.surface,
+    borderColor: colors.danger,
+    borderWidth: 1,
   },
   ghost: {
     backgroundColor: 'transparent',

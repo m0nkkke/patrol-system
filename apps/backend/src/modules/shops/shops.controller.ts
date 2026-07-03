@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -61,6 +62,14 @@ export class ShopsController {
     @Body() dto: UpdateShopDto,
   ): Promise<ShopEntity> {
     return this.shopsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @Roles('admin')
+  @ApiOkResponse({ description: 'Shop soft deleted' })
+  delete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.shopsService.delete(id);
   }
 
   @Post(':id/route-setup/start')

@@ -94,6 +94,10 @@ export class UsersRepository {
   async update(id: string, data: UpdateUserRecord): Promise<UserEntity> {
     return this.repo.save({ id, ...data });
   }
+
+  async softDelete(id: string): Promise<void> {
+    await this.repo.softDelete(id);
+  }
 }
 
 function parseUserSort(sort: ListUsersQueryDto['sort']): ['createdAt' | 'fullName' | 'role', 'ASC' | 'DESC'] {

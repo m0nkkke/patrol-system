@@ -14,6 +14,10 @@ export async function updateUser(userId: string, payload: UpdateUserDto): Promis
   return response.data;
 }
 
+export async function deleteUser(userId: string): Promise<void> {
+  await apiClient.delete(`/users/${userId}`);
+}
+
 export async function rotateUserAccessKey(userId: string): Promise<AdminUser> {
   const response = await apiClient.post<AdminUser>(`/users/${userId}/access-key/rotate`);
   return response.data;

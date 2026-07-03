@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   assignUserShops,
   createUser,
+  deleteUser,
   getUser,
   getUsers,
   rotateUserAccessKey,
@@ -31,6 +32,17 @@ export function useUpdateUser(userId: string) {
     mutationFn: (payload: UpdateUserDto) => updateUser(userId, payload),
     onSuccess: (user) => {
       queryClient.setQueryData(['user', userId], user);
+      invalidateUserLists(queryClient);
+    },
+  });
+}
+
+export function useDeleteUser(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteUser(userId),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['user', userId] });
       invalidateUserLists(queryClient);
     },
   });

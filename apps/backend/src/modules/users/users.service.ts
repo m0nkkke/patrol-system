@@ -131,6 +131,16 @@ export class UsersService {
     return toPublicUser(await this.requireEntity(id));
   }
 
+  async delete(id: string): Promise<void> {
+    const user = await this.requireEntity(id);
+
+    await this.usersRepository.update(id, {
+      sessionVersion: user.sessionVersion + 1,
+    });
+    await this.usersRepository.softDelete(id);
+    await this.sessionRevocationService.revokeUserSessions(id);
+  }
+
   async rotateAccessKey(id: string): Promise<PublicUser> {
     const user = await this.requireEntity(id);
 

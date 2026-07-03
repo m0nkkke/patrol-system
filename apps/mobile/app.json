@@ -3,14 +3,12 @@
     "name": "Patrol System",
     "slug": "patrol-system",
     "scheme": "patrolsystem",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": ["**/*"],
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
@@ -60,7 +58,7 @@
       ]
     ],
     "extra": {
-      "apiBaseUrl": "https://api.your-domain.ru/api/v1",
+      "apiBaseUrl": "https://ps.mbabsolut.ru/api/v1",
       "router": {},
       "eas": {
         "projectId": "92154afb-f1b2-456a-a768-f74ed3900f23"

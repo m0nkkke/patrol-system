@@ -18,7 +18,7 @@ import {
   scanRoutePoint,
   startRouteSetup,
 } from '@/api/route-setup.api';
-import { getShop, getShops, updateShop } from '@/api/shops.api';
+import { deleteShop, getShop, getShops, updateShop } from '@/api/shops.api';
 import type { Shop } from '@/api/types';
 import { PAGE_SIZE, useInfinitePaginated } from '@/api/use-infinite-paginated';
 
@@ -85,6 +85,17 @@ export function useUpdateShop(shopId: string) {
     mutationFn: (payload: UpdateShopDto) => updateShop(shopId, payload),
     onSuccess: (shop) => {
       queryClient.setQueryData(['shop', shopId], shop);
+      invalidateShopLists(queryClient);
+    },
+  });
+}
+
+export function useDeleteShop(shopId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteShop(shopId),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['shop', shopId] });
       invalidateShopLists(queryClient);
     },
   });

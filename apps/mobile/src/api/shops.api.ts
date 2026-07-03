@@ -35,3 +35,7 @@ export async function updateShop(shopId: string, payload: UpdateShopDto): Promis
   const response = await apiClient.patch<Shop>(`/shops/${shopId}`, payload);
   return response.data;
 }
+
+export async function deleteShop(shopId: string): Promise<void> {
+  await apiClient.delete(`/shops/${shopId}`);
+}
