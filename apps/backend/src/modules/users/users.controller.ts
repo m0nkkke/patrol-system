@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AssignUserShopsDto, CreateUserDto, ListUsersQueryDto, UpdateUserDto } from '@patrol/shared';
 
@@ -40,6 +40,13 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
   ): ReturnType<UsersService['update']> {
     return this.usersService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @ApiOkResponse({ description: 'User soft deleted' })
+  delete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.usersService.delete(id);
   }
 
   @Post(':id/access-key/rotate')

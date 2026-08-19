@@ -93,6 +93,11 @@ export class ShopsService {
     return this.findOne(id);
   }
 
+  async delete(id: string): Promise<void> {
+    await this.findOne(id);
+    await this.shopsRepository.softDelete(id);
+  }
+
   async startRouteSetup(shopId: string, dto: StartRouteSetupDto): Promise<RouteSetupState> {
     await this.findOne(shopId);
 

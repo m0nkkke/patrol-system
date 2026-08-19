@@ -9,7 +9,10 @@ import { UsersService } from './users.service';
 
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
 type SessionRevocationServiceMock = Pick<SessionRevocationService, 'revokeUserSessions'>;
-type UsersRepositoryMock = Pick<UsersRepository, 'assignShops' | 'create' | 'findById' | 'update'>;
+type UsersRepositoryMock = Pick<
+  UsersRepository,
+  'assignShops' | 'create' | 'findById' | 'softDelete' | 'update'
+>;
 
 describe('UsersService', () => {
   let shopsService: jest.Mocked<ShopsServiceMock>;
@@ -28,6 +31,7 @@ describe('UsersService', () => {
       assignShops: jest.fn(),
       create: jest.fn(),
       findById: jest.fn(),
+      softDelete: jest.fn(),
       update: jest.fn(),
     };
 
@@ -186,5 +190,26 @@ describe('UsersService', () => {
     expect(updateCall?.[1].sessionVersion).toBe(5);
     expect(sessionRevocationService.revokeUserSessions).toHaveBeenCalledWith('user-id');
     expect(typeof result.accessKey).toBe('string');
+  });
+
+  it('soft deletes user and revokes sessions', async () => {
+    const user = {
+      createdAt: new Date(),
+      fullName: 'Mobile Employee',
+      id: 'user-id',
+      isActive: true,
+      passwordHash: 'hash',
+      role: 'employee',
+      sessionVersion: 6,
+      updatedAt: new Date(),
+      username: 'mobile.employee',
+    } as UserEntity;
+    usersRepository.findById.mockResolvedValue(user);
+
+    await service.delete('user-id');
+
+    expect(usersRepository.update).toHaveBeenCalledWith('user-id', { sessionVersion: 7 });
+    expect(usersRepository.softDelete).toHaveBeenCalledWith('user-id');
+    expect(sessionRevocationService.revokeUserSessions).toHaveBeenCalledWith('user-id');
   });
 });

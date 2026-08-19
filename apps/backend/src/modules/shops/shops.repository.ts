@@ -88,6 +88,10 @@ export class ShopsRepository {
     return this.repo.save({ id, ...data });
   }
 
+  async softDelete(id: string): Promise<void> {
+    await this.repo.softDelete(id);
+  }
+
   async updateRouteSetup(id: string, data: UpdateRouteSetupRecord): Promise<void> {
     await this.repo.update(id, {
       routeExpectedPoints: data.expectedPoints,
