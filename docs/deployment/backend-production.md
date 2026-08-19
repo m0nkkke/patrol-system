@@ -7,6 +7,7 @@
 - `backend` — NestJS API, доступен на хосте только через `127.0.0.1:3000`.
 - `postgres` — PostgreSQL 15, порт наружу не публикуется.
 - `redis` — Redis 7 с паролем и AOF, порт наружу не публикуется.
+- `backend_storage` — Docker volume для локального файлового хранилища backend.
 - `nginx` — reverse proxy на хосте, принимает HTTPS и проксирует в backend.
 - `certbot` — выпуск и продление Let's Encrypt сертификата.
 
@@ -89,9 +90,23 @@ NODE_ENV=production
 API_PREFIX=api/v1
 DATABASE_HOST=postgres
 REDIS_HOST=redis
+FILE_STORAGE_BACKEND=local
+FILE_STORAGE_LOCAL_ROOT=/app/storage
+REPORTING_CORE_PUBLISH_ENABLED=false
+REPORTING_CORE_TRANSPORT=disabled
+SWAGGER_ENABLED=false
 ```
 
 Seed-скрипты на production не запускать автоматически. Тестовые данные допустимы только вручную и только для staging/demo.
+
+Когда главное ядро отчетности будет готово, включить отправку outbox-событий:
+
+```env
+REPORTING_CORE_PUBLISH_ENABLED=true
+REPORTING_CORE_TRANSPORT=http
+REPORTING_CORE_URL=https://reporting-core.example.ru
+REPORTING_CORE_API_KEY=<service-token>
+```
 
 ## Первый запуск
 
@@ -152,13 +167,22 @@ sudo certbot --nginx -d api.example.ru
 curl https://api.example.ru/api/v1/health
 ```
 
-Swagger доступен по:
+Swagger в production по умолчанию выключен:
 
-```text
-https://api.example.ru/api/v1/docs
+```env
+SWAGGER_ENABLED=false
 ```
 
-Если Swagger не должен быть публичным на production, его нужно закрывать отдельно на уровне Nginx или backend-конфигурации.
+Если Swagger нужно временно включить для staging/demo или закрытого production-доступа, он должен быть защищен Basic Auth:
+
+```env
+SWAGGER_ENABLED=true
+SWAGGER_BASIC_AUTH_ENABLED=true
+SWAGGER_BASIC_AUTH_USER=<docs-user>
+SWAGGER_BASIC_AUTH_PASSWORD=<strong-docs-password>
+```
+
+Backend не стартует в `NODE_ENV=production` со включенным Swagger без Basic Auth.
 
 ## Обновление версии
 
@@ -178,6 +202,8 @@ curl http://127.0.0.1:3000/api/v1/health
 ## Бэкапы PostgreSQL
 
 Скрипт `deploy/scripts/backup-postgres.sh` делает `pg_dump` в custom-формате и удаляет локальные копии старше `RETENTION_DAYS`.
+
+Фото и другие загруженные файлы в режиме `FILE_STORAGE_BACKEND=local` лежат в Docker volume `backend_storage` и не попадают в PostgreSQL dump. Для production нужно отдельно копировать `/app/storage` или весь volume `backend_storage` во внешнее хранилище.
 
 Первый ручной запуск:
 

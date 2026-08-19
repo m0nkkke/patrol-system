@@ -1,4 +1,4 @@
-import { UserRole } from '@patrol/shared';
+import { USER_ROLES, UserRole } from '@patrol/shared';
 import {
   Column,
   CreateDateColumn,
@@ -38,8 +38,8 @@ export class UserEntity {
   shops?: ShopEntity[];
 
   @Index('idx_users_role')
-  @Column({ default: 'employee', enum: ['employee', 'manager', 'admin'], type: 'enum', enumName: 'user_role' })
-  role: UserRole = 'employee';
+  @Column({ default: 'security_guard', enum: USER_ROLES, type: 'enum', enumName: 'user_role' })
+  role: UserRole = 'security_guard';
 
   @Column({ length: 200, name: 'full_name' })
   fullName: string = '';
@@ -58,6 +58,9 @@ export class UserEntity {
 
   @Column({ default: true, name: 'is_active' })
   isActive: boolean = true;
+
+  @Column({ default: false, name: 'is_universal_route_setter' })
+  isUniversalRouteSetter: boolean = false;
 
   @Column({ default: 0, name: 'session_version' })
   sessionVersion: number = 0;

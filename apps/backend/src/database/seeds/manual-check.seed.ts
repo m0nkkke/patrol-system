@@ -1,524 +1,270 @@
+import { PatrolPointVisitStatus, PatrolScanAction } from '@patrol/shared';
 import { Repository } from 'typeorm';
 
-import dataSource from '../data-source';
 import { formatAccessKey, hashAccessKey } from '../../common/auth/access-key';
 import { NfcTagEntity } from '../../modules/patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../../modules/patrol-points/entities/patrol-point.entity';
 import { PatrolEventEntity } from '../../modules/patrols/entities/patrol-event.entity';
+import { PatrolPointVisitEntity } from '../../modules/patrols/entities/patrol-point-visit.entity';
+import { PatrolRoutePointEntity } from '../../modules/patrols/entities/patrol-route-point.entity';
+import { PatrolRouteEntity } from '../../modules/patrols/entities/patrol-route.entity';
 import { PatrolScheduleEntity } from '../../modules/patrols/entities/patrol-schedule.entity';
 import { PatrolEntity } from '../../modules/patrols/entities/patrol.entity';
 import { RegionEntity } from '../../modules/shops/entities/region.entity';
 import { ShopEntity } from '../../modules/shops/entities/shop.entity';
 import { UserEntity } from '../../modules/users/entities/user.entity';
+import dataSource from '../data-source';
 
 const SEED_MARKER = 'manual-check-seed';
+const MINUTE_MS = 60_000;
 
-type SeedResult = {
-  admin: UserEntity;
-  completedPatrol: PatrolEntity;
-  employee: UserEntity;
-  inProgressPatrol: PatrolEntity;
-  manager: UserEntity;
-  mobileAdmin: UserEntity;
-  mobileEmployee: UserEntity;
-  points: PatrolPointEntity[];
-  shop: ShopEntity;
-  tags: NfcTagEntity[];
+type SeedUser = {
+  accessKey: string;
+  fullName: string;
+  isUniversalRouteSetter?: boolean;
+  role: UserEntity['role'];
+  shopId?: string;
+  username: string;
 };
 
 async function run(): Promise<void> {
   await dataSource.initialize();
-
   try {
     await assertSchemaIsReady();
-    const result = await seedManualCheckData();
-    printSeedResult(result);
+    process.stdout.write(`${JSON.stringify(await seedManualCheckData(), null, 2)}\n`);
   } finally {
     await dataSource.destroy();
   }
 }
 
 async function assertSchemaIsReady(): Promise<void> {
-  const requiredColumns = [
-    { column: 'external_id', table: 'shops' },
-    { column: 'route_status', table: 'shops' },
-    { column: 'access_key', table: 'users' },
-    { column: 'access_key_hash', table: 'users' },
-    { column: 'client_local_id', table: 'patrol_events' },
-    { column: 'late_sync', table: 'patrol_events' },
-    { column: 'point_deactivated_after_scan', table: 'patrol_events' },
+  const required = [
+    'patrol_routes',
+    'patrol_route_points',
+    'patrol_point_visits',
+    'route_timing_profiles',
+    'patrol_reports',
   ];
-
   const rows: unknown = await dataSource.query(
-    `
-      SELECT table_name AS "tableName", column_name AS "columnName"
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = ANY($1)
-    `,
-    [[...new Set(requiredColumns.map((item) => item.table))]],
+    `SELECT table_name AS "tableName" FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = ANY($1)`,
+    [required],
   );
-
-  const existingColumns = new Set(
-    toColumnRows(rows).map((row) => `${row.tableName}.${row.columnName}`),
+  const existing = new Set(
+    Array.isArray(rows)
+      ? rows.flatMap((row) => {
+          const value = row as { tableName?: unknown };
+          return typeof value.tableName === 'string' ? [value.tableName] : [];
+        })
+      : [],
   );
-  const missingColumns = requiredColumns
-    .filter((item) => !existingColumns.has(`${item.table}.${item.column}`))
-    .map((item) => `${item.table}.${item.column}`);
-
-  if (missingColumns.length > 0) {
+  const missing = required.filter((table) => !existing.has(table));
+  if (missing.length > 0) {
     throw new Error(
-      [
-        'База данных не соответствует текущей схеме backend.',
-        `Не найдены колонки: ${missingColumns.join(', ')}.`,
-        'Сначала примените миграции: npm run backend:migration:run',
-        'После успешных миграций повторите seed: npm run backend:seed:manual',
-      ].join('\n'),
+      `Database schema is outdated. Missing tables: ${missing.join(', ')}. ` +
+        'Run npm run backend:migration:run before the seed.',
     );
   }
 }
 
-async function seedManualCheckData(): Promise<SeedResult> {
-  const region = await findOrCreateRegion(dataSource.getRepository(RegionEntity));
-  const shop = await findOrCreateShop(dataSource.getRepository(ShopEntity), region.id);
-  const users = await findOrCreateUsers(dataSource.getRepository(UserEntity), shop.id);
-  const tags = await findOrCreateNfcTags(dataSource.getRepository(NfcTagEntity), users.admin.id);
-  const points = await findOrCreatePatrolPoints(
-    dataSource.getRepository(PatrolPointEntity),
-    shop.id,
-    tags,
-  );
-
-  await findOrCreateSchedule(dataSource.getRepository(PatrolScheduleEntity), shop.id);
-
-  const patrols = await findOrCreatePatrols(
-    dataSource.getRepository(PatrolEntity),
-    dataSource.getRepository(PatrolEventEntity),
-    shop.id,
-    users.employee.id,
-    points,
-    tags,
-  );
+async function seedManualCheckData(): Promise<Record<string, unknown>> {
+  const region = await ensureRegion();
+  const shop = await ensureShop(region.id);
+  const users = await ensureUsers(shop.id);
+  const admin = users.admin;
+  const guard = users.guard;
+  if (admin === undefined || guard === undefined) throw new Error('Seed users were not created');
+  const tags = await ensureTags(admin.id);
+  const points = await ensurePoints(shop.id, tags);
+  const route = await ensureRoute(shop.id, points);
+  const schedule = await ensureSchedule(shop.id, route.id);
+  const base = { employeeId: guard.id, points, routeId: route.id, scheduleId: schedule.id, shopId: shop.id, tags };
+  const completedPatrol = await ensurePatrol({ ...base, marker: `${SEED_MARKER}:completed`, status: 'completed' });
+  const inProgressPatrol = await ensurePatrol({ ...base, marker: `${SEED_MARKER}:in-progress`, status: 'in_progress' });
 
   return {
-    admin: users.admin,
-    completedPatrol: patrols.completed,
-    employee: users.employee,
-    inProgressPatrol: patrols.inProgress,
-    manager: users.manager,
-    mobileAdmin: users.mobileAdmin,
-    mobileEmployee: users.mobileEmployee,
-    points,
-    shop,
-    tags,
+    credentials: Object.fromEntries(
+      Object.entries(users).map(([key, user]) => [key, { accessKey: user.accessKey, username: user.username }]),
+    ),
+    ids: {
+      completedPatrolId: completedPatrol.id,
+      inProgressPatrolId: inProgressPatrol.id,
+      pointIds: points.map((point) => point.id),
+      routeId: route.id,
+      scheduleId: schedule.id,
+      shopId: shop.id,
+    },
+    nextAction: { patrolId: inProgressPatrol.id, scanAction: PatrolScanAction.DEPART, uid: tags[0]?.uid },
+    nfcUids: tags.map((tag) => tag.uid),
   };
 }
 
-async function findOrCreateRegion(repository: Repository<RegionEntity>): Promise<RegionEntity> {
-  const existing = await repository.findOne({ where: { name: 'Сибирь / ручная проверка' } });
-
-  if (existing !== null) {
-    return existing;
-  }
-
-  return repository.save(repository.create({ name: 'Сибирь / ручная проверка' }));
+async function ensureRegion(): Promise<RegionEntity> {
+  const repository = dataSource.getRepository(RegionEntity);
+  const existing = await repository.findOne({ where: { name: 'Seed region' } });
+  return repository.save(repository.create({ id: existing?.id, name: 'Seed region' }));
 }
 
-async function findOrCreateShop(
-  repository: Repository<ShopEntity>,
-  regionId: string,
-): Promise<ShopEntity> {
-  const existing = await repository.findOne({ where: { name: 'Магазин для ручной проверки' } });
-
-  if (existing !== null) {
-    existing.routeExpectedPoints = 3;
-    existing.routeRegisteredPoints = 3;
-    existing.routeStatus = 'ready';
-
-    await repository.save(existing);
-
-    return existing;
-  }
-
-  return repository.save(
-    repository.create({
-      address: 'Красноярск, тестовый контур',
-      isActive: true,
-      name: 'Магазин для ручной проверки',
-      regionId,
-      routeExpectedPoints: 3,
-      routeRegisteredPoints: 3,
-      routeStatus: 'ready',
-      timezone: 'Asia/Krasnoyarsk',
-    }),
-  );
+async function ensureShop(regionId: string): Promise<ShopEntity> {
+  const repository = dataSource.getRepository(ShopEntity);
+  const existing = await repository.findOne({ where: { externalId: 'SEED-MANUAL' } });
+  return repository.save(repository.create({
+    address: 'Krasnoyarsk, manual API check', externalId: 'SEED-MANUAL', id: existing?.id,
+    isActive: true, name: 'Manual check shop', regionId, routeExpectedPoints: 3,
+    routeRegisteredPoints: 3, routeStatus: 'ready', timezone: 'Asia/Krasnoyarsk',
+  }));
 }
 
-async function findOrCreateUsers(
-  repository: Repository<UserEntity>,
-  shopId: string,
-): Promise<{
-  admin: UserEntity;
-  employee: UserEntity;
-  manager: UserEntity;
-  mobileAdmin: UserEntity;
-  mobileEmployee: UserEntity;
-}> {
-  const admin = await findOrCreateUser(repository, {
-    accessKey: 'SADM-SEED-0001',
-    fullName: 'Администратор Seed',
-    role: 'admin',
-    username: 'seed.admin',
-  });
-  const manager = await findOrCreateUser(repository, {
-    accessKey: 'MNGR-SEED-0001',
-    fullName: 'Руководитель Seed',
-    role: 'manager',
-    shopId,
-    username: 'seed.manager',
-  });
-  const employee = await findOrCreateUser(repository, {
-    accessKey: 'EMPL-SEED-0001',
-    fullName: 'Обходчик Seed',
-    role: 'employee',
-    shopId,
-    username: 'seed.employee',
-  });
-  const mobileAdmin = await findOrCreateUser(repository, {
-    accessKey: 'MADM-SEED-0001',
-    fullName: 'Мобильный администратор Seed',
-    role: 'admin',
-    username: 'mobile.admin',
-  });
-  const mobileEmployee = await findOrCreateUser(repository, {
-    accessKey: 'MEMP-SEED-0001',
-    fullName: 'Мобильный обходчик Seed',
-    role: 'employee',
-    shopId,
-    username: 'mobile.employee',
-  });
-
-  for (const user of [manager, employee, mobileEmployee]) {
-    await ensureUserShopAssignment(repository, user.id, shopId);
+async function ensureUsers(shopId: string): Promise<Record<string, UserEntity>> {
+  const inputs: Record<string, SeedUser> = {
+    admin: { accessKey: 'SADM-SEED-0001', fullName: 'Seed Administrator', role: 'admin', username: 'seed.admin' },
+    guard: { accessKey: 'EMPL-SEED-0001', fullName: 'Seed Security Guard', role: 'security_guard', shopId, username: 'seed.employee' },
+    inspector: { accessKey: 'MNGR-SEED-0001', fullName: 'Seed Inspector', role: 'inspector', shopId, username: 'seed.manager' },
+    universalRouteSetter: {
+      accessKey: 'RSET-SEED-0001', fullName: 'Universal Route Setter Account',
+      isUniversalRouteSetter: true, role: 'route_setter', username: 'seed.route-setter',
+    },
+  };
+  const result: Record<string, UserEntity> = {};
+  for (const [key, input] of Object.entries(inputs)) {
+    const user = await ensureUser(input);
+    result[key] = user;
+    if (input.shopId !== undefined) await assignShop(user.id, input.shopId);
   }
-
-  return { admin, employee, manager, mobileAdmin, mobileEmployee };
+  return result;
 }
 
-async function ensureUserShopAssignment(
-  repository: Repository<UserEntity>,
-  userId: string,
-  shopId: string,
-): Promise<void> {
-  await repository.query(
-    `
-      INSERT INTO user_shop_assignments (user_id, shop_id)
-      VALUES ($1, $2)
-      ON CONFLICT DO NOTHING
-    `,
+async function ensureUser(input: SeedUser): Promise<UserEntity> {
+  const repository = dataSource.getRepository(UserEntity);
+  const existing = await repository.findOne({ where: { username: input.username } });
+  const accessKey = formatAccessKey(input.accessKey);
+  const accessKeyHash = hashAccessKey(accessKey);
+  return repository.save(repository.create({
+    accessKey, accessKeyHash, fullName: input.fullName, id: existing?.id, isActive: true,
+    isUniversalRouteSetter: input.isUniversalRouteSetter ?? false, passwordHash: accessKeyHash,
+    role: input.role, shopId: input.shopId, username: input.username,
+  }));
+}
+
+async function assignShop(userId: string, shopId: string): Promise<void> {
+  await dataSource.query(
+    `INSERT INTO user_shop_assignments (user_id, shop_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
     [userId, shopId],
   );
 }
 
-async function findOrCreateUser(
-  repository: Repository<UserEntity>,
-  data: Pick<UserEntity, 'fullName' | 'role' | 'shopId' | 'username'> & { accessKey: string },
-): Promise<UserEntity> {
-  const accessKey = formatAccessKey(data.accessKey);
-  const accessKeyHash = hashAccessKey(accessKey);
-  const existing = await repository.findOne({ where: { username: data.username } });
-
-  if (existing !== null) {
-    existing.accessKey = accessKey;
-    existing.accessKeyHash = accessKeyHash;
-    existing.passwordHash = accessKeyHash;
-    existing.role = data.role;
-    existing.shopId = data.shopId;
-
-    await repository.save(existing);
-
-    return existing;
+async function ensureTags(registeredBy: string): Promise<NfcTagEntity[]> {
+  const repository = dataSource.getRepository(NfcTagEntity);
+  const result: NfcTagEntity[] = [];
+  for (const uid of ['04a1b2c3d4e501', '04a1b2c3d4e502', '04a1b2c3d4e503']) {
+    const existing = await repository.findOne({ where: { uid } });
+    result.push(await repository.save(repository.create({
+      id: existing?.id, isActive: true, notes: SEED_MARKER,
+      payload: `${SEED_MARKER}:${uid}`, registeredBy, uid,
+    })));
   }
-
-  return repository.save(
-    repository.create({ ...data, accessKey, accessKeyHash, isActive: true, passwordHash: accessKeyHash }),
-  );
+  return result;
 }
 
-async function findOrCreateNfcTags(
-  repository: Repository<NfcTagEntity>,
-  registeredBy: string,
-): Promise<NfcTagEntity[]> {
-  const tagInputs = [
-    { payload: 'seed:entrance', uid: '04a1b2c3d4e501' },
-    { payload: 'seed:warehouse', uid: '04a1b2c3d4e502' },
-    { payload: 'seed:electrical', uid: '04a1b2c3d4e503' },
+async function ensurePoints(shopId: string, tags: NfcTagEntity[]): Promise<PatrolPointEntity[]> {
+  const repository = dataSource.getRepository(PatrolPointEntity);
+  const inputs = [
+    { description: 'Main entrance', name: 'Entrance' },
+    { description: 'Warehouse area', name: 'Warehouse' },
+    { description: 'Electrical room', name: 'Electrical room' },
   ];
-  const tags: NfcTagEntity[] = [];
-
-  for (const input of tagInputs) {
-    const existing = await repository.findOne({ where: { uid: input.uid } });
-
-    if (existing !== null) {
-      tags.push(existing);
-      continue;
-    }
-
-    tags.push(
-      await repository.save(
-        repository.create({
-          isActive: true,
-          notes: SEED_MARKER,
-          payload: input.payload,
-          registeredBy,
-          uid: input.uid,
-        }),
-      ),
-    );
-  }
-
-  return tags;
-}
-
-async function findOrCreatePatrolPoints(
-  repository: Repository<PatrolPointEntity>,
-  shopId: string,
-  tags: NfcTagEntity[],
-): Promise<PatrolPointEntity[]> {
-  const pointInputs = [
-    { description: 'Входная группа магазина', name: 'Вход', sortOrder: 1, tag: tags[0] },
-    { description: 'Складская зона', name: 'Склад', sortOrder: 2, tag: tags[1] },
-    { description: 'Электрощитовая', name: 'Электрощитовая', sortOrder: 3, tag: tags[2] },
-  ];
-  const points: PatrolPointEntity[] = [];
-
-  for (const input of pointInputs) {
-    const existing = await repository.findOne({
-      relations: { nfcTag: true },
-      where: { name: input.name, shopId },
-    });
-
-    if (existing !== null) {
-      points.push(existing);
-      continue;
-    }
-
-    points.push(
-      await repository.save(
-        repository.create({
-          description: input.description,
-          isActive: true,
-          name: input.name,
-          nfcTagId: input.tag?.id,
-          shopId,
-          sortOrder: input.sortOrder,
-        }),
-      ),
-    );
-  }
-
-  return points;
-}
-
-async function findOrCreateSchedule(
-  repository: Repository<PatrolScheduleEntity>,
-  shopId: string,
-): Promise<PatrolScheduleEntity> {
-  const existing = await repository.findOne({
-    where: { name: 'Ежедневный тестовый обход', shopId },
-  });
-
-  if (existing !== null) {
-    return existing;
-  }
-
-  return repository.save(
-    repository.create({
-      endTime: '23:00',
-      isActive: true,
-      name: 'Ежедневный тестовый обход',
-      shopId,
-      startTime: '09:00',
-      weekdays: [1, 2, 3, 4, 5, 6, 7],
-    }),
-  );
-}
-
-async function findOrCreatePatrols(
-  patrolRepository: Repository<PatrolEntity>,
-  eventRepository: Repository<PatrolEventEntity>,
-  shopId: string,
-  employeeId: string,
-  points: PatrolPointEntity[],
-  tags: NfcTagEntity[],
-): Promise<{ completed: PatrolEntity; inProgress: PatrolEntity }> {
-  const completed = await findOrCreateCompletedPatrol(
-    patrolRepository,
-    eventRepository,
-    shopId,
-    employeeId,
-    points,
-    tags,
-  );
-  const inProgress = await findOrCreateInProgressPatrol(
-    patrolRepository,
-    eventRepository,
-    shopId,
-    employeeId,
-    points,
-    tags,
-  );
-
-  return { completed, inProgress };
-}
-
-async function findOrCreateCompletedPatrol(
-  patrolRepository: Repository<PatrolEntity>,
-  eventRepository: Repository<PatrolEventEntity>,
-  shopId: string,
-  employeeId: string,
-  points: PatrolPointEntity[],
-  tags: NfcTagEntity[],
-): Promise<PatrolEntity> {
-  const existing = await patrolRepository.findOne({
-    where: { notes: `${SEED_MARKER}:completed`, shopId },
-  });
-
-  if (existing !== null) {
-    return existing;
-  }
-
-  const now = new Date();
-  const patrol = await patrolRepository.save(
-    patrolRepository.create({
-      completedAt: now,
-      employeeId,
-      notes: `${SEED_MARKER}:completed`,
-      scannedPoints: points.length,
-      shopId,
-      startedAt: new Date(now.getTime() - 20 * 60 * 1000),
-      status: 'completed',
-      totalPoints: points.length,
-    }),
-  );
-
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
+  const result: PatrolPointEntity[] = [];
+  for (let index = 0; index < inputs.length; index += 1) {
+    const input = inputs[index];
     const tag = tags[index];
-
-    if (point === undefined || tag === undefined) {
-      continue;
-    }
-
-    await eventRepository.save(
-      eventRepository.create({
-        deviceId: 'seed-device-01',
-        employeeId,
-        gpsAccuracy: 5,
-        lat: '56.010563',
-        lng: '92.852572',
-        nfcTagId: tag.id,
-        nfcUid: tag.uid,
-        patrolId: patrol.id,
-        patrolPointId: point.id,
-        scannedAt: new Date(now.getTime() - (15 - index * 5) * 60 * 1000),
-      }),
-    );
+    if (input === undefined || tag === undefined) continue;
+    const existing = await repository.findOne({ where: { name: input.name, shopId } });
+    result.push(await repository.save(repository.create({
+      ...input, id: existing?.id, isActive: true, nfcTagId: tag.id, shopId, sortOrder: index + 1,
+    })));
   }
-
-  return patrol;
+  return result;
 }
 
-async function findOrCreateInProgressPatrol(
-  patrolRepository: Repository<PatrolEntity>,
-  eventRepository: Repository<PatrolEventEntity>,
-  shopId: string,
-  employeeId: string,
-  points: PatrolPointEntity[],
-  tags: NfcTagEntity[],
-): Promise<PatrolEntity> {
-  const existing = await patrolRepository.findOne({
-    where: { notes: `${SEED_MARKER}:in-progress`, shopId },
-  });
+async function ensureRoute(shopId: string, points: PatrolPointEntity[]): Promise<PatrolRouteEntity> {
+  const repository = dataSource.getRepository(PatrolRouteEntity);
+  const pointRepository = dataSource.getRepository(PatrolRoutePointEntity);
+  const existing = await repository.findOne({ where: { name: 'Manual internal route', shopId } });
+  const route = await repository.save(repository.create({
+    category: 'internal', id: existing?.id, isActive: true, name: 'Manual internal route', shopId,
+  }));
+  await pointRepository.delete({ routeId: route.id });
+  await pointRepository.save(points.map((point, index) => pointRepository.create({
+    patrolPointId: point.id, routeId: route.id, sortOrder: index + 1,
+  })));
+  return route;
+}
 
-  if (existing !== null) {
-    return existing;
-  }
+async function ensureSchedule(shopId: string, routeId: string): Promise<PatrolScheduleEntity> {
+  const repository = dataSource.getRepository(PatrolScheduleEntity);
+  const existing = await repository.findOne({ where: { name: 'Manual morning patrol', shopId } });
+  return repository.save(repository.create({
+    earlyStartMinutes: 30, endTime: '23:00', id: existing?.id, isActive: true,
+    name: 'Manual morning patrol', period: 'morning', routeId, shopId, startTime: '09:00',
+    weekdays: [1, 2, 3, 4, 5, 6, 7],
+  }));
+}
 
-  const firstPoint = points[0];
-  const firstTag = tags[0];
+async function ensurePatrol(input: {
+  employeeId: string; marker: string; points: PatrolPointEntity[]; routeId: string;
+  scheduleId: string; shopId: string; status: 'completed' | 'in_progress'; tags: NfcTagEntity[];
+}): Promise<PatrolEntity> {
+  const patrolRepository = dataSource.getRepository(PatrolEntity);
+  const eventRepository = dataSource.getRepository(PatrolEventEntity);
+  const visitRepository = dataSource.getRepository(PatrolPointVisitEntity);
+  const existing = await patrolRepository.findOne({ where: { notes: input.marker } });
   const now = new Date();
-  const patrol = await patrolRepository.save(
-    patrolRepository.create({
-      dueAt: new Date(now.getTime() + 60 * 60 * 1000),
-      employeeId,
-      notes: `${SEED_MARKER}:in-progress`,
-      scannedPoints: firstPoint === undefined ? 0 : 1,
-      shopId,
-      startedAt: new Date(now.getTime() - 5 * 60 * 1000),
-      status: 'in_progress',
-      totalPoints: points.length,
-    }),
-  );
+  const completed = input.status === 'completed';
+  const patrol = await patrolRepository.save(patrolRepository.create({
+    completedAt: completed ? now : undefined,
+    dueAt: completed ? undefined : new Date(now.getTime() + 60 * MINUTE_MS),
+    employeeId: input.employeeId, id: existing?.id, notes: input.marker, routeId: input.routeId,
+    scannedPoints: completed ? input.points.length : 0, scheduleId: input.scheduleId,
+    shopId: input.shopId, startedAt: new Date(now.getTime() - (completed ? 20 : 5) * MINUTE_MS),
+    status: input.status, totalPoints: input.points.length,
+  }));
 
-  if (firstPoint !== undefined && firstTag !== undefined) {
-    await eventRepository.save(
-      eventRepository.create({
-        deviceId: 'seed-device-02',
-        employeeId,
-        gpsAccuracy: 6,
-        lat: '56.010563',
-        lng: '92.852572',
-        nfcTagId: firstTag.id,
-        nfcUid: firstTag.uid,
-        patrolId: patrol.id,
-        patrolPointId: firstPoint.id,
-        scannedAt: new Date(now.getTime() - 4 * 60 * 1000),
-      }),
-    );
+  await eventRepository.delete({ patrolId: patrol.id });
+  await visitRepository.delete({ patrolId: patrol.id });
+  const pointCount = completed ? input.points.length : 1;
+  for (let index = 0; index < pointCount; index += 1) {
+    const point = input.points[index];
+    const tag = input.tags[index];
+    if (point === undefined || tag === undefined) continue;
+    const arrivedAt = new Date(now.getTime() - (completed ? 17 - index * 5 : 3) * MINUTE_MS);
+    const departedAt = new Date(arrivedAt.getTime() + 90_000);
+    const visit = await visitRepository.save(visitRepository.create({
+      arrivedAt, departedAt: completed ? departedAt : undefined,
+      dwellSeconds: completed ? 90 : undefined, lockedUntil: departedAt,
+      patrolId: patrol.id, patrolPointId: point.id,
+      status: completed ? PatrolPointVisitStatus.COMPLETED : PatrolPointVisitStatus.READY_TO_DEPART,
+    }));
+    const arrival = await saveEvent(eventRepository, patrol, point, tag, visit.id, PatrolScanAction.ARRIVE, arrivedAt);
+    visit.arrivalEventId = arrival.id;
+    if (completed) {
+      const departure = await saveEvent(eventRepository, patrol, point, tag, visit.id, PatrolScanAction.DEPART, departedAt);
+      visit.departureEventId = departure.id;
+    }
+    await visitRepository.save(visit);
   }
-
   return patrol;
 }
 
-function printSeedResult(result: SeedResult): void {
-  const payload = {
-    credentials: {
-      admin: { accessKey: result.admin.accessKey, username: result.admin.username },
-      employee: { accessKey: result.employee.accessKey, username: result.employee.username },
-      manager: { accessKey: result.manager.accessKey, username: result.manager.username },
-      mobileAdmin: { accessKey: result.mobileAdmin.accessKey, username: result.mobileAdmin.username },
-      mobileEmployee: { accessKey: result.mobileEmployee.accessKey, username: result.mobileEmployee.username },
-    },
-    ids: {
-      completedPatrolId: result.completedPatrol.id,
-      inProgressPatrolId: result.inProgressPatrol.id,
-      pointIds: result.points.map((point) => point.id),
-      shopId: result.shop.id,
-      tagIds: result.tags.map((tag) => tag.id),
-    },
-    nfcUids: result.tags.map((tag) => tag.uid),
-  };
-
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-}
-
-function toColumnRows(rows: unknown): Array<{ columnName: string; tableName: string }> {
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  return rows.filter(
-    (row): row is { columnName: string; tableName: string } => {
-      if (typeof row !== 'object' || row === null) {
-        return false;
-      }
-
-      const record = row as Record<string, unknown>;
-
-      return typeof record.columnName === 'string' && typeof record.tableName === 'string';
-    },
-  );
+function saveEvent(
+  repository: Repository<PatrolEventEntity>, patrol: PatrolEntity, point: PatrolPointEntity,
+  tag: NfcTagEntity, pointVisitId: string, scanAction: PatrolScanAction, scannedAt: Date,
+): Promise<PatrolEventEntity> {
+  return repository.save(repository.create({
+    accepted: true, deviceId: 'manual-seed-device', employeeId: patrol.employeeId,
+    gpsAccuracy: 5, lat: '56.010563', lng: '92.852572', nfcTagId: tag.id,
+    nfcUid: tag.uid, patrolId: patrol.id, patrolPointId: point.id, pointVisitId,
+    scanAction, scannedAt,
+  }));
 }
 
 void run().catch((error: unknown) => {

@@ -13,6 +13,11 @@ export class StartPatrolDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()
+  routeId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
   scheduleId?: string;
 
   @ApiPropertyOptional({ format: 'date-time' })

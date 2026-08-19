@@ -90,9 +90,9 @@ export class NotificationsRepository {
       .where('token.is_active = :isActive', { isActive: true })
       .andWhere('user.is_active = :userIsActive', { userIsActive: true })
       .andWhere(
-        'user.role = :managerRole AND (user.shop_id = :shopId OR assignedShop.id = :shopId)',
+        'user.role = :inspectorRole AND (user.shop_id = :shopId OR assignedShop.id = :shopId)',
         {
-          managerRole: 'manager',
+          inspectorRole: 'inspector',
           shopId,
         },
       )

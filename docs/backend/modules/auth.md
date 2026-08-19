@@ -5,6 +5,8 @@
 ## Эндпоинты
 
 - `POST /api/v1/auth/login` проверяет постоянный ключ доступа и идентификатор устройства, затем возвращает access- и refresh-токены.
+- `GET /api/v1/auth/me` возвращает безопасный профиль текущего пользователя: `id`, `fullName`, `username`, `role`, основной `shopId` и список разрешенных `shopIds`.
+- `POST /api/v1/auth/universal-route-setter/login` проверяет универсальный ключ Настройщика, требует `actorFullName` и возвращает токены вместе с `authorizationId` и `authorizationFullName`.
 
 ## Бизнес-правила
 
@@ -16,6 +18,11 @@
 - При первой миграции, если в базе еще нет администратора, создается bootstrap-админ `system.admin` с ключом `ADMN-0000-0001`.
 - Неудачные попытки входа возвращают общую ошибку «не авторизован».
 - При входе обновляется поле `users.last_login_at`.
+- Универсальный Настройщик разрешен только для пользователя с ролью `route_setter` и флагом `isUniversalRouteSetter = true`.
+- Обычный `/auth/login` для такого пользователя возвращает отказ: универсальная учетная запись не может получить токены без `actorFullName`.
+- Каждый успешный вход универсального Настройщика создает запись `universal_auth_sessions`; `authorizationId` и введенное ФИО попадают в JWT и затем в `audit_log.meta` всех защищенных изменяющих запросов этой сессии.
+- При refresh backend проверяет, что `authorizationId` универсального Настройщика существует, не отозван и не истек.
+- При logout универсальная auth-сессия отзывается вместе с refresh-токеном.
 
 ## Пример запроса
 
@@ -23,6 +30,25 @@
 {
   "accessKey": "MEMP-SEED-0001",
   "deviceId": "android-device-fingerprint"
+}
+```
+
+## Пример входа универсального Настройщика
+
+```json
+{
+  "accessKey": "RSET-0000-0001",
+  "deviceId": "android-device-fingerprint",
+  "actorFullName": "Иван Петров"
+}
+```
+
+Ответ содержит стандартные `accessToken` и `refreshToken`, а также:
+
+```json
+{
+  "authorizationId": "00000000-0000-4000-8000-000000000001",
+  "authorizationFullName": "Иван Петров"
 }
 ```
 

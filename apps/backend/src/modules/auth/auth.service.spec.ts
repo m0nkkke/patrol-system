@@ -6,15 +6,18 @@ import { sign } from 'jsonwebtoken';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { InvalidCredentialsError } from '../../common/errors/invalid-credentials.error';
 import { AppConfig } from '../../config/app.config';
+import { AuditLogService } from '../audit/audit-log.service';
 import { UserEntity } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
-import { RefreshTokenStore } from './refresh-token.store';
-import { RefreshTokensRepository } from './refresh-tokens.repository';
+import { RefreshTokenStore } from './sessions/refresh-token.store';
+import { RefreshTokensRepository } from './sessions/refresh-tokens.repository';
+import { UniversalAuthSessionsRepository } from './sessions/universal-auth-sessions.repository';
 
 type ConfigServiceMock = {
   get: jest.Mock<string | number | undefined, [string]>;
 };
+type AuditLogServiceMock = Pick<AuditLogService, 'recordSafely'>;
 type RefreshTokenStoreMock = Pick<
   RefreshTokenStore,
   | 'assertLoginAllowed'
@@ -28,6 +31,10 @@ type RefreshTokensRepositoryMock = Pick<
   RefreshTokensRepository,
   'createAudit' | 'findValidByHash' | 'revokeByHash'
 >;
+type UniversalAuthSessionsRepositoryMock = Pick<
+  UniversalAuthSessionsRepository,
+  'create' | 'findActiveById' | 'revoke'
+>;
 type UsersServiceMock = Pick<
   UsersService,
   'findByAccessKey' | 'findEntityById' | 'updateLastLogin'
@@ -37,13 +44,18 @@ const ACCESS_SECRET = 'a'.repeat(64);
 const REFRESH_SECRET = 'b'.repeat(64);
 
 describe('AuthService', () => {
+  let auditLogService: jest.Mocked<AuditLogServiceMock>;
   let configService: jest.Mocked<ConfigServiceMock>;
   let refreshTokenStore: jest.Mocked<RefreshTokenStoreMock>;
   let refreshTokensRepository: jest.Mocked<RefreshTokensRepositoryMock>;
   let service: AuthService;
+  let universalAuthSessionsRepository: jest.Mocked<UniversalAuthSessionsRepositoryMock>;
   let usersService: jest.Mocked<UsersServiceMock>;
 
   beforeEach(() => {
+    auditLogService = {
+      recordSafely: jest.fn(),
+    };
     configService = {
       get: jest.fn((key: string) => {
         const values: Record<string, string | number> = {
@@ -69,6 +81,11 @@ describe('AuthService', () => {
       findValidByHash: jest.fn(),
       revokeByHash: jest.fn(),
     };
+    universalAuthSessionsRepository = {
+      create: jest.fn(),
+      findActiveById: jest.fn(),
+      revoke: jest.fn(),
+    };
     usersService = {
       findByAccessKey: jest.fn(),
       findEntityById: jest.fn(),
@@ -76,10 +93,74 @@ describe('AuthService', () => {
     };
 
     service = new AuthService(
+      auditLogService as unknown as AuditLogService,
       configService as unknown as ConfigService<AppConfig, true>,
       refreshTokenStore as unknown as RefreshTokenStore,
       refreshTokensRepository as unknown as RefreshTokensRepository,
+      universalAuthSessionsRepository as unknown as UniversalAuthSessionsRepository,
       usersService as unknown as UsersService,
+    );
+  });
+
+  it('logs in universal route setter with unique authorization id', async () => {
+    const user = createUser({
+      isUniversalRouteSetter: true,
+      role: 'route_setter',
+      username: 'universal.setter',
+    });
+    usersService.findByAccessKey.mockResolvedValue(user);
+    universalAuthSessionsRepository.create.mockResolvedValue({
+      actorFullName: 'Иван Петров',
+      id: '00000000-0000-4000-8000-000000000101',
+      userId: user.id,
+    } as Awaited<ReturnType<UniversalAuthSessionsRepository['create']>>);
+
+    const result = await service.loginUniversalRouteSetter(
+      {
+        accessKey: 'SETT-SEED-0001',
+        actorFullName: 'Иван Петров',
+        deviceId: 'device-1',
+      },
+      '127.0.0.1',
+    );
+
+    expect(result.authorizationId).toBe('00000000-0000-4000-8000-000000000101');
+    expect(result.authorizationFullName).toBe('Иван Петров');
+    expect(refreshTokenStore.save).toHaveBeenCalledWith(user.id, 'device-1', expect.any(String));
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.universal_route_setter.login.success',
+        meta: expect.objectContaining({
+          actorFullName: 'Иван Петров',
+          authorizationId: '00000000-0000-4000-8000-000000000101',
+        }),
+        userId: user.id,
+      }),
+    );
+  });
+
+  it('rejects universal route setter on regular login endpoint', async () => {
+    const user = createUser({
+      isUniversalRouteSetter: true,
+      role: 'route_setter',
+      username: 'universal.setter',
+    });
+    usersService.findByAccessKey.mockResolvedValue(user);
+
+    await expect(
+      service.login({ accessKey: 'SETT-SEED-0001', deviceId: 'device-1' }, '127.0.0.1'),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+
+    expect(refreshTokenStore.recordFailedLogin).toHaveBeenCalledWith('127.0.0.1', 'device-1');
+    expect(refreshTokenStore.save).not.toHaveBeenCalled();
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.login.failure',
+        meta: expect.objectContaining({
+          reason: 'universal_route_setter_requires_actor',
+        }),
+        userId: user.id,
+      }),
     );
   });
 
@@ -110,6 +191,15 @@ describe('AuthService', () => {
         userId: user.id,
       }),
     );
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.refresh.success',
+        deviceId: dto.deviceId,
+        entityType: 'auth',
+        ipAddress: '127.0.0.1',
+        userId: user.id,
+      }),
+    );
   });
 
   it('rejects refresh token when Redis session does not match', async () => {
@@ -125,6 +215,13 @@ describe('AuthService', () => {
     await expect(
       service.refresh({ deviceId: 'device-1', refreshToken }),
     ).rejects.toBeInstanceOf(InvalidCredentialsError);
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.refresh.failure',
+        meta: expect.objectContaining({ reason: 'session_mismatch' }),
+        userId: user.id,
+      }),
+    );
   });
 
   it('rejects refresh token when user session version changed', async () => {
@@ -149,7 +246,7 @@ describe('AuthService', () => {
     const refreshToken = createRefreshToken(user);
 
     await expect(
-      service.logout({ deviceId: 'device-1', refreshToken }),
+      service.logout({ deviceId: 'device-1', refreshToken }, '127.0.0.1'),
     ).resolves.toEqual({ success: true });
 
     expect(refreshTokensRepository.revokeByHash).toHaveBeenCalledWith(
@@ -157,6 +254,14 @@ describe('AuthService', () => {
       expect.any(Date),
     );
     expect(refreshTokenStore.revoke).toHaveBeenCalledWith(user.id, 'device-1');
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.logout.success',
+        deviceId: 'device-1',
+        ipAddress: '127.0.0.1',
+        userId: user.id,
+      }),
+    );
   });
 
   it('returns domain error when login is rate-limited', async () => {
@@ -166,6 +271,40 @@ describe('AuthService', () => {
       service.login({ accessKey: 'MEMP-SEED-0001', deviceId: 'device-1' }),
     ).rejects.toBeInstanceOf(DomainValidationError);
     expect(usersService.findByAccessKey).not.toHaveBeenCalled();
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.login.rate_limited',
+        deviceId: 'device-1',
+        entityType: 'auth',
+        meta: expect.objectContaining({
+          accessKeyFingerprint: expect.any(String),
+          reason: 'rate_limited',
+        }),
+      }),
+    );
+  });
+
+  it('records failed login attempts', async () => {
+    usersService.findByAccessKey.mockResolvedValue(null);
+
+    await expect(
+      service.login({ accessKey: 'BAD-KEY', deviceId: 'device-1' }, '127.0.0.1'),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+
+    expect(refreshTokenStore.recordFailedLogin).toHaveBeenCalledWith('127.0.0.1', 'device-1');
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.login.failure',
+        deviceId: 'device-1',
+        entityType: 'auth',
+        ipAddress: '127.0.0.1',
+        meta: {
+          accessKeyFingerprint: expect.any(String),
+          reason: 'invalid_access_key',
+        },
+        userId: null,
+      }),
+    );
   });
 });
 
@@ -189,7 +328,7 @@ function createUser(overrides: Partial<UserEntity> = {}): UserEntity {
     id: 'user-id',
     isActive: true,
     passwordHash: 'hash',
-    role: 'employee',
+    role: 'security_guard',
     sessionVersion: 0,
     updatedAt: new Date(),
     username: 'mobile.employee',

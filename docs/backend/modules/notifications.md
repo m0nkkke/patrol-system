@@ -32,7 +32,7 @@ Content-Type: application/json
 
 ## Бизнес-правила
 
-- Endpoint доступен любой авторизованной роли: `employee`, `manager`, `admin`.
+- Endpoint доступен любой авторизованной роли: `security_guard`, `route_setter`, `local_route_setter`, `inspector`, `admin`.
 - Регистрация токена идемпотентна.
 - Если то же устройство прислало новый `pushToken`, старые активные токены этого `userId + deviceId` деактивируются.
 - Если тот же `pushToken` пришел от другого пользователя или устройства, запись переносится на текущий `userId/deviceId`.
@@ -44,6 +44,7 @@ Content-Type: application/json
 Уведомления об инцидентах, просрочках и отменах уходят:
 
 - менеджерам, назначенным на магазин через основной `shopId` или список `user_shop_assignments`.
+- проверяющим с ролью `inspector`, назначенным на магазин через `user_shop_assignments`.
 
 Администраторы и обходчик не получают уведомления о нарушениях через этот канал.
 
@@ -52,6 +53,7 @@ Content-Type: application/json
 Backend отправляет push-уведомления при следующих событиях:
 
 - создан инцидент обхода: `short_interval`, `long_interval`, `missed_point`;
+- создан инцидент по новому нормативу маршрута: `route_too_fast`, `route_suspiciously_fast`, `route_too_slow`, `schedule_deviation`, `point_dwell_too_short`;
 - обход автоматически переведен в `overdue`;
 - сотрудник отменил обход с причиной или без нее.
 

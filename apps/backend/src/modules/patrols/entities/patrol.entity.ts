@@ -14,6 +14,7 @@ import {
 import { ShopEntity } from '../../shops/entities/shop.entity';
 import { UserEntity } from '../../users/entities/user.entity';
 import { PatrolEventEntity } from './patrol-event.entity';
+import { PatrolRouteEntity } from './patrol-route.entity';
 import { PatrolScheduleEntity } from './patrol-schedule.entity';
 
 @Entity({ name: 'patrols' })
@@ -29,6 +30,14 @@ export class PatrolEntity {
   @ManyToOne(() => ShopEntity, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'shop_id' })
   shop?: ShopEntity;
+
+  @Index('idx_patrols_route_id')
+  @Column({ name: 'route_id', nullable: true, type: 'uuid' })
+  routeId?: string;
+
+  @ManyToOne(() => PatrolRouteEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'route_id' })
+  route?: PatrolRouteEntity;
 
   @Index('idx_patrols_employee_id')
   @Column({ name: 'employee_id', type: 'uuid' })

@@ -22,8 +22,11 @@ type AuthServiceMock = Pick<AuthService, 'login'>;
 type MobileServiceMock = Pick<
   MobileService,
   | 'getActivePatrol'
+  | 'getAssignedShops'
   | 'getProfile'
   | 'getRoute'
+  | 'getRouteForShop'
+  | 'getAvailablePatrolSchedulesForShop'
   | 'recordPatrolEvent'
   | 'registerDevicePushToken'
   | 'scanNextRoutePoint'
@@ -39,7 +42,7 @@ describe('Mobile API contract', () => {
   let mobileService: jest.Mocked<MobileServiceMock>;
   let usersService: jest.Mocked<UsersServiceMock>;
 
-  const employeeUser = createUser({ role: 'employee' });
+  const employeeUser = createUser({ role: 'security_guard' });
   const adminUser = createUser({
     fullName: 'Mobile Admin',
     id: '00000000-0000-4000-8000-0000000000ad',
@@ -53,8 +56,11 @@ describe('Mobile API contract', () => {
     };
     mobileService = {
       getActivePatrol: jest.fn(),
+      getAssignedShops: jest.fn(),
+      getAvailablePatrolSchedulesForShop: jest.fn(),
       getProfile: jest.fn(),
       getRoute: jest.fn(),
+      getRouteForShop: jest.fn(),
       recordPatrolEvent: jest.fn(),
       registerDevicePushToken: jest.fn(),
       scanNextRoutePoint: jest.fn(),
@@ -191,7 +197,7 @@ describe('Mobile API contract', () => {
     await request(app.getHttpServer())
       .post('/api/v1/mobile/patrols/start')
       .set('Authorization', `Bearer ${accessToken}`)
-      .send({})
+      .send({ shopId: employeeUser.shopId })
       .expect(201)
       .expect((response) => {
         const body = response.body as { status?: string };
@@ -287,7 +293,7 @@ function createUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUs
   return {
     fullName: 'Mobile Employee',
     id: '00000000-0000-4000-8000-0000000000ee',
-    role: 'employee',
+    role: 'security_guard',
     shopId: '00000000-0000-4000-8000-0000000000aa',
     username: 'mobile.employee',
     ...overrides,

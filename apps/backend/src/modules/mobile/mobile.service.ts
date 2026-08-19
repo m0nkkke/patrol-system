@@ -4,6 +4,9 @@ import {
   CancelPatrolDto,
   CompletePatrolDto,
   CreatePatrolEventDto,
+  MobileSchedulePlanDto,
+  MobileSchedulePlanQueryDto,
+  NfcWaitStateDto,
   RegisterDevicePushTokenDto,
   ReportMissedPointAttemptDto,
   StartRouteSetupDto,
@@ -19,8 +22,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolEventEntity } from '../patrols/entities/patrol-event.entity';
 import { PatrolEntity } from '../patrols/entities/patrol.entity';
-import { PatrolSchedulesService } from '../patrols/patrol-schedules.service';
+import { PatrolSchedulesService } from '../patrols/schedules/patrol-schedules.service';
 import { PatrolEventRecordStatus, PatrolsService } from '../patrols/patrols.service';
+import { ShopEntity } from '../shops/entities/shop.entity';
 import { ShopsService } from '../shops/shops.service';
 
 type MobileProfile = {
@@ -52,8 +56,11 @@ export class MobileService {
   getProfile(user: AuthenticatedUser): MobileProfile {
     return {
       capabilities: {
-        canRegisterRoutes: user.role === 'admin' || user.role === 'manager',
-        canRunPatrols: user.role === 'employee',
+        canRegisterRoutes:
+          user.role === 'admin' ||
+          user.role === 'route_setter' ||
+          user.role === 'local_route_setter',
+        canRunPatrols: user.role === 'security_guard',
       },
       user,
     };
@@ -78,14 +85,78 @@ export class MobileService {
     return this.shopsService.resetRouteSetup(shopId);
   }
 
+  getAssignedShops(user: AuthenticatedUser): ShopEntity[] {
+    const shops = user.shops ?? (user.shop === undefined ? [] : [user.shop]);
+
+    return shops.filter((shop) => shop.isActive);
+  }
+
   getRoute(user: AuthenticatedUser): ReturnType<PatrolPointsService['findByShop']> {
     const shopId = requireUserShopId(user);
+
+    return this.getRouteForShop(user, shopId);
+  }
+
+  getRouteForShop(
+    user: AuthenticatedUser,
+    shopId: string,
+  ): ReturnType<PatrolPointsService['findByShop']> {
+    assertUserCanUseShop(user, shopId);
 
     return this.patrolPointsService.findByShop(shopId);
   }
 
+  async getSchedulePlan(
+    user: AuthenticatedUser,
+    query: MobileSchedulePlanQueryDto,
+  ): Promise<MobileSchedulePlanDto> {
+    const days = query.days ?? 7;
+
+    if (query.shopId !== undefined) {
+      assertUserCanUseShop(user, query.shopId);
+
+      return this.patrolSchedulesService.getMobileSchedulePlanForShop(query.shopId, user, days);
+    }
+
+    const shops = this.getAssignedShops(user);
+    const plans = await Promise.all(
+      shops.map((shop) => this.patrolSchedulesService.getMobileSchedulePlanForShop(shop.id, user, days)),
+    );
+    const items = plans.flatMap((plan) => plan.items).sort((left, right) => {
+      const plannedStart = left.plannedStartAt.getTime() - right.plannedStartAt.getTime();
+      if (plannedStart !== 0) {
+        return plannedStart;
+      }
+
+      return left.shopName.localeCompare(right.shopName);
+    });
+
+    return {
+      days: Math.min(Math.max(days, 1), 31),
+      generatedAt: new Date(),
+      items,
+    };
+  }
+
   getActivePatrol(user: AuthenticatedUser): Promise<PatrolEntity | null> {
     return this.patrolsService.findActiveByEmployee(user.id);
+  }
+
+  async getActivePatrolNfcWaitState(user: AuthenticatedUser): Promise<NfcWaitStateDto | null> {
+    const patrol = await this.patrolsService.findActiveByEmployee(user.id);
+
+    if (patrol === null) {
+      return null;
+    }
+
+    return this.patrolsService.getNfcWaitState(patrol.id, user);
+  }
+
+  getPatrolNfcWaitState(
+    user: AuthenticatedUser,
+    patrolId: string,
+  ): Promise<NfcWaitStateDto> {
+    return this.patrolsService.getNfcWaitState(patrolId, user);
   }
 
   getAvailablePatrolSchedules(
@@ -93,16 +164,25 @@ export class MobileService {
   ): ReturnType<PatrolSchedulesService['findAvailableByShop']> {
     const shopId = requireUserShopId(user);
 
+    return this.getAvailablePatrolSchedulesForShop(user, shopId);
+  }
+
+  getAvailablePatrolSchedulesForShop(
+    user: AuthenticatedUser,
+    shopId: string,
+  ): ReturnType<PatrolSchedulesService['findAvailableByShop']> {
+    assertUserCanUseShop(user, shopId);
+
     return this.patrolSchedulesService.findAvailableByShop(shopId, user);
   }
 
-  startPatrol(user: AuthenticatedUser, dto: StartMobilePatrolDto): Promise<PatrolEntity> {
-    const shopId = requireUserShopId(user);
+  async startPatrol(user: AuthenticatedUser, dto: StartMobilePatrolDto): Promise<PatrolEntity> {
+    assertUserCanUseShop(user, dto.shopId);
 
     return this.patrolsService.start({
       employeeId: user.id,
       scheduleId: dto.scheduleId,
-      shopId,
+      shopId: dto.shopId,
     });
   }
 
@@ -235,4 +315,15 @@ function requireUserShopId(user: AuthenticatedUser): string {
   }
 
   return user.shopId;
+}
+
+function assertUserCanUseShop(user: AuthenticatedUser, shopId: string): void {
+  if (user.shopId === shopId || user.shopIds?.includes(shopId) === true) {
+    return;
+  }
+
+  throw new DomainValidationError(
+    'MOBILE_SHOP_FORBIDDEN',
+    'Selected shop is not assigned to current mobile user',
+  );
 }

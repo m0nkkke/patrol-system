@@ -3,6 +3,8 @@ import { UserRole } from '@patrol/shared';
 import { ShopEntity } from '../../modules/shops/entities/shop.entity';
 
 export type AuthenticatedUser = {
+  authorizationFullName?: string;
+  authorizationId?: string;
   fullName: string;
   id: string;
   role: UserRole;

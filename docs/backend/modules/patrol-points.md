@@ -8,14 +8,15 @@
 - `POST /api/v1/patrol-points` — создает контрольную точку и опционально связывает ее с NFC-меткой.
 - `GET /api/v1/patrol-points/shop/:shopId` — возвращает активные точки магазина в порядке маршрута.
 - `GET /api/v1/patrol-points/:id` — возвращает одну контрольную точку.
+- `POST /api/v1/patrol-points/:id/photo` — загружает и сжимает фото контрольной точки.
 - `POST /api/v1/patrol-points/:id/replace-nfc` — заменяет NFC-метку контрольной точки.
 
 ## Доступ
 
 Все endpoints модуля требуют `Authorization: Bearer <accessToken>`.
 
-- `POST /api/v1/patrol-points/nfc-tags`, `POST /api/v1/patrol-points`, `POST /api/v1/patrol-points/:id/replace-nfc` доступны только роли `admin`.
-- `GET /api/v1/patrol-points/shop/:shopId` и `GET /api/v1/patrol-points/:id` доступны ролям `admin`, `manager`.
+- `POST /api/v1/patrol-points/nfc-tags`, `POST /api/v1/patrol-points`, `POST /api/v1/patrol-points/:id/photo`, `POST /api/v1/patrol-points/:id/replace-nfc` доступны ролям `admin`, `route_setter`, `local_route_setter`.
+- `GET /api/v1/patrol-points/shop/:shopId` и `GET /api/v1/patrol-points/:id` доступны ролям `admin`, `route_setter`, `local_route_setter`, `inspector`.
 
 ## Бизнес-правила
 
@@ -24,6 +25,9 @@
 - Внутренний `nfc_tags.id` остаётся UUID базы данных для связей, истории и аудита.
 - `payload` не используется в основном сценарии регистрации маршрута и остаётся необязательным.
 - Контрольная точка относится к одному магазину.
+- Фото контрольной точки хранится как `photo_file_id` со ссылкой на `file_assets`.
+- При загрузке фото backend сжимает изображение и сохраняет его через модуль [Files](files.md).
+- Локальный настройщик ТТ может загружать фото только для точек своего магазина.
 - NFC-метка может быть не привязана к точке, но сканирование точки без активной метки невозможно.
 - Если при создании точки передан `nfcTagId`, метка должна существовать.
 - Одна активная NFC-метка не может быть одновременно привязана к двум активным контрольным точкам.

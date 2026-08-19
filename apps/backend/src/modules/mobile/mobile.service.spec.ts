@@ -2,7 +2,7 @@ import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
-import { PatrolSchedulesService } from '../patrols/patrol-schedules.service';
+import { PatrolSchedulesService } from '../patrols/schedules/patrol-schedules.service';
 import { PatrolsService } from '../patrols/patrols.service';
 import { ShopsService } from '../shops/shops.service';
 import { MobileService } from './mobile.service';
@@ -16,6 +16,7 @@ type PatrolsServiceMock = Pick<
   | 'complete'
   | 'findActiveByEmployee'
   | 'findOne'
+  | 'getNfcWaitState'
   | 'recordEvent'
   | 'recordEventWithStatus'
   | 'start'
@@ -48,6 +49,7 @@ describe('MobileService', () => {
       complete: jest.fn(),
       findActiveByEmployee: jest.fn(),
       findOne: jest.fn(),
+      getNfcWaitState: jest.fn(),
       recordEvent: jest.fn(),
       recordEventWithStatus: jest.fn(),
       start: jest.fn(),
@@ -173,6 +175,70 @@ describe('MobileService', () => {
     });
   });
 
+  it('starts patrol for explicitly selected assigned shop', async () => {
+    patrolsService.start.mockResolvedValue({
+      employeeId: 'user-id',
+      id: 'patrol-id',
+      shopId: 'shop-2',
+      status: 'in_progress',
+    } as Awaited<ReturnType<PatrolsService['start']>>);
+
+    await service.startPatrol(
+      createUser({ id: 'user-id', shopIds: ['shop-1', 'shop-2'] }),
+      { shopId: 'shop-2' },
+    );
+
+    expect(patrolsService.start).toHaveBeenCalledWith({
+      employeeId: 'user-id',
+      scheduleId: undefined,
+      shopId: 'shop-2',
+    });
+  });
+
+  it('returns active patrol NFC wait state', async () => {
+    patrolsService.findActiveByEmployee.mockResolvedValue({
+      employeeId: 'user-id',
+      id: 'patrol-id',
+    } as Awaited<ReturnType<PatrolsService['findActiveByEmployee']>>);
+    patrolsService.getNfcWaitState.mockResolvedValue({
+      canAcceptNfc: true,
+      mode: 'waiting_for_nfc',
+      patrolId: 'patrol-id',
+      requiresForegroundNfcListening: true,
+      scanContract: {
+        endpoint: '/api/v1/mobile/patrols/patrol-id/events',
+        method: 'POST',
+        requiredFields: ['patrolPointId', 'nfcUid', 'scannedAt', 'deviceId'],
+      },
+      scannedPoints: 0,
+      shopId: 'shop-id',
+      status: 'in_progress',
+      totalPoints: 3,
+    });
+
+    const result = await service.getActivePatrolNfcWaitState(createUser({ id: 'user-id' }));
+
+    expect(patrolsService.getNfcWaitState).toHaveBeenCalledWith('patrol-id', createUser({ id: 'user-id' }));
+    expect(result?.mode).toBe('waiting_for_nfc');
+  });
+
+  it('returns null NFC wait state when user has no active patrol', async () => {
+    patrolsService.findActiveByEmployee.mockResolvedValue(null);
+
+    await expect(service.getActivePatrolNfcWaitState(createUser({ id: 'user-id' }))).resolves.toBeNull();
+    expect(patrolsService.getNfcWaitState).not.toHaveBeenCalled();
+  });
+
+  it('rejects patrol start for unassigned shop', async () => {
+    await expect(
+      service.startPatrol(
+        createUser({ id: 'user-id', shopIds: ['shop-1'] }),
+        { shopId: 'shop-2' },
+      ),
+    ).rejects.toBeInstanceOf(DomainValidationError);
+    expect(patrolsService.start).not.toHaveBeenCalled();
+  });
+
   it('completes only current employee patrol with report', async () => {
     patrolsService.findOne.mockResolvedValue({
       employeeId: 'user-id',
@@ -222,7 +288,7 @@ function createUser(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUs
   return {
     fullName: 'Mobile Admin',
     id: 'user-id',
-    role: 'employee',
+    role: 'security_guard',
     username: 'mobile.user',
     ...overrides,
   };

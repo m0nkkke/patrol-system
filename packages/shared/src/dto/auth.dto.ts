@@ -16,6 +16,17 @@ export class LoginDto {
   deviceId: string = '';
 }
 
+export class UniversalRouteSetterLoginDto extends LoginDto {
+  @ApiProperty({
+    description: 'Real full name entered for this universal route setter session',
+    example: 'Иван Петров',
+  })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  actorFullName: string = '';
+}
+
 export class RefreshTokenDto {
   @ApiProperty()
   @IsString()

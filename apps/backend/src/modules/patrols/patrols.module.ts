@@ -7,20 +7,27 @@ import { ShopsModule } from '../shops/shops.module';
 import { UsersModule } from '../users/users.module';
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
+import { PatrolPointVisitEntity } from './entities/patrol-point-visit.entity';
+import { PatrolRoutePointEntity } from './entities/patrol-route-point.entity';
+import { PatrolRouteEntity } from './entities/patrol-route.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
 import { PatrolScheduleEntity } from './entities/patrol-schedule.entity';
 import { PatrolEntity } from './entities/patrol.entity';
-import { PatrolSchedulesController } from './patrol-schedules.controller';
-import { PatrolSchedulesRepository } from './patrol-schedules.repository';
-import { PatrolSchedulesService } from './patrol-schedules.service';
-import { PatrolOverdueService } from './patrol-overdue.service';
+import { RouteTimingProfileEntity } from './entities/route-timing-profile.entity';
+import { PatrolOverdueService } from './overdue/patrol-overdue.service';
+import { PatrolRoutesController } from './routes/patrol-routes.controller';
+import { PatrolRoutesRepository } from './routes/patrol-routes.repository';
+import { PatrolRoutesService } from './routes/patrol-routes.service';
+import { PatrolSchedulesController } from './schedules/patrol-schedules.controller';
+import { PatrolSchedulesRepository } from './schedules/patrol-schedules.repository';
+import { PatrolSchedulesService } from './schedules/patrol-schedules.service';
 import { PatrolsController } from './patrols.controller';
 import { PatrolsRepository } from './patrols.repository';
 import { PatrolsService } from './patrols.service';
 
 @Module({
-  controllers: [PatrolSchedulesController, PatrolsController],
-  exports: [PatrolSchedulesService, PatrolsService],
+  controllers: [PatrolRoutesController, PatrolSchedulesController, PatrolsController],
+  exports: [PatrolRoutesService, PatrolSchedulesService, PatrolsService],
   imports: [
     NotificationsModule,
     PatrolPointsModule,
@@ -30,12 +37,18 @@ import { PatrolsService } from './patrols.service';
       PatrolEntity,
       PatrolEventEntity,
       PatrolIncidentEntity,
+      PatrolPointVisitEntity,
+      PatrolRouteEntity,
+      PatrolRoutePointEntity,
       PatrolRouteIntervalEntity,
       PatrolScheduleEntity,
+      RouteTimingProfileEntity,
     ]),
   ],
   providers: [
     PatrolOverdueService,
+    PatrolRoutesRepository,
+    PatrolRoutesService,
     PatrolSchedulesRepository,
     PatrolSchedulesService,
     PatrolsRepository,

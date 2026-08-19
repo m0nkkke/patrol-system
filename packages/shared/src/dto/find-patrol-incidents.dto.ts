@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsISO8601, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
+import { ALERT_SEVERITIES, AlertSeverity } from '../enums/alert-severity';
 import { PatrolIncidentType } from '../enums/patrol-incident-type';
 import { PatrolStatus } from '../enums/patrol-status';
 import { PaginationDto } from './pagination.dto';
@@ -21,6 +22,11 @@ export class FindPatrolIncidentsDto extends PaginationDto {
   @IsUUID()
   employeeId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  patrolId?: string;
+
   @ApiPropertyOptional({ description: 'Search by incident message, shop name or employee full name' })
   @IsOptional()
   @IsString()
@@ -31,6 +37,11 @@ export class FindPatrolIncidentsDto extends PaginationDto {
   @IsOptional()
   @IsIn(PATROL_INCIDENT_TYPES)
   type?: PatrolIncidentType;
+
+  @ApiPropertyOptional({ enum: ALERT_SEVERITIES })
+  @IsOptional()
+  @IsIn(ALERT_SEVERITIES)
+  severity?: AlertSeverity;
 
   @ApiPropertyOptional({ format: 'date-time' })
   @IsOptional()

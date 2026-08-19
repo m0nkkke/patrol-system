@@ -1,17 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindPatrolsDto, PatrolIncidentType, PatrolStatus } from '@patrol/shared';
+import {
+  FindPatrolsDto,
+  PatrolIncidentType,
+  PatrolPointVisitStatus,
+  PatrolScanAction,
+  PatrolStatus,
+} from '@patrol/shared';
 import { In, LessThan, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
+import { PatrolPointVisitEntity } from './entities/patrol-point-visit.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
 import { PatrolEntity } from './entities/patrol.entity';
+import { RouteTimingProfileEntity } from './entities/route-timing-profile.entity';
 
 type CreatePatrolRecord = {
   dueAt?: Date;
   employeeId: string;
   notes?: string;
+  routeId?: string;
   scheduleId?: string;
   shopId: string;
   startedAt: Date;
@@ -31,11 +40,22 @@ type CreatePatrolEventRecord = {
   lng?: string;
   nfcTagId: string;
   nfcUid: string;
+  accepted?: boolean;
   patrolId: string;
   patrolPointId: string;
+  pointVisitId?: string;
   pointDeactivatedAfterScan?: boolean;
+  rejectionReason?: string;
+  scanAction: PatrolScanAction;
   scannedAt: Date;
   suspicionReason?: string;
+};
+
+type CreatePointVisitRecord = {
+  arrivedAt: Date;
+  lockedUntil: Date;
+  patrolId: string;
+  patrolPointId: string;
 };
 
 type CreatePatrolIncidentRecord = {
@@ -62,6 +82,11 @@ type CreatePatrolRouteIntervalRecord = {
   toSortOrder: number;
 };
 
+type RouteTimingProfileAggregate = {
+  averageTotalSeconds: string | number;
+  sampleCount: string | number;
+};
+
 type FindPatrolIncidentsQuery = {
   employeeId?: string;
   from?: Date;
@@ -75,6 +100,18 @@ type FindPatrolIncidentsQuery = {
   type?: PatrolIncidentType;
 };
 
+export type ExpectedPatrolPointRecord = {
+  id: string;
+  description?: string | null;
+  name: string;
+  nfcTagId?: string | null;
+  photoFileId?: string | null;
+  pointVisitId?: string | null;
+  pointVisitStatus?: PatrolPointVisitStatus | null;
+  lockedUntil?: Date | null;
+  sortOrder: number;
+};
+
 @Injectable()
 export class PatrolsRepository {
   constructor(
@@ -84,8 +121,12 @@ export class PatrolsRepository {
     private readonly patrolEvents: Repository<PatrolEventEntity>,
     @InjectRepository(PatrolIncidentEntity)
     private readonly patrolIncidents: Repository<PatrolIncidentEntity>,
+    @InjectRepository(PatrolPointVisitEntity)
+    private readonly patrolPointVisits: Repository<PatrolPointVisitEntity>,
     @InjectRepository(PatrolRouteIntervalEntity)
     private readonly patrolRouteIntervals: Repository<PatrolRouteIntervalEntity>,
+    @InjectRepository(RouteTimingProfileEntity)
+    private readonly routeTimingProfiles: Repository<RouteTimingProfileEntity>,
   ) {}
 
   createPatrol(data: CreatePatrolRecord): Promise<PatrolEntity> {
@@ -100,11 +141,48 @@ export class PatrolsRepository {
     return this.patrolEvents.findOne({ where: { clientLocalId } });
   }
 
-  findEventByPatrolAndPoint(
+  findAcceptedEventByPatrolPointAndAction(
     patrolId: string,
     patrolPointId: string,
+    scanAction: PatrolScanAction,
   ): Promise<PatrolEventEntity | null> {
-    return this.patrolEvents.findOne({ where: { patrolId, patrolPointId } });
+    return this.patrolEvents.findOne({ where: { accepted: true, patrolId, patrolPointId, scanAction } });
+  }
+
+  findPointVisitByPatrolAndPoint(
+    patrolId: string,
+    patrolPointId: string,
+  ): Promise<PatrolPointVisitEntity | null> {
+    return this.patrolPointVisits.findOne({ where: { patrolId, patrolPointId } });
+  }
+
+  createPointVisit(data: CreatePointVisitRecord): Promise<PatrolPointVisitEntity> {
+    return this.patrolPointVisits.save(
+      this.patrolPointVisits.create({
+        ...data,
+        status: PatrolPointVisitStatus.ARRIVED,
+      }),
+    );
+  }
+
+  async attachArrivalEventToPointVisit(visitId: string, eventId: string): Promise<void> {
+    await this.patrolPointVisits.update(visitId, { arrivalEventId: eventId });
+  }
+
+  async completePointVisit(
+    visitId: string,
+    data: {
+      departedAt: Date;
+      departureEventId: string;
+      dwellSeconds: number;
+    },
+  ): Promise<void> {
+    await this.patrolPointVisits.update(visitId, {
+      departedAt: data.departedAt,
+      departureEventId: data.departureEventId,
+      dwellSeconds: data.dwellSeconds,
+      status: PatrolPointVisitStatus.COMPLETED,
+    });
   }
 
   createPatrolIncident(data: CreatePatrolIncidentRecord): Promise<PatrolIncidentEntity> {
@@ -119,7 +197,7 @@ export class PatrolsRepository {
 
   findById(id: string): Promise<PatrolEntity | null> {
     return this.patrols.findOne({
-      relations: { employee: true, events: true, schedule: true, shop: true },
+      relations: { employee: true, events: true, route: true, schedule: true, shop: true },
       where: { id },
     });
   }
@@ -149,9 +227,17 @@ export class PatrolsRepository {
   findActiveByEmployee(employeeId: string): Promise<PatrolEntity | null> {
     return this.patrols.findOne({
       order: { startedAt: 'DESC' },
-      relations: { employee: true, events: true, schedule: true, shop: true },
+      relations: { employee: true, events: true, route: true, schedule: true, shop: true },
       where: { employeeId, status: In(['in_progress', 'overdue']) },
     });
+  }
+
+  async findNextExpectedPoint(patrol: PatrolEntity): Promise<ExpectedPatrolPointRecord | null> {
+    if (patrol.routeId !== undefined) {
+      return this.findNextExpectedRoutePoint(patrol.id, patrol.routeId);
+    }
+
+    return this.findNextExpectedShopPoint(patrol.id, patrol.shopId);
   }
 
   findOverdueCandidates(now: Date): Promise<PatrolEntity[]> {
@@ -227,6 +313,7 @@ export class PatrolsRepository {
     const builder = this.patrols
       .createQueryBuilder('patrol')
       .leftJoinAndSelect('patrol.employee', 'employee')
+      .leftJoinAndSelect('patrol.route', 'route')
       .leftJoinAndSelect('patrol.schedule', 'schedule')
       .leftJoinAndSelect('patrol.shop', 'shop')
       .skip((query.page - 1) * query.limit)
@@ -258,6 +345,8 @@ export class PatrolsRepository {
       .createQueryBuilder('event')
       .innerJoinAndSelect('event.patrolPoint', 'point')
       .where('event.patrol_id = :patrolId', { patrolId })
+      .andWhere('event.accepted = TRUE')
+      .andWhere('event.scan_action = :scanAction', { scanAction: PatrolScanAction.DEPART })
       .andWhere('point.sort_order < :currentSortOrder', { currentSortOrder })
       .orderBy('point.sortOrder', 'DESC')
       .addOrderBy('event.scannedAt', 'DESC')
@@ -269,6 +358,8 @@ export class PatrolsRepository {
       .createQueryBuilder('event')
       .innerJoinAndSelect('event.patrolPoint', 'point')
       .where('event.patrol_id = :patrolId', { patrolId })
+      .andWhere('event.accepted = TRUE')
+      .andWhere('event.scan_action = :scanAction', { scanAction: PatrolScanAction.DEPART })
       .orderBy('point.sortOrder', 'ASC')
       .addOrderBy('event.scannedAt', 'ASC')
       .getMany();
@@ -286,6 +377,74 @@ export class PatrolsRepository {
 
   countRouteIntervalsByShop(shopId: string): Promise<number> {
     return this.patrolRouteIntervals.count({ where: { shopId } });
+  }
+
+  findRouteTimingProfile(routeId: string): Promise<RouteTimingProfileEntity | null> {
+    return this.routeTimingProfiles.findOne({ where: { routeId } });
+  }
+
+  async recalculateRouteTimingProfile(
+    routeId: string,
+    calculatedTo: Date,
+    options: {
+      fastFactor: number;
+      lookbackDays: number;
+      slowFactor: number;
+      suspiciousFastFactor: number;
+    },
+  ): Promise<RouteTimingProfileEntity | null> {
+    const calculatedFrom = new Date(
+      calculatedTo.getTime() - options.lookbackDays * 24 * 60 * 60 * 1000,
+    );
+    const [aggregate] = await this.patrols.query<RouteTimingProfileAggregate[]>(
+      `
+      SELECT
+        COUNT(*) AS "sampleCount",
+        ROUND(AVG(EXTRACT(EPOCH FROM (completed_at - started_at)))) AS "averageTotalSeconds"
+      FROM patrols
+      WHERE route_id = $1
+        AND status = 'completed'
+        AND started_at IS NOT NULL
+        AND completed_at IS NOT NULL
+        AND completed_at >= $2
+        AND completed_at <= $3
+        AND completed_at >= started_at
+      `,
+      [routeId, calculatedFrom, calculatedTo],
+    );
+
+    const sampleCount = Number(aggregate?.sampleCount ?? 0);
+    const averageTotalSeconds = Number(aggregate?.averageTotalSeconds ?? 0);
+
+    if (sampleCount === 0 || averageTotalSeconds <= 0) {
+      return null;
+    }
+
+    const route = await this.patrols.query<Array<{ shopId: string }>>(
+      'SELECT shop_id AS "shopId" FROM patrol_routes WHERE id = $1 LIMIT 1',
+      [routeId],
+    );
+    const shopId = route[0]?.shopId;
+
+    if (shopId === undefined) {
+      return null;
+    }
+
+    const profile = this.routeTimingProfiles.create({
+      averageTotalSeconds,
+      calculatedFrom,
+      calculatedTo,
+      fastSeconds: Math.floor(averageTotalSeconds * options.fastFactor),
+      routeId,
+      sampleCount,
+      shopId,
+      slowSeconds: Math.ceil(averageTotalSeconds * options.slowFactor),
+      suspiciousFastSeconds: Math.floor(averageTotalSeconds * options.suspiciousFastFactor),
+    });
+
+    await this.routeTimingProfiles.upsert(profile, ['routeId']);
+
+    return this.findRouteTimingProfile(routeId);
   }
 
   async markCompleted(
@@ -333,6 +492,71 @@ export class PatrolsRepository {
     const result = await this.patrols.update({ id: In(ids) }, { status: 'overdue' });
 
     return result.affected ?? 0;
+  }
+
+  private async findNextExpectedRoutePoint(
+    patrolId: string,
+    routeId: string,
+  ): Promise<ExpectedPatrolPointRecord | null> {
+    const [raw] = await this.patrols.query<ExpectedPatrolPointRecord[]>(
+      `
+      SELECT
+        point.id,
+        point.description,
+        point.name,
+        point.nfc_tag_id AS "nfcTagId",
+        point.photo_file_id AS "photoFileId",
+        visit.id AS "pointVisitId",
+        visit.status AS "pointVisitStatus",
+        visit.locked_until AS "lockedUntil",
+        route_point.sort_order AS "sortOrder"
+      FROM patrol_route_points route_point
+      INNER JOIN patrol_points point ON point.id = route_point.patrol_point_id
+      LEFT JOIN patrol_point_visits visit
+        ON visit.patrol_id = $1
+        AND visit.patrol_point_id = point.id
+      WHERE route_point.route_id = $2
+        AND point.is_active = TRUE
+        AND (visit.id IS NULL OR visit.status != 'completed')
+      ORDER BY route_point.sort_order ASC
+      LIMIT 1
+      `,
+      [patrolId, routeId],
+    );
+
+    return raw ?? null;
+  }
+
+  private async findNextExpectedShopPoint(
+    patrolId: string,
+    shopId: string,
+  ): Promise<ExpectedPatrolPointRecord | null> {
+    const [raw] = await this.patrols.query<ExpectedPatrolPointRecord[]>(
+      `
+      SELECT
+        point.id,
+        point.description,
+        point.name,
+        point.nfc_tag_id AS "nfcTagId",
+        point.photo_file_id AS "photoFileId",
+        visit.id AS "pointVisitId",
+        visit.status AS "pointVisitStatus",
+        visit.locked_until AS "lockedUntil",
+        point.sort_order AS "sortOrder"
+      FROM patrol_points point
+      LEFT JOIN patrol_point_visits visit
+        ON visit.patrol_id = $1
+        AND visit.patrol_point_id = point.id
+      WHERE point.shop_id = $2
+        AND point.is_active = TRUE
+        AND (visit.id IS NULL OR visit.status != 'completed')
+      ORDER BY point.sort_order ASC, point.created_at ASC
+      LIMIT 1
+      `,
+      [patrolId, shopId],
+    );
+
+    return raw ?? null;
   }
 }
 

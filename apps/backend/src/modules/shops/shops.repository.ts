@@ -41,11 +41,19 @@ export class ShopsRepository {
     return this.repo.save(this.repo.create(data));
   }
 
-  findMany(query: ListShopsQueryDto): Promise<[ShopEntity[], number]> {
+  findMany(query: ListShopsQueryDto, allowedShopIds?: string[]): Promise<[ShopEntity[], number]> {
+    if (allowedShopIds !== undefined && allowedShopIds.length === 0) {
+      return Promise.resolve([[], 0]);
+    }
+
     const builder = this.repo
       .createQueryBuilder('shop')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
+
+    if (allowedShopIds !== undefined) {
+      builder.andWhere('shop.id IN (:...allowedShopIds)', { allowedShopIds });
+    }
 
     if (query.isActive !== undefined) {
       builder.andWhere('shop.is_active = :isActive', { isActive: query.isActive });

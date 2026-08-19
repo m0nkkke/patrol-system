@@ -12,6 +12,7 @@ type CreateUserRecord = {
   accessKeyHash: string;
   fullName: string;
   isActive: boolean;
+  isUniversalRouteSetter: boolean;
   passwordHash: string;
   role: UserRole;
   shopId?: string;
@@ -24,6 +25,7 @@ type UpdateUserRecord = {
   accessKeyHash?: string;
   fullName?: string;
   isActive?: boolean;
+  isUniversalRouteSetter?: boolean;
   passwordHash?: string;
   role?: UserRole;
   sessionVersion?: number;

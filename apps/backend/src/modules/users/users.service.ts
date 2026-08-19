@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { formatAccessKey, generateAccessKey, hashAccessKey } from '../../common/auth/access-key';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
-import { SessionRevocationService } from '../auth/session-revocation.service';
+import { SessionRevocationService } from '../auth/sessions/session-revocation.service';
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { ShopsService } from '../shops/shops.service';
 import { UserEntity } from './entities/user.entity';
@@ -18,6 +18,7 @@ type PublicUser = {
   fullName: string;
   id: string;
   isActive: boolean;
+  isUniversalRouteSetter: boolean;
   lastLoginAt?: Date;
   role: UserEntity['role'];
   sessionVersion: number;
@@ -45,6 +46,7 @@ export class UsersService {
   ) {}
 
   async create(dto: CreateUserDto): Promise<PublicUser> {
+    assertValidUniversalRouteSetter(dto.role, dto.isUniversalRouteSetter);
     const shopIds = normalizeShopIds(dto.shopId, dto.shopIds);
     const shops = await this.findShops(shopIds);
     const primaryShopId = dto.shopId ?? shopIds[0];
@@ -56,6 +58,7 @@ export class UsersService {
       accessKeyHash,
       fullName: dto.fullName,
       isActive: dto.isActive ?? true,
+      isUniversalRouteSetter: dto.isUniversalRouteSetter ?? false,
       passwordHash: accessKeyHash,
       role: dto.role,
       shopId: primaryShopId,
@@ -106,6 +109,7 @@ export class UsersService {
 
   async update(id: string, dto: UpdateUserDto): Promise<PublicUser> {
     const user = await this.requireEntity(id);
+    assertValidUniversalRouteSetter(dto.role ?? user.role, dto.isUniversalRouteSetter ?? user.isUniversalRouteSetter);
     const shouldRevokeSessions = dto.isActive !== undefined && dto.isActive !== user.isActive;
 
     const shopIds =
@@ -118,6 +122,7 @@ export class UsersService {
     await this.usersRepository.update(id, {
       fullName: dto.fullName,
       isActive: dto.isActive,
+      isUniversalRouteSetter: dto.isUniversalRouteSetter,
       role: dto.role,
       sessionVersion: shouldRevokeSessions ? user.sessionVersion + 1 : undefined,
       shopId: shopIds === undefined ? undefined : primaryShopId ?? null,
@@ -198,6 +203,7 @@ function toPublicUser(user: UserEntity): PublicUser {
     fullName: user.fullName,
     id: user.id,
     isActive: user.isActive,
+    isUniversalRouteSetter: user.isUniversalRouteSetter,
     lastLoginAt: user.lastLoginAt,
     role: user.role,
     sessionVersion: user.sessionVersion ?? 0,
@@ -216,4 +222,13 @@ function normalizeShopIds(primaryShopId: string | undefined, shopIds: string[] |
 
 function generateUsername(): string {
   return `user-${randomUUID().slice(0, 8)}`;
+}
+
+function assertValidUniversalRouteSetter(role: UserEntity['role'], isUniversalRouteSetter?: boolean): void {
+  if (isUniversalRouteSetter === true && role !== 'route_setter') {
+    throw new DomainValidationError(
+      'USER_UNIVERSAL_ROUTE_SETTER_ROLE_INVALID',
+      'Universal route setter account must have route_setter role',
+    );
+  }
 }

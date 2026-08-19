@@ -31,9 +31,9 @@ export class CreateUserDto {
   @MaxLength(100)
   username?: string;
 
-  @ApiProperty({ enum: USER_ROLES, default: 'employee' })
+  @ApiProperty({ enum: USER_ROLES, default: 'security_guard' })
   @IsIn(USER_ROLES)
-  role: UserRole = 'employee';
+  role: UserRole = 'security_guard';
 
   @ApiPropertyOptional({ description: 'Primary shop used by the current mobile flow.', format: 'uuid' })
   @IsOptional()
@@ -51,6 +51,14 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Allows route_setter to use universal route setter login with per-login actor full name.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isUniversalRouteSetter?: boolean;
 }
 
 export class AssignUserShopsDto {
@@ -103,6 +111,12 @@ export class UpdateUserDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  isUniversalRouteSetter?: boolean;
 }
 
 export class ListUsersQueryDto extends PaginationDto {
@@ -122,6 +136,12 @@ export class ListUsersQueryDto extends PaginationDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  isUniversalRouteSetter?: boolean;
 
   @ApiPropertyOptional({ enum: USER_SORT_FIELDS })
   @IsOptional()

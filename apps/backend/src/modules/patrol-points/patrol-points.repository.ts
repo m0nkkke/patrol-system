@@ -68,7 +68,7 @@ export class PatrolPointsRepository {
   findActiveByShop(shopId: string): Promise<PatrolPointEntity[]> {
     return this.patrolPoints.find({
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
-      relations: { nfcTag: true },
+      relations: { nfcTag: true, photoFile: true },
       where: { isActive: true, shopId },
     });
   }
@@ -91,7 +91,7 @@ export class PatrolPointsRepository {
   }
 
   findPatrolPointById(id: string): Promise<PatrolPointEntity | null> {
-    return this.patrolPoints.findOne({ relations: { nfcTag: true }, where: { id } });
+    return this.patrolPoints.findOne({ relations: { nfcTag: true, photoFile: true }, where: { id } });
   }
 
   findPatrolPointByNfcTagId(nfcTagId: string): Promise<PatrolPointEntity | null> {

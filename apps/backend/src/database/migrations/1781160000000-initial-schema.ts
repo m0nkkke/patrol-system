@@ -7,7 +7,7 @@ export class InitialSchema1781160000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-      CREATE TYPE user_role AS ENUM ('employee', 'manager', 'admin');
+      CREATE TYPE user_role AS ENUM ('security_guard', 'route_setter', 'local_route_setter', 'inspector', 'admin');
       CREATE TYPE patrol_status AS ENUM ('pending', 'in_progress', 'completed', 'overdue', 'cancelled');
       CREATE TYPE alert_severity AS ENUM ('info', 'warning', 'critical');
 
@@ -38,7 +38,7 @@ export class InitialSchema1781160000000 implements MigrationInterface {
       CREATE TABLE users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         shop_id UUID REFERENCES shops(id) ON DELETE SET NULL,
-        role user_role NOT NULL DEFAULT 'employee',
+        role user_role NOT NULL DEFAULT 'security_guard',
         full_name VARCHAR(200) NOT NULL,
         username VARCHAR(100) NOT NULL,
         password_hash TEXT NOT NULL,

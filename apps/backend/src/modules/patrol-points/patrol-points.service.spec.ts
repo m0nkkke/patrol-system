@@ -2,6 +2,8 @@ import { DomainValidationError } from '../../common/errors/domain-validation.err
 import { NfcTagEntity } from './entities/nfc-tag.entity';
 import { NfcTagReplacementEntity } from './entities/nfc-tag-replacement.entity';
 import { PatrolPointEntity } from './entities/patrol-point.entity';
+import { FileAssetEntity } from '../files/entities/file-asset.entity';
+import { FilesService } from '../files/files.service';
 import { PatrolPointsRepository } from './patrol-points.repository';
 import { PatrolPointsService } from './patrol-points.service';
 
@@ -24,6 +26,7 @@ type PatrolPointsRepositoryMock = Pick<
 >;
 
 describe('PatrolPointsService', () => {
+  let filesService: jest.Mocked<Pick<FilesService, 'createImageAsset'>>;
   let repository: jest.Mocked<PatrolPointsRepositoryMock>;
   let service: PatrolPointsService;
 
@@ -44,7 +47,54 @@ describe('PatrolPointsService', () => {
       saveNfcTag: jest.fn(),
       savePatrolPoint: jest.fn(),
     };
-    service = new PatrolPointsService(repository as unknown as PatrolPointsRepository);
+    filesService = {
+      createImageAsset: jest.fn(),
+    };
+    service = new PatrolPointsService(
+      repository as unknown as PatrolPointsRepository,
+      filesService as unknown as FilesService,
+    );
+  });
+
+  it('uploads compressed patrol point photo and links file asset', async () => {
+    const point = createPoint();
+    const asset = createFileAsset();
+    repository.findPatrolPointById.mockResolvedValue(point);
+    repository.savePatrolPoint.mockImplementation((savedPoint) => Promise.resolve(savedPoint));
+    filesService.createImageAsset.mockResolvedValue(asset);
+
+    const result = await service.uploadPhoto(
+      point.id,
+      {
+        buffer: Buffer.from('image'),
+        mimetype: 'image/jpeg',
+        originalname: 'point.jpg',
+        size: 5,
+      },
+      {
+        fullName: 'Setter',
+        id: 'setter-id',
+        role: 'local_route_setter',
+        shopId: point.shopId,
+        username: 'setter',
+      },
+    );
+
+    expect(filesService.createImageAsset).toHaveBeenCalledWith({
+      file: {
+        buffer: Buffer.from('image'),
+        mimetype: 'image/jpeg',
+        originalname: 'point.jpg',
+        size: 5,
+      },
+      kind: 'patrol_point_photo',
+      ownerId: point.id,
+      ownerType: 'patrol_point',
+      uploadedBy: 'setter-id',
+    });
+    expect(result.photoFileId).toBe(asset.id);
+    expect(result.photoFile).toBe(asset);
+    expect(repository.savePatrolPoint).toHaveBeenCalledWith(point);
   });
 
   it('replaces NFC tag and stores replacement history', async () => {
@@ -149,6 +199,22 @@ function createPoint(overrides: Partial<PatrolPointEntity> = {}): PatrolPointEnt
     updatedAt: new Date(),
     ...overrides,
   } as PatrolPointEntity;
+}
+
+function createFileAsset(overrides: Partial<FileAssetEntity> = {}): FileAssetEntity {
+  return {
+    checksumSha256: 'a'.repeat(64),
+    createdAt: new Date(),
+    id: 'file-id',
+    kind: 'patrol_point_photo',
+    mimeType: 'image/webp',
+    ownerId: 'point-id',
+    ownerType: 'patrol_point',
+    sizeBytes: 1024,
+    storage: 'local',
+    storageKey: 'patrol_point_photo/2026/08/file-id.webp',
+    ...overrides,
+  } as FileAssetEntity;
 }
 
 function createReplacement(

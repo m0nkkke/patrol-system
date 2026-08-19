@@ -1,7 +1,7 @@
 import { CreateUserDto } from '@patrol/shared';
 
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
-import { SessionRevocationService } from '../auth/session-revocation.service';
+import { SessionRevocationService } from '../auth/sessions/session-revocation.service';
 import { ShopsService } from '../shops/shops.service';
 import { UserEntity } from './entities/user.entity';
 import { UsersRepository } from './users.repository';
@@ -42,7 +42,7 @@ describe('UsersService', () => {
     const shopId = '00000000-0000-4000-8000-0000000000aa';
     const dto: CreateUserDto = {
       fullName: 'Mobile Employee',
-      role: 'employee',
+      role: 'security_guard',
       shopId,
     };
 
@@ -74,7 +74,7 @@ describe('UsersService', () => {
 
     const result = await service.create({
       fullName: 'Mobile Employee',
-      role: 'employee',
+      role: 'security_guard',
       shopIds: [firstShop.id, secondShop.id],
     });
 
@@ -100,7 +100,7 @@ describe('UsersService', () => {
       id: 'user-id',
       isActive: true,
       passwordHash: 'hash',
-      role: 'employee',
+      role: 'security_guard',
       shopId: firstShop.id,
       shops: [firstShop],
       updatedAt: new Date(),
@@ -133,7 +133,7 @@ describe('UsersService', () => {
       id: 'user-id',
       isActive: true,
       passwordHash: 'hash',
-      role: 'employee',
+      role: 'security_guard',
       sessionVersion: 2,
       updatedAt: new Date(),
       username: 'mobile.employee',
@@ -167,7 +167,7 @@ describe('UsersService', () => {
       id: 'user-id',
       isActive: true,
       passwordHash: 'hash',
-      role: 'employee',
+      role: 'security_guard',
       sessionVersion: 4,
       updatedAt: new Date(),
       username: 'mobile.employee',

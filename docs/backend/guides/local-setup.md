@@ -29,6 +29,7 @@ $env:DATABASE_USER='patrol'
 $env:DATABASE_PASSWORD='patrol'
 $env:DATABASE_NAME='patrol'
 $env:DATABASE_SSL='false'
+
 npm run backend:migration:run
 ```
 
@@ -40,7 +41,7 @@ npm run backend:migration:run
 npm run backend:dev
 ```
 
-Swagger UI будет доступен на `http://localhost:3000/api/v1/docs`.
+Swagger UI будет доступен на `http://localhost:3000/api/v1/docs`. Локально он включен через `SWAGGER_ENABLED=true`; в production по умолчанию выключен.
 
 ## Seed-данные
 
@@ -53,7 +54,20 @@ $env:DATABASE_USER='patrol'
 $env:DATABASE_PASSWORD='patrol'
 $env:DATABASE_NAME='patrol'
 $env:DATABASE_SSL='false'
+
 npm run backend:seed:manual
 ```
 
 Подробности описаны в `docs/backend/guides/seed-data.md`.
+
+## Web-панель
+
+Backend использует `API_PREFIX=api/v1`, поэтому локальный API доступен по адресу `http://127.0.0.1:3000/api/v1`.
+
+После запуска backend открыть второй терминал в корне проекта:
+
+```powershell
+npm run web:dev
+```
+
+Web-панель будет доступна на `http://127.0.0.1:5173`. Для локальной разработки backend должен разрешать оба origin: `http://localhost:5173,http://127.0.0.1:5173`. Подробности и временное ограничение безопасности web-сессии описаны в `docs/web/README.md`.

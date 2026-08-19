@@ -1,98 +1,101 @@
-import { PatrolIncidentType, RouteStatus } from '@patrol/shared';
+import {
+  PatrolIncidentType,
+  PatrolPointVisitStatus,
+  PatrolReportStatus,
+  PatrolReportType,
+  PatrolScanAction,
+  RouteStatus,
+} from '@patrol/shared';
 import { Repository } from 'typeorm';
+import { createHash } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
+import { dirname, resolve } from 'path';
+import type sharpFactory from 'sharp';
 
 import { formatAccessKey, hashAccessKey } from '../../common/auth/access-key';
 import { NfcTagEntity } from '../../modules/patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../../modules/patrol-points/entities/patrol-point.entity';
+import { PatrolReportEntity } from '../../modules/reports/entities/patrol-report.entity';
+import { PatrolReportFileEntity } from '../../modules/reports/entities/patrol-report-file.entity';
+import { FileAssetEntity } from '../../modules/files/entities/file-asset.entity';
 import { PatrolEventEntity } from '../../modules/patrols/entities/patrol-event.entity';
 import { PatrolIncidentEntity } from '../../modules/patrols/entities/patrol-incident.entity';
+import { PatrolPointVisitEntity } from '../../modules/patrols/entities/patrol-point-visit.entity';
+import { PatrolRoutePointEntity } from '../../modules/patrols/entities/patrol-route-point.entity';
+import { PatrolRouteEntity } from '../../modules/patrols/entities/patrol-route.entity';
 import { PatrolScheduleEntity } from '../../modules/patrols/entities/patrol-schedule.entity';
 import { PatrolEntity } from '../../modules/patrols/entities/patrol.entity';
+import { RouteTimingProfileEntity } from '../../modules/patrols/entities/route-timing-profile.entity';
 import { RegionEntity } from '../../modules/shops/entities/region.entity';
 import { ShopEntity } from '../../modules/shops/entities/shop.entity';
 import { UserEntity } from '../../modules/users/entities/user.entity';
 import dataSource from '../data-source';
 
-const SEED_MARKER = 'scenarios-seed';
-const MINUTE_MS = 60 * 1000;
-const seedStartedAt = Date.now();
+const SEED_MARKER = 'scenarios-seed-v030';
+const sharp: typeof sharpFactory = require('sharp');
+const MINUTE_MS = 60_000;
+const DAY_MS = 24 * 60 * MINUTE_MS;
+const seedNow = new Date();
 
 type Repositories = {
   events: Repository<PatrolEventEntity>;
+  fileAssets: Repository<FileAssetEntity>;
   incidents: Repository<PatrolIncidentEntity>;
   patrols: Repository<PatrolEntity>;
   points: Repository<PatrolPointEntity>;
-  regions: Repository<RegionEntity>;
+  reports: Repository<PatrolReportEntity>;
+  reportFiles: Repository<PatrolReportFileEntity>;
+  routePoints: Repository<PatrolRoutePointEntity>;
+  routes: Repository<PatrolRouteEntity>;
   schedules: Repository<PatrolScheduleEntity>;
   shops: Repository<ShopEntity>;
   tags: Repository<NfcTagEntity>;
+  timingProfiles: Repository<RouteTimingProfileEntity>;
   users: Repository<UserEntity>;
+  visits: Repository<PatrolPointVisitEntity>;
 };
 
-type SeedSummary = {
-  credentials: Record<string, string | undefined>;
-  nfcUids: Record<string, string[]>;
-  notes: Record<string, string>;
-  shops: Record<string, string>;
-};
-
-type ShopInput = {
-  address: string;
+type ShopSeed = {
   externalId: string;
   name: string;
-  regionId: string;
   routeExpectedPoints: number;
   routeRegisteredPoints: number;
   routeStatus: RouteStatus;
   timezone: string;
 };
 
-type UserInput = {
+type UserSeed = {
   accessKey: string;
   fullName: string;
   isActive?: boolean;
+  isUniversalRouteSetter?: boolean;
   role: UserEntity['role'];
   shopId?: string;
   username: string;
 };
 
-type PointInput = {
-  description: string;
-  name: string;
-  tag?: NfcTagEntity;
-};
-
-type ScheduleInput = {
-  endTime: string;
-  isActive: boolean;
-  name: string;
-  startTime: string;
-  weekdays: number[];
-};
-
-type PatrolInput = {
+type PatrolSeed = {
   cancellationReason?: string;
-  cancelledAt?: Date;
   completedAt?: Date;
-  completionReport?: string;
+  completedPointCount: number;
   dueAt?: Date;
   employeeId: string;
-  events: Array<{ point: PatrolPointEntity; scannedAt: Date; tag?: NfcTagEntity }>;
-  note: string;
-  scannedPoints: number;
+  marker: string;
+  openPointIndex?: number;
+  points: PatrolPointEntity[];
+  routeId: string;
+  scheduleId: string;
   shopId: string;
   startedAt: Date;
   status: PatrolEntity['status'];
-  totalPoints: number;
+  tags: NfcTagEntity[];
 };
 
 async function run(): Promise<void> {
   await dataSource.initialize();
-
   try {
     await assertSchemaIsReady();
-    const summary = await seedScenarios(createRepositories());
-    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(await seedScenarios(createRepositories()), null, 2)}\n`);
   } finally {
     await dataSource.destroy();
   }
@@ -101,690 +104,418 @@ async function run(): Promise<void> {
 function createRepositories(): Repositories {
   return {
     events: dataSource.getRepository(PatrolEventEntity),
+    fileAssets: dataSource.getRepository(FileAssetEntity),
     incidents: dataSource.getRepository(PatrolIncidentEntity),
     patrols: dataSource.getRepository(PatrolEntity),
     points: dataSource.getRepository(PatrolPointEntity),
-    regions: dataSource.getRepository(RegionEntity),
+    reports: dataSource.getRepository(PatrolReportEntity),
+    reportFiles: dataSource.getRepository(PatrolReportFileEntity),
+    routePoints: dataSource.getRepository(PatrolRoutePointEntity),
+    routes: dataSource.getRepository(PatrolRouteEntity),
     schedules: dataSource.getRepository(PatrolScheduleEntity),
     shops: dataSource.getRepository(ShopEntity),
     tags: dataSource.getRepository(NfcTagEntity),
+    timingProfiles: dataSource.getRepository(RouteTimingProfileEntity),
     users: dataSource.getRepository(UserEntity),
+    visits: dataSource.getRepository(PatrolPointVisitEntity),
   };
 }
 
 async function assertSchemaIsReady(): Promise<void> {
-  const requiredColumns = [
-    { column: 'external_id', table: 'shops' },
-    { column: 'route_status', table: 'shops' },
-    { column: 'route_expected_points', table: 'shops' },
-    { column: 'route_registered_points', table: 'shops' },
-    { column: 'access_key', table: 'users' },
-    { column: 'access_key_hash', table: 'users' },
-    { column: 'completion_report', table: 'patrols' },
-    { column: 'cancellation_reason', table: 'patrols' },
-    { column: 'client_local_id', table: 'patrol_events' },
-    { column: 'late_sync', table: 'patrol_events' },
-    { column: 'point_deactivated_after_scan', table: 'patrol_events' },
+  const required = [
+    'patrol_routes', 'patrol_route_points', 'patrol_point_visits', 'route_timing_profiles',
+    'patrol_reports', 'universal_auth_sessions', 'anonymous_appeals',
   ];
-
   const rows: unknown = await dataSource.query(
-    `
-      SELECT table_name AS "tableName", column_name AS "columnName"
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = ANY($1)
-    `,
-    [[...new Set(requiredColumns.map((item) => item.table))]],
+    `SELECT table_name AS "tableName" FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = ANY($1)`,
+    [required],
   );
-
-  const existingColumns = new Set(
-    toColumnRows(rows).map((row) => `${row.tableName}.${row.columnName}`),
-  );
-  const missingColumns = requiredColumns
-    .filter((item) => !existingColumns.has(`${item.table}.${item.column}`))
-    .map((item) => `${item.table}.${item.column}`);
-
-  if (missingColumns.length > 0) {
+  const existing = new Set(Array.isArray(rows) ? rows.flatMap((row) => {
+    const value = row as { tableName?: unknown };
+    return typeof value.tableName === 'string' ? [value.tableName] : [];
+  }) : []);
+  const missing = required.filter((table) => !existing.has(table));
+  if (missing.length > 0) {
     throw new Error(
-      [
-        'База данных не соответствует текущей схеме backend.',
-        `Не найдены колонки: ${missingColumns.join(', ')}.`,
-        'Сначала примените миграции: npm run backend:migration:run',
-        'После успешных миграций повторите seed: npm run backend:seed:scenarios',
-      ].join('\n'),
+      `Database schema is outdated. Missing tables: ${missing.join(', ')}. ` +
+      'Run npm run backend:migration:run before npm run backend:seed:scenarios.',
     );
   }
 }
 
-async function seedScenarios(repositories: Repositories): Promise<SeedSummary> {
-  const region = await findOrCreateRegion(repositories.regions);
-
-  const shopIrkutsk = await findOrCreateShop(repositories.shops, {
-    address: 'Иркутск, ул. Демонстрационная, 1',
-    externalId: 'DEMO-IRK',
-    name: 'Демо - Иркутск',
-    regionId: region.id,
-    routeExpectedPoints: 4,
-    routeRegisteredPoints: 4,
-    routeStatus: RouteStatus.READY,
-    timezone: 'Asia/Irkutsk',
-  });
-  const shopMoscow = await findOrCreateShop(repositories.shops, {
-    address: 'Москва, ул. Демонстрационная, 2',
-    externalId: 'DEMO-MSK',
-    name: 'Демо - Москва',
-    regionId: region.id,
-    routeExpectedPoints: 3,
-    routeRegisteredPoints: 3,
-    routeStatus: RouteStatus.READY,
-    timezone: 'Europe/Moscow',
-  });
-  const shopSetup = await findOrCreateShop(repositories.shops, {
-    address: 'Красноярск, ул. Демонстрационная, 3',
-    externalId: 'DEMO-KRS',
-    name: 'Демо - Красноярск (настройка маршрута)',
-    regionId: region.id,
-    routeExpectedPoints: 4,
-    routeRegisteredPoints: 2,
-    routeStatus: RouteStatus.SETUP_IN_PROGRESS,
-    timezone: 'Asia/Krasnoyarsk',
-  });
-  const shopNotConfigured = await findOrCreateShop(repositories.shops, {
-    address: 'Владивосток, ул. Демонстрационная, 4',
-    externalId: 'DEMO-VVO',
-    name: 'Демо - Владивосток (без маршрута)',
-    regionId: region.id,
-    routeExpectedPoints: 0,
-    routeRegisteredPoints: 0,
-    routeStatus: RouteStatus.NOT_CONFIGURED,
-    timezone: 'Asia/Vladivostok',
-  });
-
-  const users = {
-    admin: await findOrCreateUser(repositories.users, {
-      accessKey: 'ADMN-DEMO-0001',
-      fullName: 'Демо Администратор',
-      role: 'admin',
-      username: 'demo.admin',
+async function seedScenarios(repositories: Repositories): Promise<Record<string, unknown>> {
+  const region = await ensureRegion();
+  const shops = {
+    irkutsk: await ensureShop(repositories.shops, region.id, {
+      externalId: 'DEMO-IRK', name: 'Demo Irkutsk', routeExpectedPoints: 4,
+      routeRegisteredPoints: 4, routeStatus: RouteStatus.READY, timezone: 'Asia/Irkutsk',
     }),
-    employeeInactive: await findOrCreateUser(repositories.users, {
-      accessKey: 'EMPL-INAC-0001',
-      fullName: 'Демо Обходчик Неактивный',
-      isActive: false,
-      role: 'employee',
-      shopId: shopIrkutsk.id,
-      username: 'demo.employee.inactive',
+    moscow: await ensureShop(repositories.shops, region.id, {
+      externalId: 'DEMO-MSK', name: 'Demo Moscow', routeExpectedPoints: 3,
+      routeRegisteredPoints: 3, routeStatus: RouteStatus.READY, timezone: 'Europe/Moscow',
     }),
-    employeeIrkutsk: await findOrCreateUser(repositories.users, {
-      accessKey: 'EMPL-IRKK-0001',
-      fullName: 'Демо Обходчик Иркутск',
-      role: 'employee',
-      shopId: shopIrkutsk.id,
-      username: 'demo.employee.irkutsk',
+    setup: await ensureShop(repositories.shops, region.id, {
+      externalId: 'DEMO-KRS', name: 'Demo Krasnoyarsk route setup', routeExpectedPoints: 4,
+      routeRegisteredPoints: 2, routeStatus: RouteStatus.SETUP_IN_PROGRESS, timezone: 'Asia/Krasnoyarsk',
     }),
-    employeeMoscow: await findOrCreateUser(repositories.users, {
-      accessKey: 'EMPL-MSKK-0001',
-      fullName: 'Демо Обходчик Москва',
-      role: 'employee',
-      shopId: shopMoscow.id,
-      username: 'demo.employee.moscow',
-    }),
-    employeeMultiShop: await findOrCreateUser(repositories.users, {
-      accessKey: 'EMPL-MULT-0001',
-      fullName: 'Демо Обходчик Несколько Магазинов',
-      role: 'employee',
-      shopId: shopIrkutsk.id,
-      username: 'demo.employee.multi',
-    }),
-    managerIrkutsk: await findOrCreateUser(repositories.users, {
-      accessKey: 'MNGR-IRKK-0001',
-      fullName: 'Демо Менеджер Иркутск',
-      role: 'manager',
-      shopId: shopIrkutsk.id,
-      username: 'demo.manager.irkutsk',
-    }),
-    managerMoscow: await findOrCreateUser(repositories.users, {
-      accessKey: 'MNGR-MSKK-0001',
-      fullName: 'Демо Менеджер Москва',
-      role: 'manager',
-      shopId: shopMoscow.id,
-      username: 'demo.manager.moscow',
+    unconfigured: await ensureShop(repositories.shops, region.id, {
+      externalId: 'DEMO-VVO', name: 'Demo Vladivostok without route', routeExpectedPoints: 0,
+      routeRegisteredPoints: 0, routeStatus: RouteStatus.NOT_CONFIGURED, timezone: 'Asia/Vladivostok',
     }),
   };
 
-  await assignShop(repositories.users, users.managerIrkutsk.id, shopIrkutsk.id);
-  await assignShop(repositories.users, users.managerMoscow.id, shopMoscow.id);
-  await assignShop(repositories.users, users.employeeIrkutsk.id, shopIrkutsk.id);
-  await assignShop(repositories.users, users.employeeInactive.id, shopIrkutsk.id);
-  await assignShop(repositories.users, users.employeeMoscow.id, shopMoscow.id);
-  await assignShop(repositories.users, users.employeeMultiShop.id, shopIrkutsk.id);
-  await assignShop(repositories.users, users.employeeMultiShop.id, shopMoscow.id);
+  const users = await ensureUsers(repositories.users, shops);
+  const admin = requiredUser(users, 'admin');
+  const guardIrkutsk = requiredUser(users, 'guardIrkutsk');
+  const guardMoscow = requiredUser(users, 'guardMoscow');
 
-  const irkutskTags = await ensureTags(repositories.tags, users.admin.id, [
-    '04demoirk0001',
-    '04demoirk0002',
-    '04demoirk0003',
-    '04demoirk0004',
-  ]);
-  const irkutskPoints = await ensurePoints(repositories.points, shopIrkutsk.id, [
-    { description: 'Входная группа магазина', name: 'Вход', tag: irkutskTags[0] },
-    { description: 'Складская зона', name: 'Склад', tag: irkutskTags[1] },
-    { description: 'Электрощитовая', name: 'Электрощитовая', tag: irkutskTags[2] },
-    { description: 'Кассовая зона', name: 'Касса', tag: irkutskTags[3] },
-  ]);
+  const irkutskTags = await ensureTags(repositories.tags, admin.id, '04demoirk', 4);
+  const moscowTags = await ensureTags(repositories.tags, admin.id, '04demomsk', 3);
+  const setupTags = await ensureTags(repositories.tags, admin.id, '04demokrs', 2);
+  const irkutskPoints = await ensurePoints(repositories.points, shops.irkutsk.id, irkutskTags,
+    ['Entrance', 'Warehouse', 'Electrical room', 'Cash desk']);
+  const moscowPoints = await ensurePoints(repositories.points, shops.moscow.id, moscowTags,
+    ['Entrance', 'Sales floor', 'Back office']);
+  await ensurePoints(repositories.points, shops.setup.id, setupTags,
+    ['Setup point 1', 'Setup point 2', 'Setup point 3', 'Setup point 4']);
 
-  const moscowTags = await ensureTags(repositories.tags, users.admin.id, [
-    '04demomsk0001',
-    '04demomsk0002',
-    '04demomsk0003',
-  ]);
-  const moscowPoints = await ensurePoints(repositories.points, shopMoscow.id, [
-    { description: 'Входная группа магазина', name: 'Вход', tag: moscowTags[0] },
-    { description: 'Торговый зал', name: 'Торговый зал', tag: moscowTags[1] },
-    { description: 'Подсобное помещение', name: 'Подсобка', tag: moscowTags[2] },
-  ]);
+  const routes = {
+    irkutskInternal: await ensureRoute(repositories, shops.irkutsk.id, 'Irkutsk internal', 'internal', irkutskPoints),
+    irkutskExternal: await ensureRoute(repositories, shops.irkutsk.id, 'Irkutsk external', 'external',
+      [irkutskPoints[0], irkutskPoints[3]].filter((point): point is PatrolPointEntity => point !== undefined)),
+    moscowInternal: await ensureRoute(repositories, shops.moscow.id, 'Moscow internal', 'internal', moscowPoints),
+  };
+  const schedules = {
+    irkutskMorning: await ensureSchedule(repositories.schedules, shops.irkutsk.id, routes.irkutskInternal.id,
+      'Irkutsk morning', 'morning', '08:00', '10:00', 30),
+    irkutskEvening: await ensureSchedule(repositories.schedules, shops.irkutsk.id, routes.irkutskExternal.id,
+      'Irkutsk evening', 'evening', '19:00', '22:00', 15),
+    moscowNoon: await ensureSchedule(repositories.schedules, shops.moscow.id, routes.moscowInternal.id,
+      'Moscow noon', 'noon', '12:00', '15:00', 20),
+  };
 
-  const setupTags = await ensureTags(repositories.tags, users.admin.id, [
-    '04demokrs0001',
-    '04demokrs0002',
-  ]);
-  await ensurePoints(repositories.points, shopSetup.id, [
-    { description: 'Уже привязана', name: 'Точка 1', tag: setupTags[0] },
-    { description: 'Уже привязана', name: 'Точка 2', tag: setupTags[1] },
-    { description: 'Ожидает NFC-метку', name: 'Точка 3' },
-    { description: 'Ожидает NFC-метку', name: 'Точка 4' },
-  ]);
+  const historyDurations = [19, 21, 20, 22, 18, 20];
+  const history: PatrolEntity[] = [];
+  for (let index = 0; index < historyDurations.length; index += 1) {
+    const startedAt = daysAgo(index + 1, 8);
+    history.push(await ensurePatrol(repositories, {
+      completedAt: new Date(startedAt.getTime() + historyDurations[index]! * MINUTE_MS),
+      completedPointCount: irkutskPoints.length,
+      employeeId: guardIrkutsk.id,
+      marker: `${SEED_MARKER}:timing:${index + 1}`,
+      points: irkutskPoints,
+      routeId: routes.irkutskInternal.id,
+      scheduleId: schedules.irkutskMorning.id,
+      shopId: shops.irkutsk.id,
+      startedAt,
+      status: 'completed',
+      tags: irkutskTags,
+    }));
+  }
+  await ensureTimingProfile(repositories.timingProfiles, routes.irkutskInternal, historyDurations);
 
-  await ensureSchedule(repositories.schedules, shopIrkutsk.id, {
-    endTime: '23:59',
-    isActive: true,
-    name: 'Круглосуточный демо-обход',
-    startTime: '00:00',
-    weekdays: [1, 2, 3, 4, 5, 6, 7],
+  const fastStart = minutesAgo(240);
+  const fastPatrol = await ensurePatrol(repositories, {
+    completedAt: new Date(fastStart.getTime() + 8 * MINUTE_MS), completedPointCount: irkutskPoints.length,
+    employeeId: guardIrkutsk.id, marker: `${SEED_MARKER}:fast`, points: irkutskPoints,
+    routeId: routes.irkutskInternal.id, scheduleId: schedules.irkutskMorning.id,
+    shopId: shops.irkutsk.id, startedAt: fastStart, status: 'completed', tags: irkutskTags,
   });
-  await ensureSchedule(repositories.schedules, shopIrkutsk.id, {
-    endTime: '10:00',
-    isActive: true,
-    name: 'Утренний обход',
-    startTime: '08:00',
-    weekdays: [1, 2, 3, 4, 5],
-  });
-  await ensureSchedule(repositories.schedules, shopIrkutsk.id, {
-    endTime: '13:00',
-    isActive: false,
-    name: 'Отключенное расписание',
-    startTime: '12:00',
-    weekdays: [1, 2, 3, 4, 5, 6, 7],
-  });
-  await ensureSchedule(repositories.schedules, shopMoscow.id, {
-    endTime: '21:00',
-    isActive: true,
-    name: 'Дневной обход',
-    startTime: '09:00',
-    weekdays: [1, 2, 3, 4, 5, 6, 7],
-  });
+  await ensureIncident(repositories.incidents, fastPatrol, PatrolIncidentType.ROUTE_TOO_FAST,
+    'Route completed faster than its learned norm', 1200, 480);
 
-  await seedPatrolScenarios(
-    repositories,
-    shopIrkutsk,
-    shopMoscow,
-    users.employeeIrkutsk,
-    users.employeeMoscow,
-    irkutskPoints,
-    irkutskTags,
-    moscowPoints,
-    moscowTags,
-  );
+  const slowStart = minutesAgo(190);
+  const slowPatrol = await ensurePatrol(repositories, {
+    completedAt: new Date(slowStart.getTime() + 35 * MINUTE_MS), completedPointCount: irkutskPoints.length,
+    employeeId: guardIrkutsk.id, marker: `${SEED_MARKER}:slow`, points: irkutskPoints,
+    routeId: routes.irkutskInternal.id, scheduleId: schedules.irkutskMorning.id,
+    shopId: shops.irkutsk.id, startedAt: slowStart, status: 'completed', tags: irkutskTags,
+  });
+  await ensureIncident(repositories.incidents, slowPatrol, PatrolIncidentType.ROUTE_TOO_SLOW,
+    'Route completed slower than its learned norm', 1200, 2100);
+
+  const overdue = await ensurePatrol(repositories, {
+    completedPointCount: 1, dueAt: minutesAgo(60), employeeId: guardMoscow.id,
+    marker: `${SEED_MARKER}:overdue`, openPointIndex: 1, points: moscowPoints,
+    routeId: routes.moscowInternal.id, scheduleId: schedules.moscowNoon.id,
+    shopId: shops.moscow.id, startedAt: minutesAgo(180), status: 'overdue', tags: moscowTags,
+  });
+  await ensureIncident(repositories.incidents, overdue, PatrolIncidentType.PATROL_OVERDUE,
+    'Patrol was not completed by its due time');
+
+  const active = await ensurePatrol(repositories, {
+    completedPointCount: 0, dueAt: minutesAhead(50), employeeId: guardMoscow.id,
+    marker: `${SEED_MARKER}:active`, openPointIndex: 0, points: moscowPoints,
+    routeId: routes.moscowInternal.id, scheduleId: schedules.moscowNoon.id,
+    shopId: shops.moscow.id, startedAt: minutesAgo(5), status: 'in_progress', tags: moscowTags,
+  });
+  await ensureReports(repositories, shops.irkutsk.id, guardIrkutsk.id,
+    history[0], routes.irkutskInternal.id, schedules.irkutskMorning.id);
 
   return {
-    credentials: {
-      admin: users.admin.accessKey,
-      employeeInactive: users.employeeInactive.accessKey,
-      employeeIrkutsk: users.employeeIrkutsk.accessKey,
-      employeeMoscow: users.employeeMoscow.accessKey,
-      employeeMultiShop: users.employeeMultiShop.accessKey,
-      managerIrkutsk: users.managerIrkutsk.accessKey,
-      managerMoscow: users.managerMoscow.accessKey,
+    credentials: Object.fromEntries(Object.entries(users).map(([key, user]) => [key, user.accessKey])),
+    ids: {
+      activePatrolId: active.id, fastPatrolId: fastPatrol.id, overduePatrolId: overdue.id,
+      timingRouteId: routes.irkutskInternal.id,
     },
     nfcUids: {
       irkutsk: irkutskTags.map((tag) => tag.uid),
       krasnoyarskSetup: setupTags.map((tag) => tag.uid),
       moscow: moscowTags.map((tag) => tag.uid),
     },
-    notes: {
-      employeeInactive: 'Вход должен быть заблокирован, пользователь isActive=false.',
-      employeeIrkutsk: 'Нет активного обхода: удобно проверять старт по расписанию и внеплановый старт.',
-      employeeMoscow: 'Есть активный обход и просроченный обход в истории.',
-      shopNotConfigured: 'Магазин без маршрута: старт обхода должен вернуть PATROL_ROUTE_NOT_READY.',
-      shopSetup: 'Маршрут частично настроен: следующий bind-nfc должен продолжить с точки 3.',
-    },
-    shops: {
-      irkutsk: shopIrkutsk.id,
-      krasnoyarskSetup: shopSetup.id,
-      moscow: shopMoscow.id,
-      vladivostokNotConfigured: shopNotConfigured.id,
-    },
+    shops: Object.fromEntries(Object.entries(shops).map(([key, shop]) => [key, shop.id])),
+    timingProfile: { averageMinutes: 20, sampleCount: historyDurations.length },
   };
 }
 
-async function seedPatrolScenarios(
-  repositories: Repositories,
-  shopIrkutsk: ShopEntity,
-  shopMoscow: ShopEntity,
-  employeeIrkutsk: UserEntity,
-  employeeMoscow: UserEntity,
-  irkutskPoints: PatrolPointEntity[],
-  irkutskTags: NfcTagEntity[],
-  moscowPoints: PatrolPointEntity[],
-  moscowTags: NfcTagEntity[],
-): Promise<void> {
-  await ensurePatrol(repositories, {
-    completedAt: minutesAgo(20),
-    employeeId: employeeIrkutsk.id,
-    events: irkutskPoints.map((point, index) => ({
-      point,
-      scannedAt: minutesAgo(38 - index * 5),
-      tag: irkutskTags[index],
-    })),
-    note: `${SEED_MARKER}:irkutsk:completed`,
-    scannedPoints: irkutskPoints.length,
-    shopId: shopIrkutsk.id,
-    startedAt: minutesAgo(40),
-    status: 'completed',
-    totalPoints: irkutskPoints.length,
-  });
-
-  const reportPatrol = await ensurePatrol(repositories, {
-    completedAt: minutesAgo(120),
-    completionReport:
-      'На точке "Склад" задержался: помогал покупателю найти товар. Перед электрощитовой ждал, пока освободит проход персонал.',
-    employeeId: employeeIrkutsk.id,
-    events: irkutskPoints.map((point, index) => ({
-      point,
-      scannedAt: minutesAgo(178 - index * 10),
-      tag: irkutskTags[index],
-    })),
-    note: `${SEED_MARKER}:irkutsk:report`,
-    scannedPoints: irkutskPoints.length,
-    shopId: shopIrkutsk.id,
-    startedAt: minutesAgo(180),
-    status: 'completed',
-    totalPoints: irkutskPoints.length,
-  });
-
-  await ensurePatrol(repositories, {
-    cancellationReason: 'Срочно вызвали к руководству, начну обход заново позже.',
-    cancelledAt: minutesAgo(295),
-    employeeId: employeeIrkutsk.id,
-    events: irkutskPoints.slice(0, 2).map((point, index) => ({
-      point,
-      scannedAt: minutesAgo(299 - index * 2),
-      tag: irkutskTags[index],
-    })),
-    note: `${SEED_MARKER}:irkutsk:cancelled`,
-    scannedPoints: 2,
-    shopId: shopIrkutsk.id,
-    startedAt: minutesAgo(300),
-    status: 'cancelled',
-    totalPoints: irkutskPoints.length,
-  });
-
-  await ensureIncident(repositories.incidents, {
-    actualSeconds: 45,
-    expectedSeconds: 3600,
-    fromPatrolPointId: irkutskPoints[0]?.id,
-    message: 'Подозрительно короткий интервал между точками',
-    patrolId: reportPatrol.id,
-    shopId: shopIrkutsk.id,
-    toPatrolPointId: irkutskPoints[1]?.id,
-    type: PatrolIncidentType.SHORT_INTERVAL,
-  });
-  await ensureIncident(repositories.incidents, {
-    actualSeconds: 5400,
-    expectedSeconds: 600,
-    fromPatrolPointId: irkutskPoints[1]?.id,
-    message: 'Слишком долгий интервал между точками',
-    patrolId: reportPatrol.id,
-    shopId: shopIrkutsk.id,
-    toPatrolPointId: irkutskPoints[2]?.id,
-    type: PatrolIncidentType.LONG_INTERVAL,
-  });
-  await ensureIncident(repositories.incidents, {
-    fromPatrolPointId: irkutskPoints[0]?.id,
-    message: 'Пропущены точки маршрута между 1 и 3',
-    patrolId: reportPatrol.id,
-    shopId: shopIrkutsk.id,
-    toPatrolPointId: irkutskPoints[2]?.id,
-    type: PatrolIncidentType.MISSED_POINT,
-  });
-
-  await ensurePatrol(repositories, {
-    completedAt: minutesAgo(70),
-    employeeId: employeeMoscow.id,
-    events: moscowPoints.map((point, index) => ({
-      point,
-      scannedAt: minutesAgo(88 - index * 6),
-      tag: moscowTags[index],
-    })),
-    note: `${SEED_MARKER}:moscow:completed`,
-    scannedPoints: moscowPoints.length,
-    shopId: shopMoscow.id,
-    startedAt: minutesAgo(90),
-    status: 'completed',
-    totalPoints: moscowPoints.length,
-  });
-
-  await ensurePatrol(repositories, {
-    dueAt: minutesAgo(60),
-    employeeId: employeeMoscow.id,
-    events: moscowPoints.slice(0, 2).map((point, index) => ({
-      point,
-      scannedAt: minutesAgo(178 - index * 5),
-      tag: moscowTags[index],
-    })),
-    note: `${SEED_MARKER}:moscow:overdue`,
-    scannedPoints: 2,
-    shopId: shopMoscow.id,
-    startedAt: minutesAgo(180),
-    status: 'overdue',
-    totalPoints: moscowPoints.length,
-  });
-
-  await ensurePatrol(repositories, {
-    dueAt: minutesAhead(50),
-    employeeId: employeeMoscow.id,
-    events: moscowPoints.slice(0, 1).map((point) => ({
-      point,
-      scannedAt: minutesAgo(8),
-      tag: moscowTags[0],
-    })),
-    note: `${SEED_MARKER}:moscow:in-progress`,
-    scannedPoints: 1,
-    shopId: shopMoscow.id,
-    startedAt: minutesAgo(10),
-    status: 'in_progress',
-    totalPoints: moscowPoints.length,
-  });
+async function ensureRegion(): Promise<RegionEntity> {
+  const repository = dataSource.getRepository(RegionEntity);
+  const existing = await repository.findOne({ where: { name: 'Demo scenarios' } });
+  return repository.save(repository.create({ id: existing?.id, name: 'Demo scenarios' }));
 }
 
-async function findOrCreateRegion(repository: Repository<RegionEntity>): Promise<RegionEntity> {
-  const existing = await repository.findOne({ where: { name: 'Демо-сценарии' } });
-
-  if (existing !== null) {
-    return existing;
-  }
-
-  return repository.save(repository.create({ name: 'Демо-сценарии' }));
-}
-
-async function findOrCreateShop(
-  repository: Repository<ShopEntity>,
-  input: ShopInput,
-): Promise<ShopEntity> {
+async function ensureShop(repository: Repository<ShopEntity>, regionId: string, input: ShopSeed): Promise<ShopEntity> {
   const existing = await repository.findOne({ where: { externalId: input.externalId } });
-
-  if (existing !== null) {
-    existing.address = input.address;
-    existing.isActive = true;
-    existing.name = input.name;
-    existing.regionId = input.regionId;
-    existing.routeExpectedPoints = input.routeExpectedPoints;
-    existing.routeRegisteredPoints = input.routeRegisteredPoints;
-    existing.routeStatus = input.routeStatus;
-    existing.timezone = input.timezone;
-
-    return repository.save(existing);
-  }
-
-  return repository.save(repository.create({ isActive: true, ...input }));
+  return repository.save(repository.create({
+    ...input, address: `${input.name}, test address`, id: existing?.id, isActive: true, regionId,
+  }));
 }
 
-async function findOrCreateUser(
-  repository: Repository<UserEntity>,
-  input: UserInput,
-): Promise<UserEntity> {
-  const accessKey = formatAccessKey(input.accessKey);
-  const accessKeyHash = hashAccessKey(accessKey);
-  const existing = await repository.findOne({ where: { username: input.username } });
-
-  if (existing !== null) {
-    existing.accessKey = accessKey;
-    existing.accessKeyHash = accessKeyHash;
-    existing.fullName = input.fullName;
-    existing.isActive = input.isActive ?? true;
-    existing.passwordHash = accessKeyHash;
-    existing.role = input.role;
-    existing.shopId = input.shopId;
-
-    return repository.save(existing);
+async function ensureUsers(repository: Repository<UserEntity>, shops: Record<string, ShopEntity>): Promise<Record<string, UserEntity>> {
+  const inputs: Record<string, UserSeed> = {
+    admin: { accessKey: 'ADMN-DEMO-0001', fullName: 'Demo Administrator', role: 'admin', username: 'demo.admin' },
+    guardInactive: { accessKey: 'EMPL-INAC-0001', fullName: 'Inactive Guard', isActive: false, role: 'security_guard', shopId: shops.irkutsk?.id, username: 'demo.employee.inactive' },
+    guardIrkutsk: { accessKey: 'EMPL-IRKK-0001', fullName: 'Irkutsk Guard', role: 'security_guard', shopId: shops.irkutsk?.id, username: 'demo.employee.irkutsk' },
+    guardMoscow: { accessKey: 'EMPL-MSKK-0001', fullName: 'Moscow Guard', role: 'security_guard', shopId: shops.moscow?.id, username: 'demo.employee.moscow' },
+    guardMultiShop: { accessKey: 'EMPL-MULT-0001', fullName: 'Multi-shop Guard', role: 'security_guard', shopId: shops.irkutsk?.id, username: 'demo.employee.multi' },
+    inspectorIrkutsk: { accessKey: 'MNGR-IRKK-0001', fullName: 'Irkutsk Inspector', role: 'inspector', shopId: shops.irkutsk?.id, username: 'demo.manager.irkutsk' },
+    inspectorMoscow: { accessKey: 'MNGR-MSKK-0001', fullName: 'Moscow Inspector', role: 'inspector', shopId: shops.moscow?.id, username: 'demo.manager.moscow' },
+    localRouteSetter: { accessKey: 'LRST-DEMO-0001', fullName: 'Local Route Setter', role: 'local_route_setter', shopId: shops.setup?.id, username: 'demo.local-route-setter' },
+    universalRouteSetter: { accessKey: 'RSET-DEMO-0001', fullName: 'Universal Route Setter Account', isUniversalRouteSetter: true, role: 'route_setter', username: 'demo.route-setter' },
+  };
+  const result: Record<string, UserEntity> = {};
+  for (const [key, input] of Object.entries(inputs)) {
+    const accessKey = formatAccessKey(input.accessKey);
+    const accessKeyHash = hashAccessKey(accessKey);
+    const existing = await repository.findOne({ where: { username: input.username } });
+    const user = await repository.save(repository.create({
+      accessKey, accessKeyHash, fullName: input.fullName, id: existing?.id,
+      isActive: input.isActive ?? true, isUniversalRouteSetter: input.isUniversalRouteSetter ?? false,
+      passwordHash: accessKeyHash, role: input.role, shopId: input.shopId, username: input.username,
+    }));
+    result[key] = user;
+    if (input.shopId !== undefined) await assignShop(user.id, input.shopId);
   }
-
-  return repository.save(
-    repository.create({
-      accessKey,
-      accessKeyHash,
-      fullName: input.fullName,
-      isActive: input.isActive ?? true,
-      passwordHash: accessKeyHash,
-      role: input.role,
-      shopId: input.shopId,
-      username: input.username,
-    }),
-  );
+  const multi = result.guardMultiShop;
+  if (multi !== undefined && shops.moscow !== undefined) await assignShop(multi.id, shops.moscow.id);
+  return result;
 }
 
-async function assignShop(
-  repository: Repository<UserEntity>,
-  userId: string,
-  shopId: string,
-): Promise<void> {
-  await repository.query(
-    `
-      INSERT INTO user_shop_assignments (user_id, shop_id)
-      VALUES ($1, $2)
-      ON CONFLICT DO NOTHING
-    `,
+function requiredUser(users: Record<string, UserEntity>, key: string): UserEntity {
+  const user = users[key];
+  if (user === undefined) throw new Error(`Seed user ${key} was not created`);
+  return user;
+}
+
+async function assignShop(userId: string, shopId: string): Promise<void> {
+  await dataSource.query(
+    `INSERT INTO user_shop_assignments (user_id, shop_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
     [userId, shopId],
   );
 }
 
-async function ensureTags(
-  repository: Repository<NfcTagEntity>,
-  registeredBy: string,
-  uids: string[],
-): Promise<NfcTagEntity[]> {
-  const tags: NfcTagEntity[] = [];
-
-  for (const uid of uids) {
+async function ensureTags(repository: Repository<NfcTagEntity>, registeredBy: string, prefix: string, count: number): Promise<NfcTagEntity[]> {
+  const result: NfcTagEntity[] = [];
+  for (let index = 1; index <= count; index += 1) {
+    const uid = `${prefix}${String(index).padStart(4, '0')}`;
     const existing = await repository.findOne({ where: { uid } });
-
-    if (existing !== null) {
-      existing.isActive = true;
-      existing.notes = SEED_MARKER;
-      existing.payload = `${SEED_MARKER}:${uid}`;
-      existing.registeredBy = registeredBy;
-      tags.push(await repository.save(existing));
-      continue;
-    }
-
-    tags.push(
-      await repository.save(
-        repository.create({
-          isActive: true,
-          notes: SEED_MARKER,
-          payload: `${SEED_MARKER}:${uid}`,
-          registeredBy,
-          uid,
-        }),
-      ),
-    );
+    result.push(await repository.save(repository.create({
+      id: existing?.id, isActive: true, notes: SEED_MARKER,
+      payload: `${SEED_MARKER}:${uid}`, registeredBy, uid,
+    })));
   }
-
-  return tags;
+  return result;
 }
 
-async function ensurePoints(
-  repository: Repository<PatrolPointEntity>,
-  shopId: string,
-  inputs: PointInput[],
-): Promise<PatrolPointEntity[]> {
-  const points: PatrolPointEntity[] = [];
-
-  for (let index = 0; index < inputs.length; index += 1) {
-    const input = inputs[index];
-
-    if (input === undefined) {
-      continue;
-    }
-
-    const existing = await repository.findOne({ where: { name: input.name, shopId } });
-
-    if (existing !== null) {
-      existing.description = input.description;
-      existing.isActive = true;
-      existing.nfcTagId = input.tag?.id;
-      existing.sortOrder = index + 1;
-      points.push(await repository.save(existing));
-      continue;
-    }
-
-    points.push(
-      await repository.save(
-        repository.create({
-          description: input.description,
-          isActive: true,
-          name: input.name,
-          nfcTagId: input.tag?.id,
-          shopId,
-          sortOrder: index + 1,
-        }),
-      ),
-    );
+async function ensurePoints(repository: Repository<PatrolPointEntity>, shopId: string, tags: NfcTagEntity[], names: string[]): Promise<PatrolPointEntity[]> {
+  const result: PatrolPointEntity[] = [];
+  for (let index = 0; index < names.length; index += 1) {
+    const name = names[index];
+    if (name === undefined) continue;
+    const existing = await repository.findOne({ where: { name, shopId } });
+    result.push(await repository.save(repository.create({
+      description: `${name} control point`, id: existing?.id, isActive: true,
+      name, nfcTagId: tags[index]?.id, shopId, sortOrder: index + 1,
+    })));
   }
-
-  return points;
+  return result;
 }
 
-async function ensureSchedule(
-  repository: Repository<PatrolScheduleEntity>,
-  shopId: string,
-  input: ScheduleInput,
-): Promise<PatrolScheduleEntity> {
-  const existing = await repository.findOne({ where: { name: input.name, shopId } });
-
-  if (existing !== null) {
-    existing.endTime = input.endTime;
-    existing.isActive = input.isActive;
-    existing.startTime = input.startTime;
-    existing.weekdays = input.weekdays;
-
-    return repository.save(existing);
-  }
-
-  return repository.save(repository.create({ shopId, ...input }));
+async function ensureRoute(repositories: Repositories, shopId: string, name: string, category: PatrolRouteEntity['category'], points: PatrolPointEntity[]): Promise<PatrolRouteEntity> {
+  const existing = await repositories.routes.findOne({ where: { name, shopId } });
+  const route = await repositories.routes.save(repositories.routes.create({
+    category, id: existing?.id, isActive: true, name, shopId,
+  }));
+  await repositories.routePoints.delete({ routeId: route.id });
+  await repositories.routePoints.save(points.map((point, index) => repositories.routePoints.create({
+    patrolPointId: point.id, routeId: route.id, sortOrder: index + 1,
+  })));
+  return route;
 }
 
-async function ensurePatrol(
-  repositories: Repositories,
-  input: PatrolInput,
-): Promise<PatrolEntity> {
-  const existing = await repositories.patrols.findOne({
-    where: { notes: input.note, shopId: input.shopId },
-  });
+async function ensureSchedule(repository: Repository<PatrolScheduleEntity>, shopId: string, routeId: string, name: string, period: PatrolScheduleEntity['period'], startTime: string, endTime: string, earlyStartMinutes: number): Promise<PatrolScheduleEntity> {
+  const existing = await repository.findOne({ where: { name, shopId } });
+  return repository.save(repository.create({
+    earlyStartMinutes, endTime, id: existing?.id, isActive: true, name, period,
+    routeId, shopId, startTime, weekdays: [1, 2, 3, 4, 5, 6, 7],
+  }));
+}
 
-  if (existing !== null) {
-    return existing;
+async function ensurePatrol(repositories: Repositories, input: PatrolSeed): Promise<PatrolEntity> {
+  const existing = await repositories.patrols.findOne({ where: { notes: input.marker } });
+  const patrol = await repositories.patrols.save(repositories.patrols.create({
+    cancellationReason: input.cancellationReason,
+    cancelledAt: input.status === 'cancelled' ? input.completedAt : undefined,
+    completedAt: input.completedAt, dueAt: input.dueAt, employeeId: input.employeeId,
+    id: existing?.id, notes: input.marker, routeId: input.routeId,
+    scannedPoints: input.completedPointCount, scheduleId: input.scheduleId,
+    shopId: input.shopId, startedAt: input.startedAt, status: input.status,
+    totalPoints: input.points.length,
+  }));
+  await repositories.events.delete({ patrolId: patrol.id });
+  await repositories.visits.delete({ patrolId: patrol.id });
+
+  const durationMs = (input.completedAt?.getTime() ?? seedNow.getTime()) - input.startedAt.getTime();
+  const stepMs = Math.max(3 * MINUTE_MS, Math.floor(durationMs / Math.max(input.points.length, 1)));
+  for (let index = 0; index < input.completedPointCount; index += 1) {
+    await ensureVisit(repositories, patrol, input.points[index], input.tags[index],
+      new Date(input.startedAt.getTime() + index * stepMs + MINUTE_MS), true);
   }
-
-  const patrol = await repositories.patrols.save(
-    repositories.patrols.create({
-      cancellationReason: input.cancellationReason,
-      cancelledAt: input.cancelledAt,
-      completedAt: input.completedAt,
-      completionReport: input.completionReport,
-      dueAt: input.dueAt,
-      employeeId: input.employeeId,
-      notes: input.note,
-      scannedPoints: input.scannedPoints,
-      shopId: input.shopId,
-      startedAt: input.startedAt,
-      status: input.status,
-      totalPoints: input.totalPoints,
-    }),
-  );
-
-  for (const event of input.events) {
-    if (event.tag === undefined) {
-      continue;
-    }
-
-    await repositories.events.save(
-      repositories.events.create({
-        deviceId: 'scenario-seed-device',
-        employeeId: input.employeeId,
-        gpsAccuracy: 5,
-        lat: '52.289588',
-        lng: '104.280606',
-        nfcTagId: event.tag.id,
-        nfcUid: event.tag.uid,
-        patrolId: patrol.id,
-        patrolPointId: event.point.id,
-        scannedAt: event.scannedAt,
-      }),
-    );
+  if (input.openPointIndex !== undefined) {
+    await ensureVisit(repositories, patrol, input.points[input.openPointIndex], input.tags[input.openPointIndex],
+      new Date(seedNow.getTime() - 3 * MINUTE_MS), false);
   }
-
   return patrol;
 }
 
-async function ensureIncident(
-  repository: Repository<PatrolIncidentEntity>,
-  input: {
-    actualSeconds?: number;
-    expectedSeconds?: number;
-    fromPatrolPointId?: string;
-    message: string;
-    patrolId: string;
-    shopId: string;
-    toPatrolPointId?: string;
-    type: PatrolIncidentType;
-  },
-): Promise<void> {
-  const existing = await repository.findOne({
-    where: { patrolId: input.patrolId, type: input.type },
-  });
-
-  if (existing !== null) {
-    return;
+async function ensureVisit(repositories: Repositories, patrol: PatrolEntity, point: PatrolPointEntity | undefined, tag: NfcTagEntity | undefined, arrivedAt: Date, completed: boolean): Promise<void> {
+  if (point === undefined || tag === undefined) return;
+  const departedAt = new Date(arrivedAt.getTime() + 90_000);
+  const visit = await repositories.visits.save(repositories.visits.create({
+    arrivedAt, departedAt: completed ? departedAt : undefined,
+    dwellSeconds: completed ? 90 : undefined, lockedUntil: departedAt,
+    patrolId: patrol.id, patrolPointId: point.id,
+    status: completed ? PatrolPointVisitStatus.COMPLETED : PatrolPointVisitStatus.READY_TO_DEPART,
+  }));
+  const arrival = await saveEvent(repositories.events, patrol, point, tag, visit.id, PatrolScanAction.ARRIVE, arrivedAt);
+  visit.arrivalEventId = arrival.id;
+  if (completed) {
+    const departure = await saveEvent(repositories.events, patrol, point, tag, visit.id, PatrolScanAction.DEPART, departedAt);
+    visit.departureEventId = departure.id;
   }
+  await repositories.visits.save(visit);
+}
 
-  await repository.save(repository.create(input));
+function saveEvent(repository: Repository<PatrolEventEntity>, patrol: PatrolEntity, point: PatrolPointEntity, tag: NfcTagEntity, pointVisitId: string, scanAction: PatrolScanAction, scannedAt: Date): Promise<PatrolEventEntity> {
+  return repository.save(repository.create({
+    accepted: true, deviceId: 'scenario-seed-device', employeeId: patrol.employeeId,
+    gpsAccuracy: 5, lat: '52.289588', lng: '104.280606', nfcTagId: tag.id,
+    nfcUid: tag.uid, patrolId: patrol.id, patrolPointId: point.id, pointVisitId,
+    scanAction, scannedAt,
+  }));
+}
+
+async function ensureTimingProfile(repository: Repository<RouteTimingProfileEntity>, route: PatrolRouteEntity, durationsMinutes: number[]): Promise<void> {
+  const averageSeconds = Math.round(
+    durationsMinutes.reduce((sum, duration) => sum + duration * 60, 0) / durationsMinutes.length,
+  );
+  const existing = await repository.findOne({ where: { routeId: route.id } });
+  await repository.save(repository.create({
+    averageTotalSeconds: averageSeconds, calculatedFrom: new Date(seedNow.getTime() - 14 * DAY_MS),
+    calculatedTo: seedNow, fastSeconds: Math.round(averageSeconds * 0.7), id: existing?.id,
+    routeId: route.id, sampleCount: durationsMinutes.length, shopId: route.shopId,
+    slowSeconds: Math.round(averageSeconds * 1.3),
+    suspiciousFastSeconds: Math.round(averageSeconds * 0.5),
+  }));
+}
+
+async function ensureIncident(repository: Repository<PatrolIncidentEntity>, patrol: PatrolEntity, type: PatrolIncidentType, message: string, expectedSeconds?: number, actualSeconds?: number): Promise<void> {
+  const existing = await repository.findOne({ where: { patrolId: patrol.id, type } });
+  await repository.save(repository.create({
+    actualSeconds, expectedSeconds, id: existing?.id, message,
+    patrolId: patrol.id, shopId: patrol.shopId, type,
+  }));
+}
+
+async function ensureReports(repositories: Repositories, shopId: string, employeeId: string, patrol: PatrolEntity | undefined, routeId: string, scheduleId: string): Promise<void> {
+  const types: PatrolReportType[] = ['photo_report', 'morning', 'closing', 'sunday', 'heating', 'evacuation'];
+  for (const reportType of types) {
+    const comment = `${SEED_MARKER}:${reportType}`;
+    const existing = await repositories.reports.findOne({ where: { comment } });
+    const status: PatrolReportStatus = reportType === 'evacuation' ? 'draft' : 'submitted';
+    const report = await repositories.reports.save(repositories.reports.create({
+      comment, employeeId, fields: { checklistComplete: true, seed: true }, id: existing?.id,
+      patrolId: patrol?.id, period: reportType === 'closing' ? 'evening' : 'morning',
+      reportType, routeId, scheduleId, shopId, status,
+      submittedAt: status === 'submitted' ? minutesAgo(30) : undefined,
+    }));
+    if (reportType === 'photo_report') await ensureReportPhoto(repositories, report, employeeId);
+  }
+}
+
+async function ensureReportPhoto(repositories: Repositories, report: PatrolReportEntity, uploadedBy: string): Promise<void> {
+  if ((process.env.FILE_STORAGE_BACKEND ?? 'local') !== 'local') return;
+
+  const existing = await repositories.fileAssets.findOne({
+    where: { kind: 'report_photo', ownerId: report.id, ownerType: 'patrol_report' },
+  });
+  const storageKey = `report_photo/seed/${SEED_MARKER}.webp`;
+  const svg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640"><rect width="960" height="640" fill="#dfe9e1"/><rect x="80" y="90" width="800" height="460" rx="18" fill="#ffffff" stroke="#35634a" stroke-width="8"/><path d="M180 430L360 270L490 385L610 235L790 430Z" fill="#78a187"/><circle cx="285" cy="205" r="58" fill="#e8b85d"/><rect x="300" y="476" width="360" height="18" rx="9" fill="#244535"/><rect x="375" y="508" width="210" height="10" rx="5" fill="#8aa095"/></svg>',
+  );
+  const processed = await sharp(svg).webp({ quality: 82 }).toBuffer({ resolveWithObject: true });
+  const root = resolve(process.env.FILE_STORAGE_LOCAL_ROOT ?? './storage');
+  const filePath = resolve(root, storageKey);
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, processed.data);
+
+  const asset = await repositories.fileAssets.save(repositories.fileAssets.create({
+    checksumSha256: createHash('sha256').update(processed.data).digest('hex'),
+    height: processed.info.height,
+    id: existing?.id,
+    kind: 'report_photo',
+    mimeType: 'image/webp',
+    originalName: 'demo-control-photo.webp',
+    ownerId: report.id,
+    ownerType: 'patrol_report',
+    sizeBytes: processed.data.byteLength,
+    storage: 'local',
+    storageKey,
+    uploadedBy,
+    width: processed.info.width,
+  }));
+  const link = await repositories.reportFiles.findOne({ where: { fileId: asset.id, reportId: report.id } });
+  await repositories.reportFiles.save(repositories.reportFiles.create({
+    fileId: asset.id,
+    id: link?.id,
+    kind: 'report_photo',
+    reportId: report.id,
+  }));
+}
+
+function daysAgo(days: number, hourUtc: number): Date {
+  const value = new Date(seedNow.getTime() - days * DAY_MS);
+  value.setUTCHours(hourUtc, 0, 0, 0);
+  return value;
 }
 
 function minutesAgo(minutes: number): Date {
-  return new Date(seedStartedAt - minutes * MINUTE_MS);
+  return new Date(seedNow.getTime() - minutes * MINUTE_MS);
 }
 
 function minutesAhead(minutes: number): Date {
-  return new Date(seedStartedAt + minutes * MINUTE_MS);
-}
-
-function toColumnRows(rows: unknown): Array<{ columnName: string; tableName: string }> {
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  return rows.filter(
-    (row): row is { columnName: string; tableName: string } => {
-      if (typeof row !== 'object' || row === null) {
-        return false;
-      }
-
-      const record = row as Record<string, unknown>;
-
-      return typeof record.columnName === 'string' && typeof record.tableName === 'string';
-    },
-  );
+  return new Date(seedNow.getTime() + minutes * MINUTE_MS);
 }
 
 void run().catch((error: unknown) => {

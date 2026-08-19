@@ -6,16 +6,17 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
-  Unique,
 } from 'typeorm';
+
+import { PatrolScanAction } from '@patrol/shared';
 
 import { NfcTagEntity } from '../../patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../../patrol-points/entities/patrol-point.entity';
 import { UserEntity } from '../../users/entities/user.entity';
+import { PatrolPointVisitEntity } from './patrol-point-visit.entity';
 import { PatrolEntity } from './patrol.entity';
 
 @Entity({ name: 'patrol_events' })
-@Unique('uq_patrol_event_point', ['patrolId', 'patrolPointId'])
 export class PatrolEventEntity {
   @PrimaryGeneratedColumn('uuid')
   // TypeORM assigns generated UUID when entity is loaded or saved.
@@ -36,6 +37,14 @@ export class PatrolEventEntity {
   @ManyToOne(() => PatrolPointEntity, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'patrol_point_id' })
   patrolPoint?: PatrolPointEntity;
+
+  @Index('idx_patrol_events_point_visit_id')
+  @Column({ name: 'point_visit_id', nullable: true, type: 'uuid' })
+  pointVisitId?: string;
+
+  @ManyToOne(() => PatrolPointVisitEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'point_visit_id' })
+  pointVisit?: PatrolPointVisitEntity;
 
   @Column({ name: 'nfc_tag_id', type: 'uuid' })
   nfcTagId: string = '';
@@ -93,6 +102,15 @@ export class PatrolEventEntity {
 
   @Column({ default: false, name: 'late_sync' })
   lateSync: boolean = false;
+
+  @Column({ default: PatrolScanAction.ARRIVE, length: 20, name: 'scan_action' })
+  scanAction: PatrolScanAction = PatrolScanAction.ARRIVE;
+
+  @Column({ default: true })
+  accepted: boolean = true;
+
+  @Column({ length: 100, name: 'rejection_reason', nullable: true })
+  rejectionReason?: string;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date = new Date();

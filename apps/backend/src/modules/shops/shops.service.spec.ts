@@ -1,5 +1,6 @@
 import { RouteStatus } from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { ShopEntity } from './entities/shop.entity';
@@ -73,6 +74,20 @@ describe('ShopsService', () => {
     });
     expect(result.nextSortOrder).toBe(1);
     expect(result.routeStatus).toBe(RouteStatus.SETUP_IN_PROGRESS);
+  });
+
+  it('limits inspector shop list to assigned shops', async () => {
+    shopsRepository.findMany.mockResolvedValue([[createShop()], 1]);
+
+    await service.findAll(
+      { limit: 20, page: 1 },
+      createActor({ role: 'inspector', shopIds: ['shop-id'] }),
+    );
+
+    expect(shopsRepository.findMany).toHaveBeenCalledWith(
+      { limit: 20, page: 1 },
+      ['shop-id'],
+    );
   });
 
   it('rejects NFC binding before route setup is started', async () => {
@@ -153,5 +168,15 @@ function createPoint(sortOrder: number): Awaited<
     shopId: 'shop-id',
     sortOrder,
     updatedAt: new Date(),
+  };
+}
+
+function createActor(overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser {
+  return {
+    fullName: 'Test administrator',
+    id: 'user-id',
+    role: 'admin',
+    username: 'test.admin',
+    ...overrides,
   };
 }

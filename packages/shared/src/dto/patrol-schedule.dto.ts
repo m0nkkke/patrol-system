@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -14,6 +16,8 @@ import {
   Max,
   Min,
 } from 'class-validator';
+
+import { PATROL_PERIODS, PatrolPeriod } from '../enums/patrol-period';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -26,6 +30,23 @@ export class CreatePatrolScheduleDto {
   @IsString()
   @Length(1, 200)
   name: string = '';
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  routeId?: string;
+
+  @ApiProperty({ enum: PATROL_PERIODS, default: 'morning' })
+  @IsIn(PATROL_PERIODS)
+  period: PatrolPeriod = 'morning';
+
+  @ApiPropertyOptional({ default: 0, minimum: 0, maximum: 1440 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  earlyStartMinutes?: number;
 
   @ApiProperty({ example: [1, 2, 3, 4, 5], type: [Number] })
   @IsArray()
@@ -58,6 +79,24 @@ export class UpdatePatrolScheduleDto {
   @Length(1, 200)
   name?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  routeId?: string;
+
+  @ApiPropertyOptional({ enum: PATROL_PERIODS })
+  @IsOptional()
+  @IsIn(PATROL_PERIODS)
+  period?: PatrolPeriod;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 1440 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(1440)
+  earlyStartMinutes?: number;
+
   @ApiPropertyOptional({ example: [1, 2, 3, 4, 5], type: [Number] })
   @IsOptional()
   @IsArray()
@@ -86,10 +125,19 @@ export class UpdatePatrolScheduleDto {
 }
 
 export class StartMobilePatrolDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  shopId: string = '';
+
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
   @IsUUID()
   scheduleId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  routeId?: string;
 }
 
 export class PatrolScheduleDto {
@@ -98,6 +146,15 @@ export class PatrolScheduleDto {
 
   @ApiProperty({ format: 'uuid' })
   shopId: string = '';
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  routeId?: string;
+
+  @ApiProperty({ enum: PATROL_PERIODS })
+  period: PatrolPeriod = 'morning';
+
+  @ApiProperty({ minimum: 0, maximum: 1440 })
+  earlyStartMinutes: number = 0;
 
   @ApiProperty()
   name: string = '';
@@ -133,4 +190,68 @@ export class AvailablePatrolScheduleDto extends PatrolScheduleDto {
 
   @ApiPropertyOptional({ example: 3, minimum: 1, maximum: 7 })
   nextWeekday?: number;
+}
+
+export class MobileSchedulePlanQueryDto {
+  @ApiPropertyOptional({ default: 7, minimum: 1, maximum: 31 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  days: number = 7;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  shopId?: string;
+}
+
+export class MobileSchedulePlanItemDto {
+  @ApiProperty({ format: 'uuid' })
+  scheduleId: string = '';
+
+  @ApiProperty({ format: 'uuid' })
+  shopId: string = '';
+
+  @ApiProperty()
+  shopName: string = '';
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  routeId?: string;
+
+  @ApiProperty()
+  scheduleName: string = '';
+
+  @ApiProperty({ enum: PATROL_PERIODS })
+  period: PatrolPeriod = 'morning';
+
+  @ApiProperty({ format: 'date-time' })
+  plannedStartAt: Date = new Date();
+
+  @ApiProperty({ format: 'date-time' })
+  availableFrom: Date = new Date();
+
+  @ApiProperty({ format: 'date-time' })
+  dueAt: Date = new Date();
+
+  @ApiProperty({ format: 'date-time' })
+  notificationAt: Date = new Date();
+
+  @ApiProperty({ minimum: 1, maximum: 7 })
+  weekday: number = 1;
+
+  @ApiProperty()
+  timezone: string = 'Europe/Moscow';
+}
+
+export class MobileSchedulePlanDto {
+  @ApiProperty({ type: [MobileSchedulePlanItemDto] })
+  items: MobileSchedulePlanItemDto[] = [];
+
+  @ApiProperty({ minimum: 1, maximum: 31 })
+  days: number = 7;
+
+  @ApiProperty({ format: 'date-time' })
+  generatedAt: Date = new Date();
 }

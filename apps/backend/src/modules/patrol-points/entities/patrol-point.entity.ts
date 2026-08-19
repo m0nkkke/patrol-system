@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 
 import { ShopEntity } from '../../shops/entities/shop.entity';
+import { FileAssetEntity } from '../../files/entities/file-asset.entity';
 import { NfcTagEntity } from './nfc-tag.entity';
 
 @Entity({ name: 'patrol_points' })
@@ -40,6 +41,14 @@ export class PatrolPointEntity {
 
   @Column({ nullable: true, type: 'text' })
   description?: string;
+
+  @Index('idx_patrol_points_photo_file_id')
+  @Column({ name: 'photo_file_id', nullable: true, type: 'uuid' })
+  photoFileId?: string | null;
+
+  @ManyToOne(() => FileAssetEntity, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'photo_file_id' })
+  photoFile?: FileAssetEntity | null;
 
   @Column({ default: 0, name: 'sort_order', type: 'smallint' })
   sortOrder: number = 0;

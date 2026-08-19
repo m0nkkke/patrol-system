@@ -44,7 +44,7 @@ export class PatrolsController {
   }
 
   @Get('shop/:shopId')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'inspector')
   @ApiOkResponse({ description: 'Patrols by shop' })
   findByShop(
     @Param('shopId', ParseUUIDPipe) shopId: string,
@@ -55,7 +55,7 @@ export class PatrolsController {
   }
 
   @Get('incidents')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'inspector')
   @ApiOkResponse({ description: 'Patrol incidents list' })
   findIncidents(
     @Query() query: FindPatrolIncidentsDto,
@@ -65,7 +65,7 @@ export class PatrolsController {
   }
 
   @Get('employee/:employeeId')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'inspector')
   @ApiOkResponse({ description: 'Patrol history by employee' })
   findByEmployee(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
@@ -76,7 +76,7 @@ export class PatrolsController {
   }
 
   @Get(':id')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'inspector')
   @ApiOkResponse({ description: 'Patrol details' })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,

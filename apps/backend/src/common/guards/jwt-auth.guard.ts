@@ -37,6 +37,8 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     request.user = {
+      authorizationFullName: payload.authorizationFullName,
+      authorizationId: payload.authorizationId,
       fullName: user.fullName,
       id: user.id,
       role: user.role,
@@ -92,6 +94,16 @@ function isJwtPayload(payload: unknown): payload is JwtPayload {
     typeof payload.sub === 'string' &&
     typeof payload.role === 'string' &&
     typeof payload.sessionVersion === 'number' &&
-    typeof payload.username === 'string'
+    typeof payload.username === 'string' &&
+    (
+      !('authorizationId' in payload) ||
+      payload.authorizationId === undefined ||
+      typeof payload.authorizationId === 'string'
+    ) &&
+    (
+      !('authorizationFullName' in payload) ||
+      payload.authorizationFullName === undefined ||
+      typeof payload.authorizationFullName === 'string'
+    )
   );
 }

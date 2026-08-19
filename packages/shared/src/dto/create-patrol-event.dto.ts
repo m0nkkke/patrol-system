@@ -6,11 +6,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsIn,
   Length,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
+
+import { PATROL_SCAN_ACTIONS, PatrolScanAction } from '../enums/patrol-scan-action';
 
 export class CreatePatrolEventDto {
   @ApiProperty({ format: 'uuid' })
@@ -59,4 +62,13 @@ export class CreatePatrolEventDto {
   @IsString()
   @MaxLength(500)
   suspicionReason?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Two-phase point scan action. New mobile flow sends arrive first, then depart after lockedUntil.',
+    enum: PATROL_SCAN_ACTIONS,
+  })
+  @IsOptional()
+  @IsIn(PATROL_SCAN_ACTIONS)
+  scanAction?: PatrolScanAction;
 }

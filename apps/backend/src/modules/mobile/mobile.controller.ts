@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -17,6 +18,9 @@ import {
   CompletePatrolDto,
   CreatePatrolEventDto,
   DevicePushTokenResponseDto,
+  MobileSchedulePlanDto,
+  MobileSchedulePlanQueryDto,
+  NfcWaitStateDto,
   RegisterDevicePushTokenDto,
   ReportMissedPointAttemptDto,
   StartRouteSetupDto,
@@ -60,7 +64,7 @@ export class MobileController {
 
   @Post('shops/:shopId/route-setup/start')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Mobile route setup started' })
   startRouteSetup(
@@ -71,7 +75,7 @@ export class MobileController {
   }
 
   @Get('shops/:shopId/route-setup')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Mobile route setup state' })
   getRouteSetup(
@@ -82,7 +86,7 @@ export class MobileController {
 
   @Post('shops/:shopId/route-setup/scan')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'NFC UID bound to next route point' })
   scanNextRoutePoint(
@@ -94,7 +98,7 @@ export class MobileController {
 
   @Post('shops/:shopId/route-setup/reset')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Mobile route setup cancelled and reset' })
   resetRouteSetup(
@@ -103,8 +107,57 @@ export class MobileController {
     return this.mobileService.resetRouteSetup(shopId);
   }
 
+  @Get('shops')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Current security guard assigned shops' })
+  getAssignedShops(
+    @CurrentUser() user: AuthenticatedUser,
+  ): ReturnType<MobileService['getAssignedShops']> {
+    return this.mobileService.getAssignedShops(user);
+  }
+
+  @Get('schedule-plan')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({
+    description: 'Future patrol schedule plan for local mobile reminders',
+    type: MobileSchedulePlanDto,
+  })
+  getSchedulePlan(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: MobileSchedulePlanQueryDto,
+  ): ReturnType<MobileService['getSchedulePlan']> {
+    return this.mobileService.getSchedulePlan(user, query);
+  }
+
+  @Get('shops/:shopId/route')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({ description: 'Selected shop route for current security guard' })
+  getShopRoute(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ): ReturnType<MobileService['getRouteForShop']> {
+    return this.mobileService.getRouteForShop(user, shopId);
+  }
+
+  @Get('shops/:shopId/patrol-schedules/available')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({
+    description: 'Active patrol schedules for selected assigned shop',
+    type: [AvailablePatrolScheduleDto],
+  })
+  getShopAvailablePatrolSchedules(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+  ): ReturnType<MobileService['getAvailablePatrolSchedulesForShop']> {
+    return this.mobileService.getAvailablePatrolSchedulesForShop(user, shopId);
+  }
+
   @Get('route')
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Current employee shop route' })
   getRoute(@CurrentUser() user: AuthenticatedUser): ReturnType<MobileService['getRoute']> {
@@ -112,7 +165,7 @@ export class MobileController {
   }
 
   @Get('patrols/active')
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Current employee active patrol' })
   getActivePatrol(
@@ -121,8 +174,35 @@ export class MobileController {
     return this.mobileService.getActivePatrol(user);
   }
 
+  @Get('patrols/active/nfc-wait-state')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({
+    description: 'Current active patrol NFC waiting state for automatic scanning UI',
+    type: NfcWaitStateDto,
+  })
+  getActivePatrolNfcWaitState(
+    @CurrentUser() user: AuthenticatedUser,
+  ): ReturnType<MobileService['getActivePatrolNfcWaitState']> {
+    return this.mobileService.getActivePatrolNfcWaitState(user);
+  }
+
+  @Get('patrols/:id/nfc-wait-state')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiOkResponse({
+    description: 'Selected patrol NFC waiting state for automatic scanning UI',
+    type: NfcWaitStateDto,
+  })
+  getPatrolNfcWaitState(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): ReturnType<MobileService['getPatrolNfcWaitState']> {
+    return this.mobileService.getPatrolNfcWaitState(user, id);
+  }
+
   @Get('patrol-schedules/available')
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({
     description: 'Active patrol schedules for the employee shop with current availability flag',
@@ -135,7 +215,7 @@ export class MobileController {
   }
 
   @Post('patrols/start')
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiCreatedResponse({ description: 'Mobile patrol started' })
   startPatrol(
@@ -146,7 +226,7 @@ export class MobileController {
   }
 
   @Post('patrols/:id/events')
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiCreatedResponse({ description: 'Mobile patrol NFC event recorded' })
   recordPatrolEvent(
@@ -158,9 +238,22 @@ export class MobileController {
     return this.mobileService.recordPatrolEvent(user, id, dto, ipAddress);
   }
 
+  @Post('patrols/:id/point-visits/scan')
+  @Roles('security_guard')
+  @UseGuards(RolesGuard)
+  @ApiCreatedResponse({ description: 'Mobile patrol point visit scan recorded' })
+  recordPatrolPointVisitScan(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePatrolEventDto,
+    @Ip() ipAddress: string,
+  ): ReturnType<MobileService['recordPatrolEvent']> {
+    return this.mobileService.recordPatrolEvent(user, id, dto, ipAddress);
+  }
+
   @Post('patrols/:id/complete')
   @HttpCode(200)
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Mobile patrol completed with employee report' })
   completePatrol(
@@ -173,7 +266,7 @@ export class MobileController {
 
   @Post('patrols/:id/cancel')
   @HttpCode(200)
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Mobile patrol cancelled' })
   cancelPatrol(
@@ -186,7 +279,7 @@ export class MobileController {
 
   @Post('patrols/:id/missed-point-attempts')
   @HttpCode(204)
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({ description: 'Mobile missed route point attempt reported' })
   reportMissedPointAttempt(
@@ -199,7 +292,7 @@ export class MobileController {
 
   @Post('patrols/:id/events/sync')
   @HttpCode(200)
-  @Roles('employee')
+  @Roles('security_guard')
   @UseGuards(RolesGuard)
   @ApiOkResponse({
     description: 'Offline patrol NFC events synchronized',

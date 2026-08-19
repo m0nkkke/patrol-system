@@ -22,6 +22,8 @@ import {
 
 import { ShopEntity } from './entities/shop.entity';
 import { ShopsService } from './shops.service';
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -41,10 +43,13 @@ export class ShopsController {
   }
 
   @Get()
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Active shops list' })
-  findAll(@Query() query: ListShopsQueryDto): ReturnType<ShopsService['findAll']> {
-    return this.shopsService.findAll(query);
+  findAll(
+    @Query() query: ListShopsQueryDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): ReturnType<ShopsService['findAll']> {
+    return this.shopsService.findAll(query, actor);
   }
 
   @Get(':id')
@@ -65,7 +70,7 @@ export class ShopsController {
 
   @Post(':id/route-setup/start')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Route setup started for shop' })
   startRouteSetup(
     @Param('id', ParseUUIDPipe) id: string,
@@ -75,7 +80,7 @@ export class ShopsController {
   }
 
   @Get(':id/route-setup')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Route setup state for shop' })
   getRouteSetup(@Param('id', ParseUUIDPipe) id: string): ReturnType<ShopsService['getRouteSetup']> {
     return this.shopsService.getRouteSetup(id);
@@ -83,7 +88,7 @@ export class ShopsController {
 
   @Post(':id/route-setup/points/:sortOrder/bind-nfc')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'NFC UID bound to route point' })
   bindRoutePointNfc(
     @Param('id', ParseUUIDPipe) id: string,
@@ -95,7 +100,7 @@ export class ShopsController {
 
   @Post(':id/route-setup/reset')
   @HttpCode(200)
-  @Roles('admin', 'manager')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Route setup cancelled and reset for shop' })
   resetRouteSetup(
     @Param('id', ParseUUIDPipe) id: string,

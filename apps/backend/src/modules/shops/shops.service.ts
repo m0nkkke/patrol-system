@@ -9,6 +9,7 @@ import {
 } from '@patrol/shared';
 
 import { DomainConflictError } from '../../common/errors/domain-conflict.error';
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
@@ -52,8 +53,12 @@ export class ShopsService {
     });
   }
 
-  async findAll(query: ListShopsQueryDto): Promise<PaginatedShops> {
-    const [items, total] = await this.shopsRepository.findMany(query);
+  async findAll(query: ListShopsQueryDto, actor: AuthenticatedUser): Promise<PaginatedShops> {
+    const allowedShopIds =
+      actor.role === 'inspector'
+        ? actor.shopIds ?? (actor.shopId === undefined ? [] : [actor.shopId])
+        : undefined;
+    const [items, total] = await this.shopsRepository.findMany(query, allowedShopIds);
 
     return {
       items,

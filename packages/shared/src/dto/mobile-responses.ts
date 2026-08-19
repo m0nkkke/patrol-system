@@ -1,4 +1,6 @@
 import { PatrolIncidentType } from '../enums/patrol-incident-type';
+import { PatrolPeriod } from '../enums/patrol-period';
+import { PatrolRouteCategory } from '../enums/patrol-route-category';
 import { PatrolStatus } from '../enums/patrol-status';
 import { RouteStatus } from '../enums/route-status';
 import { UserRole } from '../enums/user-role';
@@ -74,11 +76,22 @@ export interface NfcTag {
   isActive: boolean;
 }
 
+export interface FileAsset {
+  id: string;
+  kind: string;
+  mimeType: string;
+  sizeBytes: number;
+  width?: number;
+  height?: number;
+}
+
 export interface RoutePoint {
   id: string;
   shopId: string;
   nfcTagId?: string;
   nfcTag?: NfcTag;
+  photoFileId?: string;
+  photoFile?: FileAsset;
   name: string;
   description?: string;
   sortOrder: number;
@@ -113,6 +126,7 @@ export interface Patrol {
   shopId: string;
   employeeId: string;
   employee?: PatrolEmployee;
+  routeId?: string;
   shop?: PatrolShop;
   status: PatrolStatus;
   startedAt?: string;
@@ -131,11 +145,28 @@ export interface Patrol {
 export interface PatrolSchedule {
   id: string;
   shopId: string;
+  routeId?: string;
+  period: PatrolPeriod;
+  earlyStartMinutes: number;
   name: string;
   weekdays: number[];
   startTime: string;
   endTime: string;
   isActive: boolean;
+}
+
+export interface PatrolRoute {
+  id: string;
+  shopId: string;
+  name: string;
+  category: PatrolRouteCategory;
+  isActive: boolean;
+  points?: Array<{
+    id: string;
+    sortOrder: number;
+    patrolPoint: RoutePoint;
+    patrolPointId: string;
+  }>;
 }
 
 export interface AvailablePatrolSchedule extends PatrolSchedule {

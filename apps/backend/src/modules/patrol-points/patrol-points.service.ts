@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { CreateNfcTagDto, CreatePatrolPointDto, ReplaceNfcTagDto } from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
+import { FilesService, UploadedImageFile } from '../files/files.service';
 import { NfcTagEntity } from './entities/nfc-tag.entity';
 import { NfcTagReplacementEntity } from './entities/nfc-tag-replacement.entity';
 import { PatrolPointEntity } from './entities/patrol-point.entity';
@@ -10,7 +12,10 @@ import { PatrolPointsRepository } from './patrol-points.repository';
 
 @Injectable()
 export class PatrolPointsService {
-  constructor(private readonly patrolPointsRepository: PatrolPointsRepository) {}
+  constructor(
+    private readonly patrolPointsRepository: PatrolPointsRepository,
+    private readonly filesService: FilesService,
+  ) {}
 
   createNfcTag(dto: CreateNfcTagDto): Promise<NfcTagEntity> {
     return this.patrolPointsRepository.createNfcTag({
@@ -57,6 +62,32 @@ export class PatrolPointsService {
     }
 
     return point;
+  }
+
+  async uploadPhoto(
+    pointId: string,
+    file: UploadedImageFile | undefined,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    if (file === undefined) {
+      throw new DomainValidationError('FILE_REQUIRED', 'Photo file is required');
+    }
+
+    const point = await this.findOne(pointId);
+    assertCanManagePointPhoto(actor, point.shopId);
+
+    const asset = await this.filesService.createImageAsset({
+      file,
+      kind: 'patrol_point_photo',
+      ownerId: point.id,
+      ownerType: 'patrol_point',
+      uploadedBy: actor.id,
+    });
+
+    point.photoFileId = asset.id;
+    point.photoFile = asset;
+
+    return this.patrolPointsRepository.savePatrolPoint(point);
   }
 
   countActiveByShop(shopId: string): Promise<number> {
@@ -224,6 +255,23 @@ export class PatrolPointsService {
   resetRouteSetupPoints(shopId: string): Promise<void> {
     return this.patrolPointsRepository.resetRouteSetupPoints(shopId);
   }
+}
+
+function assertCanManagePointPhoto(actor: AuthenticatedUser, shopId: string): void {
+  if (actor.role === 'admin' || actor.role === 'route_setter') {
+    return;
+  }
+
+  if (actor.role !== 'local_route_setter' || !actorHasShop(actor, shopId)) {
+    throw new DomainValidationError(
+      'PATROL_POINT_PHOTO_FORBIDDEN',
+      'User cannot update patrol point photo for this shop',
+    );
+  }
+}
+
+function actorHasShop(actor: AuthenticatedUser, shopId: string): boolean {
+  return actor.shopId === shopId || (actor.shopIds?.includes(shopId) ?? false);
 }
 
 export function normalizeNfcUid(uid: string): string {
