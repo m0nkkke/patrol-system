@@ -75,6 +75,7 @@
 
 - ожидаемую точку (`expectedPatrolPointId`);
 - фактически отсканированную точку (`attemptedPatrolPointId`);
+- UUID локальной записи (`clientLocalId`);
 - UID метки, время скана и `deviceId`.
 
 Backend проверяет:
@@ -85,6 +86,9 @@ Backend проверяет:
 - `attemptedPoint.sortOrder > expectedPoint.sortOrder`.
 
 Если условия выполнены, создается `patrol_incident` с типом `missed_point`, `fromPatrolPointId = expectedPatrolPointId`, `toPatrolPointId = attemptedPatrolPointId`. `patrol_event` не создается, поэтому сотрудник должен вернуться к ожидаемой точке и продолжить маршрут в правильном порядке.
+
+Повторная отправка того же `clientLocalId` в рамках обхода идемпотентна: backend возвращает успех
+без второго инцидента и уведомления. Уникальность обеспечивается ограничением БД.
 
 После создания инцидента вызывается общий `notifyIncidentCreated`, поэтому push получают проверяющие, назначенные на магазин.
 

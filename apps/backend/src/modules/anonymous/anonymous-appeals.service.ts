@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import {
+  AnonymousAppealResponseDto,
   CreateAnonymousAppealDto,
   FindAnonymousAppealsDto,
+  PaginatedAnonymousAppealsResponseDto,
   UpdateAnonymousAppealDto,
 } from '@patrol/shared';
 
@@ -9,15 +11,9 @@ import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { ShopsService } from '../shops/shops.service';
+import { ShopEntity } from '../shops/entities/shop.entity';
 import { AnonymousAppealsRepository } from './anonymous-appeals.repository';
 import { AnonymousAppealEntity } from './entities/anonymous-appeal.entity';
-
-type PaginatedAnonymousAppeals = {
-  items: AnonymousAppealEntity[];
-  limit: number;
-  page: number;
-  total: number;
-};
 
 @Injectable()
 export class AnonymousAppealsService {
@@ -30,7 +26,7 @@ export class AnonymousAppealsService {
     dto: CreateAnonymousAppealDto,
     actor: AuthenticatedUser,
     meta: { deviceId?: string | null; ipAddress?: string | null } = {},
-  ): Promise<AnonymousAppealEntity> {
+  ): Promise<AnonymousAppealResponseDto> {
     if (actor.role !== 'security_guard' || !actorHasShop(actor, dto.shopId)) {
       throw new DomainValidationError(
         'ANONYMOUS_APPEAL_FORBIDDEN',
@@ -38,34 +34,57 @@ export class AnonymousAppealsService {
       );
     }
 
-    await this.shopsService.findOne(dto.shopId);
+    const shop = await this.shopsService.findOne(dto.shopId);
 
-    return this.repository.create({
+    const appeal = await this.repository.create({
       category: dto.category ?? 'message',
       deviceId: meta.deviceId,
       ipAddress: meta.ipAddress,
       message: dto.message.trim(),
       shopId: dto.shopId,
     });
+
+    return toResponseDto(appeal, shop);
   }
 
   async findMany(
     query: FindAnonymousAppealsDto,
     actor: AuthenticatedUser,
-  ): Promise<PaginatedAnonymousAppeals> {
+  ): Promise<PaginatedAnonymousAppealsResponseDto> {
     assertCanInspect(actor);
     const allowedShopIds = actor.role === 'inspector' ? actor.shopIds ?? [] : undefined;
     const [items, total] = await this.repository.findMany(query, allowedShopIds);
 
     return {
-      items,
+      items: items.map((appeal) => toResponseDto(appeal)),
       limit: query.limit,
       page: query.page,
       total,
     };
   }
 
-  async findOne(id: string, actor: AuthenticatedUser): Promise<AnonymousAppealEntity> {
+  async findOne(id: string, actor: AuthenticatedUser): Promise<AnonymousAppealResponseDto> {
+    return toResponseDto(await this.findAccessibleEntity(id, actor));
+  }
+
+  async updateStatus(
+    id: string,
+    dto: UpdateAnonymousAppealDto,
+    actor: AuthenticatedUser,
+  ): Promise<AnonymousAppealResponseDto> {
+    const appeal = await this.findAccessibleEntity(id, actor);
+
+    if (dto.status !== undefined && dto.status !== appeal.status) {
+      await this.repository.updateStatus(id, dto.status);
+    }
+
+    return this.findOne(id, actor);
+  }
+
+  private async findAccessibleEntity(
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<AnonymousAppealEntity> {
     assertCanInspect(actor);
     const appeal = await this.repository.findById(id);
 
@@ -82,20 +101,28 @@ export class AnonymousAppealsService {
 
     return appeal;
   }
+}
 
-  async updateStatus(
-    id: string,
-    dto: UpdateAnonymousAppealDto,
-    actor: AuthenticatedUser,
-  ): Promise<AnonymousAppealEntity> {
-    const appeal = await this.findOne(id, actor);
+function toResponseDto(
+  appeal: AnonymousAppealEntity,
+  explicitShop?: ShopEntity,
+): AnonymousAppealResponseDto {
+  const shop = explicitShop ?? appeal.shop;
 
-    if (dto.status !== undefined && dto.status !== appeal.status) {
-      await this.repository.updateStatus(id, dto.status);
-    }
-
-    return this.findOne(id, actor);
-  }
+  return {
+    category: appeal.category,
+    createdAt: appeal.createdAt.toISOString(),
+    id: appeal.id,
+    message: appeal.message,
+    shop: {
+      address: shop?.address ?? null,
+      id: appeal.shopId,
+      name: shop?.name ?? '',
+    },
+    shopId: appeal.shopId,
+    status: appeal.status,
+    updatedAt: appeal.updatedAt.toISOString(),
+  };
 }
 
 function assertCanInspect(actor: AuthenticatedUser): void {

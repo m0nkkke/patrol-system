@@ -40,6 +40,9 @@ export class PatrolIncidentEntity {
   @Column({ name: 'patrol_event_id', nullable: true, type: 'uuid' })
   patrolEventId?: string;
 
+  @Column({ name: 'client_local_id', nullable: true, type: 'uuid' })
+  clientLocalId?: string;
+
   @ManyToOne(() => PatrolEventEntity, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'patrol_event_id' })
   patrolEvent?: PatrolEventEntity;

@@ -14,8 +14,10 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
+  AnonymousAppealResponseDto,
   CreateAnonymousAppealDto,
   FindAnonymousAppealsDto,
+  PaginatedAnonymousAppealsResponseDto,
   UpdateAnonymousAppealDto,
 } from '@patrol/shared';
 
@@ -25,7 +27,6 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AnonymousAppealsService } from './anonymous-appeals.service';
-import { AnonymousAppealEntity } from './entities/anonymous-appeal.entity';
 
 @ApiBearerAuth()
 @ApiTags('anonymous')
@@ -37,13 +38,13 @@ export class AnonymousAppealsController {
   @Post('mobile/anonymous')
   @HttpCode(201)
   @Roles('security_guard')
-  @ApiCreatedResponse({ description: 'Anonymous appeal submitted' })
+  @ApiCreatedResponse({ description: 'Anonymous appeal submitted', type: AnonymousAppealResponseDto })
   createMobileAnonymousAppeal(
     @Body() dto: CreateAnonymousAppealDto,
     @CurrentUser() actor: AuthenticatedUser,
     @Headers('x-device-id') deviceId: string | undefined,
     @Ip() ipAddress: string,
-  ): Promise<AnonymousAppealEntity> {
+  ): Promise<AnonymousAppealResponseDto> {
     return this.anonymousAppealsService.create(dto, actor, {
       deviceId,
       ipAddress,
@@ -52,7 +53,7 @@ export class AnonymousAppealsController {
 
   @Get('anonymous')
   @Roles('admin', 'inspector')
-  @ApiOkResponse({ description: 'Anonymous appeals list' })
+  @ApiOkResponse({ description: 'Anonymous appeals list', type: PaginatedAnonymousAppealsResponseDto })
   findMany(
     @Query() query: FindAnonymousAppealsDto,
     @CurrentUser() actor: AuthenticatedUser,
@@ -62,22 +63,22 @@ export class AnonymousAppealsController {
 
   @Get('anonymous/:id')
   @Roles('admin', 'inspector')
-  @ApiOkResponse({ description: 'Anonymous appeal details' })
+  @ApiOkResponse({ description: 'Anonymous appeal details', type: AnonymousAppealResponseDto })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<AnonymousAppealEntity> {
+  ): Promise<AnonymousAppealResponseDto> {
     return this.anonymousAppealsService.findOne(id, actor);
   }
 
   @Patch('anonymous/:id')
   @Roles('admin', 'inspector')
-  @ApiOkResponse({ description: 'Anonymous appeal status updated' })
+  @ApiOkResponse({ description: 'Anonymous appeal status updated', type: AnonymousAppealResponseDto })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateAnonymousAppealDto,
     @CurrentUser() actor: AuthenticatedUser,
-  ): Promise<AnonymousAppealEntity> {
+  ): Promise<AnonymousAppealResponseDto> {
     return this.anonymousAppealsService.updateStatus(id, dto, actor);
   }
 }

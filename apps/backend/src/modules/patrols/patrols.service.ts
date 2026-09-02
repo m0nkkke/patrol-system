@@ -334,6 +334,7 @@ export class PatrolsService {
               : 'inactive',
       patrolId: patrol.id,
       pointVisitStatus,
+      pointDwellSeconds: DEFAULT_POINT_DWELL_SECONDS,
       remainingLockSeconds,
       requiresForegroundNfcListening: true,
       routeId: patrol.routeId,
@@ -605,6 +606,14 @@ export class PatrolsService {
     patrolId: string,
     dto: ReportMissedPointAttemptDto,
   ): Promise<void> {
+    const existingIncident = await this.patrolsRepository.findIncidentByClientLocalId(
+      patrolId,
+      dto.clientLocalId,
+    );
+    if (existingIncident !== null) {
+      return;
+    }
+
     const patrol = await this.findOne(patrolId);
 
     if (patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
@@ -628,14 +637,23 @@ export class PatrolsService {
       return;
     }
 
-    const incident = await this.patrolsRepository.createPatrolIncident({
-      fromPatrolPointId: expectedPoint.id,
-      message: `Попытка пропуска точки: сотрудник сканировал точку ${attemptedPoint.sortOrder} вместо ${expectedPoint.sortOrder}`,
-      patrolId: patrol.id,
-      shopId: patrol.shopId,
-      toPatrolPointId: attemptedPoint.id,
-      type: PatrolIncidentType.MISSED_POINT,
-    });
+    let incident: PatrolIncidentEntity;
+    try {
+      incident = await this.patrolsRepository.createPatrolIncident({
+        clientLocalId: dto.clientLocalId,
+        fromPatrolPointId: expectedPoint.id,
+        message: `Попытка пропуска точки: сотрудник сканировал точку ${attemptedPoint.sortOrder} вместо ${expectedPoint.sortOrder}`,
+        patrolId: patrol.id,
+        shopId: patrol.shopId,
+        toPatrolPointId: attemptedPoint.id,
+        type: PatrolIncidentType.MISSED_POINT,
+      });
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        return;
+      }
+      throw error;
+    }
 
     await this.notifyIncidentCreated(patrol, incident);
   }
@@ -830,6 +848,15 @@ export class PatrolsService {
     });
     await this.notifyIncidentCreated(patrol, incident);
   }
+}
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
 }
 
 function assertCanAccessPatrolShop(actor: AuthenticatedUser, shopId: string): void {

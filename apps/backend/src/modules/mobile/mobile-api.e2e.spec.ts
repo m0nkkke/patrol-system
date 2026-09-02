@@ -5,6 +5,7 @@ import { sign } from 'jsonwebtoken';
 import request = require('supertest');
 
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { DomainValidationError } from '../../common/errors/domain-validation.error';
 import { GlobalExceptionFilter } from '../../common/filters/global-exception.filter';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -28,6 +29,7 @@ type MobileServiceMock = Pick<
   | 'getRouteForShop'
   | 'getAvailablePatrolSchedulesForShop'
   | 'recordPatrolEvent'
+  | 'reportMissedPointAttempt'
   | 'registerDevicePushToken'
   | 'scanNextRoutePoint'
   | 'startPatrol'
@@ -62,6 +64,7 @@ describe('Mobile API contract', () => {
       getRoute: jest.fn(),
       getRouteForShop: jest.fn(),
       recordPatrolEvent: jest.fn(),
+      reportMissedPointAttempt: jest.fn(),
       registerDevicePushToken: jest.fn(),
       scanNextRoutePoint: jest.fn(),
       startPatrol: jest.fn(),
@@ -142,6 +145,62 @@ describe('Mobile API contract', () => {
         expect(body.accessToken).toBe(accessToken);
         expect(body.refreshToken).toBe(refreshToken);
       });
+  });
+
+  it('returns actor full name challenge for a universal route setter key', async () => {
+    authService.login.mockRejectedValue(
+      new DomainValidationError('AUTH_ACTOR_FULL_NAME_REQUIRED', 'Actor full name is required'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        accessKey: 'RSET-TEST-0001',
+        deviceId: 'android-device-01',
+      })
+      .expect(400)
+      .expect((response) => {
+        const body = response.body as { code?: string; message?: string; statusCode?: number };
+
+        expect(body).toMatchObject({
+          code: 'AUTH_ACTOR_FULL_NAME_REQUIRED',
+          message: 'Actor full name is required',
+          statusCode: 400,
+        });
+      });
+  });
+
+  it('requires clientLocalId and accepts a valid missed point attempt', async () => {
+    const accessToken = issueAccessToken(employeeUser);
+    usersService.findEntityById.mockResolvedValue(createUserEntity(employeeUser));
+    mobileService.reportMissedPointAttempt.mockResolvedValue();
+    const endpoint =
+      '/api/v1/mobile/patrols/33333333-3333-4333-8333-333333333333/missed-point-attempts';
+    const payload = {
+      attemptedPatrolPointId: '22222222-2222-4222-8222-222222222222',
+      deviceId: 'android-device-01',
+      expectedPatrolPointId: '11111111-1111-4111-8111-111111111111',
+      nfcUid: '04a1b2c3d4e5f6',
+      scannedAt: '2026-06-19T10:00:00.000Z',
+    };
+
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(payload)
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ ...payload, clientLocalId: '44444444-4444-4444-8444-444444444444' })
+      .expect(204);
+
+    expect(mobileService.reportMissedPointAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ id: employeeUser.id, role: 'security_guard' }),
+      '33333333-3333-4333-8333-333333333333',
+      expect.objectContaining({ clientLocalId: '44444444-4444-4444-8444-444444444444' }),
+    );
   });
 
   it('allows employee to read route, start patrol and sync offline events', async () => {

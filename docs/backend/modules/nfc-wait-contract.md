@@ -35,6 +35,7 @@ Authorization: Bearer <accessToken>
   "totalPoints": 3,
   "canAcceptNfc": true,
   "requiresForegroundNfcListening": true,
+  "pointDwellSeconds": 90,
   "expectedScanAction": "arrive",
   "pointVisitStatus": "pending",
   "lockedUntil": null,
@@ -78,7 +79,9 @@ Authorization: Bearer <accessToken>
 - `scanAction` должен быть равен `expectedScanAction`.
 - Если `expectedScanAction = depart`, mobile должен отправлять ту же точку и ту же NFC-метку, что были использованы при `arrive`.
 - После успешной отправки NFC-события mobile снова запрашивает wait state.
-- Если пользователь пытается приложить метку другой точки, mobile должен вызвать `POST /api/v1/mobile/patrols/:id/missed-point-attempts` и не считать точку пройденной локально.
+- `pointDwellSeconds` задает минимальное время между `arrive` и `depart`; mobile не должен прошивать это значение локальной константой.
+- Если пользователь пытается приложить метку другой точки, mobile должен сохранить попытку с UUID `clientLocalId`, вызвать `POST /api/v1/mobile/patrols/:id/missed-point-attempts` и не считать точку пройденной локально.
+- Повторная отправка попытки с тем же `clientLocalId` безопасна и не создает второй инцидент.
 - Для offline sync mobile сохраняет локальные NFC-события с `localId` и затем отправляет их через `POST /api/v1/mobile/patrols/:id/events/sync`.
 
 ## Backend Behavior

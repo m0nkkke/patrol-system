@@ -73,6 +73,7 @@ Content-Type: application/json
 
 ```json
 {
+  "clientLocalId": "33333333-3333-4333-8333-333333333333",
   "expectedPatrolPointId": "11111111-1111-4111-8111-111111111111",
   "attemptedPatrolPointId": "22222222-2222-4222-8222-222222222222",
   "nfcUid": "04a1b2c3d4e5f6",
@@ -81,7 +82,9 @@ Content-Type: application/json
 }
 ```
 
-Ответ: `204 No Content`.
+Ответ: `204 No Content`. `clientLocalId` обязателен и должен оставаться неизменным при повторной
+отправке. Дубль в рамках того же обхода также возвращает `204`, не создавая второй инцидент и
+повторное push-уведомление.
 
 Backend проверяет, что обход принадлежит текущему сотруднику, находится в `in_progress` или `overdue`, а обе точки принадлежат магазину обхода. Если `attemptedPatrolPoint.sortOrder > expectedPatrolPoint.sortOrder`, создается инцидент `missed_point` без создания `patrol_event`.
 

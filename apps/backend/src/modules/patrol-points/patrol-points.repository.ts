@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { NfcTagEntity } from './entities/nfc-tag.entity';
 import { NfcTagReplacementEntity } from './entities/nfc-tag-replacement.entity';
 import { PatrolPointEntity } from './entities/patrol-point.entity';
+import { PatrolRoutePointEntity } from '../patrols/entities/patrol-route-point.entity';
 
 type CreateNfcTagRecord = {
   isActive: boolean;
@@ -73,6 +74,19 @@ export class PatrolPointsRepository {
     });
   }
 
+  findArchivedByShop(shopId: string): Promise<PatrolPointEntity[]> {
+    return this.patrolPoints
+      .createQueryBuilder('point')
+      .withDeleted()
+      .leftJoinAndSelect('point.nfcTag', 'nfcTag')
+      .leftJoinAndSelect('point.photoFile', 'photoFile')
+      .where('point.shop_id = :shopId', { shopId })
+      .andWhere('point.deleted_at IS NOT NULL')
+      .orderBy('point.sort_order', 'ASC')
+      .addOrderBy('point.created_at', 'ASC')
+      .getMany();
+  }
+
   findRouteSetupPointsByShop(shopId: string): Promise<PatrolPointEntity[]> {
     return this.patrolPoints.find({
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
@@ -90,8 +104,12 @@ export class PatrolPointsRepository {
     return this.nfcTags.findOne({ where: { uid } });
   }
 
-  findPatrolPointById(id: string): Promise<PatrolPointEntity | null> {
-    return this.patrolPoints.findOne({ relations: { nfcTag: true, photoFile: true }, where: { id } });
+  findPatrolPointById(id: string, withDeleted = false): Promise<PatrolPointEntity | null> {
+    return this.patrolPoints.findOne({
+      relations: { nfcTag: true, photoFile: true },
+      where: { id },
+      withDeleted,
+    });
   }
 
   findPatrolPointByNfcTagId(nfcTagId: string): Promise<PatrolPointEntity | null> {
@@ -113,6 +131,36 @@ export class PatrolPointsRepository {
 
   countActiveByShop(shopId: string): Promise<number> {
     return this.patrolPoints.count({ where: { isActive: true, shopId } });
+  }
+
+  countActiveRoutesByPointId(patrolPointId: string): Promise<number> {
+    return this.patrolPoints.manager
+      .getRepository(PatrolRoutePointEntity)
+      .createQueryBuilder('routePoint')
+      .innerJoin('routePoint.route', 'route')
+      .where('routePoint.patrol_point_id = :patrolPointId', { patrolPointId })
+      .andWhere('route.is_active = TRUE')
+      .andWhere('route.deleted_at IS NULL')
+      .getCount();
+  }
+
+  async archivePatrolPoint(id: string): Promise<void> {
+    await this.patrolPoints.manager.transaction(async (manager) => {
+      const points = manager.getRepository(PatrolPointEntity);
+      await points.update(id, { isActive: false });
+      await points.softDelete(id);
+    });
+  }
+
+  async restorePatrolPoint(id: string, unbindNfcTag = false): Promise<void> {
+    await this.patrolPoints.manager.transaction(async (manager) => {
+      const points = manager.getRepository(PatrolPointEntity);
+      if (unbindNfcTag) {
+        await points.update(id, { nfcTagId: null });
+      }
+      await points.restore(id);
+      await points.update(id, { isActive: true });
+    });
   }
 
   countRegisteredRoutePoints(shopId: string, expectedPoints: number): Promise<number> {

@@ -39,19 +39,30 @@ export class AuthService {
 
     const user = await this.usersService.findByAccessKey(dto.accessKey);
 
-    if (user === null || !user.isActive || user.isUniversalRouteSetter) {
+    if (user !== null && user.isActive && user.isUniversalRouteSetter) {
+      await this.recordAuthAuditSafely('auth.universal_route_setter.login.challenge', {
+        deviceId: dto.deviceId,
+        ipAddress,
+        meta: {
+          accessKeyFingerprint: fingerprint(dto.accessKey),
+          reason: 'actor_full_name_required',
+        },
+        userId: user.id,
+      });
+      throw new DomainValidationError(
+        'AUTH_ACTOR_FULL_NAME_REQUIRED',
+        'Actor full name is required',
+      );
+    }
+
+    if (user === null || !user.isActive) {
       await this.refreshTokenStore.recordFailedLogin(ipAddress, dto.deviceId);
       await this.recordAuthAuditSafely('auth.login.failure', {
         deviceId: dto.deviceId,
         ipAddress,
         meta: {
           accessKeyFingerprint: fingerprint(dto.accessKey),
-          reason:
-            user === null
-              ? 'invalid_access_key'
-              : !user.isActive
-                ? 'inactive_user'
-                : 'universal_route_setter_requires_actor',
+          reason: user === null ? 'invalid_access_key' : 'inactive_user',
         },
         userId: user?.id ?? null,
       });

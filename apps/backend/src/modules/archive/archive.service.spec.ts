@@ -1,8 +1,10 @@
 import { Repository } from 'typeorm';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { ArchiveService } from './archive.service';
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { PatrolRouteEntity } from '../patrols/entities/patrol-route.entity';
+import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 
 type RepositoryMock = Pick<
   Repository<any>,
@@ -17,6 +19,7 @@ describe('ArchiveService', () => {
   let shops: jest.Mocked<RepositoryMock>;
   let users: jest.Mocked<RepositoryMock>;
   let service: ArchiveService;
+  let patrolPointsService: jest.Mocked<Pick<PatrolPointsService, 'archive' | 'restore'>>;
 
   beforeEach(() => {
     fileAssets = createRepositoryMock();
@@ -25,6 +28,10 @@ describe('ArchiveService', () => {
     patrolRoutes = createRepositoryMock();
     shops = createRepositoryMock();
     users = createRepositoryMock();
+    patrolPointsService = {
+      archive: jest.fn(),
+      restore: jest.fn(),
+    };
     service = new ArchiveService(
       fileAssets as unknown as Repository<any>,
       nfcTags as unknown as Repository<any>,
@@ -32,6 +39,7 @@ describe('ArchiveService', () => {
       patrolRoutes as unknown as Repository<any>,
       shops as unknown as Repository<any>,
       users as unknown as Repository<any>,
+      patrolPointsService as unknown as PatrolPointsService,
     );
   });
 
@@ -67,7 +75,7 @@ describe('ArchiveService', () => {
     });
     shops.findOne.mockResolvedValueOnce(activeShop).mockResolvedValueOnce(archivedShop);
 
-    await expect(service.archive('shops', 'shop-id')).resolves.toMatchObject({
+    await expect(service.archive('shops', 'shop-id', createAdminActor())).resolves.toMatchObject({
       archiveReason: 'soft_deleted',
       displayName: 'Archived shop',
       resourceType: 'shops',
@@ -77,7 +85,7 @@ describe('ArchiveService', () => {
 
     shops.findOne.mockResolvedValueOnce(archivedShop).mockResolvedValueOnce(activeShop);
 
-    await expect(service.restore('shops', 'shop-id')).resolves.toMatchObject({
+    await expect(service.restore('shops', 'shop-id', createAdminActor())).resolves.toMatchObject({
       archiveReason: null,
       archived: false,
       displayName: 'Archived shop',
@@ -92,7 +100,9 @@ describe('ArchiveService', () => {
     const restoredRoute = createRoute(true);
     patrolRoutes.findOne.mockResolvedValueOnce(archivedRoute).mockResolvedValueOnce(restoredRoute);
 
-    await expect(service.restore('patrol-routes', 'route-id')).resolves.toMatchObject({
+    await expect(
+      service.restore('patrol-routes', 'route-id', createAdminActor()),
+    ).resolves.toMatchObject({
       archiveReason: null,
       archived: false,
       displayName: 'Internal route',
@@ -101,7 +111,39 @@ describe('ArchiveService', () => {
     expect(patrolRoutes.restore).not.toHaveBeenCalled();
     expect(patrolRoutes.update).toHaveBeenCalledWith('route-id', { isActive: true });
   });
+
+  it('delegates patrol point archive to patrol point business rules', async () => {
+    const archivedPoint = {
+      createdAt: new Date(),
+      deletedAt: new Date(),
+      id: 'point-id',
+      isActive: false,
+      name: 'Archived point',
+      shopId: 'shop-id',
+      sortOrder: 1,
+      updatedAt: new Date(),
+    };
+    const actor = createAdminActor();
+    patrolPointsService.archive.mockResolvedValue(archivedPoint);
+
+    await expect(service.archive('patrol-points', 'point-id', actor)).resolves.toMatchObject({
+      archived: true,
+      displayName: 'Archived point',
+      resourceType: 'patrol-points',
+    });
+    expect(patrolPointsService.archive).toHaveBeenCalledWith('point-id', actor);
+    expect(patrolPoints.softDelete).not.toHaveBeenCalled();
+  });
 });
+
+function createAdminActor(): AuthenticatedUser {
+  return {
+    fullName: 'Admin',
+    id: 'admin-id',
+    role: 'admin' as const,
+    username: 'admin',
+  };
+}
 
 function createRepositoryMock(): jest.Mocked<RepositoryMock> {
   return {

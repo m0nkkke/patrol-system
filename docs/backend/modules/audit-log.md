@@ -33,6 +33,7 @@ Auth-сценарии пишутся точечно внутри `AuthService`:
 - `auth.login.failure`;
 - `auth.login.rate_limited`;
 - `auth.universal_route_setter.login.success`;
+- `auth.universal_route_setter.login.challenge`;
 - `auth.universal_route_setter.login.failure`;
 - `auth.universal_route_setter.login.rate_limited`;
 - `auth.refresh.success`;

@@ -4,6 +4,10 @@ import { IsISO8601, IsString, IsUUID, MaxLength, MinLength } from 'class-validat
 export class ReportMissedPointAttemptDto {
   @ApiProperty({ format: 'uuid' })
   @IsUUID()
+  clientLocalId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
   expectedPatrolPointId!: string;
 
   @ApiProperty({ format: 'uuid' })

@@ -34,6 +34,7 @@ type PatrolsRepositoryMock = Pick<
   | 'findAcceptedEventByPatrolPointAndAction'
   | 'findEventByClientLocalId'
   | 'findExistingScheduledPatrol'
+  | 'findIncidentByClientLocalId'
   | 'findIncidents'
   | 'findNextExpectedPoint'
   | 'findPointVisitByPatrolAndPoint'
@@ -106,6 +107,7 @@ describe('PatrolsService', () => {
       findEventsByPatrolOrdered: jest.fn(),
       findEventByClientLocalId: jest.fn(),
       findExistingScheduledPatrol: jest.fn(),
+      findIncidentByClientLocalId: jest.fn(),
       findIncidents: jest.fn(),
       findNextExpectedPoint: jest.fn(),
       findPointVisitByPatrolAndPoint: jest.fn(),
@@ -139,6 +141,7 @@ describe('PatrolsService', () => {
       patrolRoutesService as unknown as PatrolRoutesService,
     );
     patrolsRepository.findEventByClientLocalId.mockResolvedValue(null);
+    patrolsRepository.findIncidentByClientLocalId.mockResolvedValue(null);
     patrolsRepository.findAcceptedEventByPatrolPointAndAction.mockResolvedValue(null);
     patrolsRepository.findPointVisitByPatrolAndPoint.mockResolvedValue(null);
     patrolsRepository.recalculateRouteTimingProfile.mockResolvedValue(null);
@@ -303,6 +306,7 @@ describe('PatrolsService', () => {
       },
       mode: 'waiting_for_nfc',
       patrolId: patrol.id,
+      pointDwellSeconds: 90,
       routeId: 'route-id',
       scanContract: {
         endpoint: `/api/v1/mobile/patrols/${patrol.id}/point-visits/scan`,
@@ -615,6 +619,79 @@ describe('PatrolsService', () => {
     });
 
     expect(patrolsRepository.updateScanProgress).toHaveBeenCalledWith(patrol.id, 2, 'overdue');
+  });
+
+  it('creates an idempotent missed point attempt incident', async () => {
+    const patrol = createPatrol();
+    patrolsRepository.findById.mockResolvedValue(patrol);
+    patrolPointsService.findOne
+      .mockResolvedValueOnce(createPatrolPoint({ id: 'point-1', sortOrder: 1 }))
+      .mockResolvedValueOnce(createPatrolPoint({ id: 'point-2', sortOrder: 2 }));
+
+    await service.recordMissedPointAttempt(patrol.id, {
+      attemptedPatrolPointId: 'point-2',
+      clientLocalId: '11111111-1111-4111-8111-111111111111',
+      deviceId: 'device-1',
+      expectedPatrolPointId: 'point-1',
+      nfcUid: '04tag2',
+      scannedAt: '2026-06-19T10:05:00.000Z',
+    });
+
+    expect(patrolsRepository.createPatrolIncident).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientLocalId: '11111111-1111-4111-8111-111111111111',
+        fromPatrolPointId: 'point-1',
+        patrolId: patrol.id,
+        toPatrolPointId: 'point-2',
+        type: PatrolIncidentType.MISSED_POINT,
+      }),
+    );
+    expect(notificationsService.notifyPatrolIncident).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts a duplicate missed point attempt without creating or notifying again', async () => {
+    const existingIncident = createIncident({
+      clientLocalId: '11111111-1111-4111-8111-111111111111',
+      patrolId: 'patrol-id',
+    });
+    patrolsRepository.findIncidentByClientLocalId.mockResolvedValue(existingIncident);
+
+    await expect(
+      service.recordMissedPointAttempt('patrol-id', {
+        attemptedPatrolPointId: 'point-2',
+        clientLocalId: '11111111-1111-4111-8111-111111111111',
+        deviceId: 'device-1',
+        expectedPatrolPointId: 'point-1',
+        nfcUid: '04tag2',
+        scannedAt: '2026-06-19T10:05:00.000Z',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(patrolsRepository.findById).not.toHaveBeenCalled();
+    expect(patrolsRepository.createPatrolIncident).not.toHaveBeenCalled();
+    expect(notificationsService.notifyPatrolIncident).not.toHaveBeenCalled();
+  });
+
+  it('accepts a concurrent duplicate missed point attempt without notifying', async () => {
+    const patrol = createPatrol();
+    patrolsRepository.findById.mockResolvedValue(patrol);
+    patrolPointsService.findOne
+      .mockResolvedValueOnce(createPatrolPoint({ id: 'point-1', sortOrder: 1 }))
+      .mockResolvedValueOnce(createPatrolPoint({ id: 'point-2', sortOrder: 2 }));
+    patrolsRepository.createPatrolIncident.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      service.recordMissedPointAttempt(patrol.id, {
+        attemptedPatrolPointId: 'point-2',
+        clientLocalId: '11111111-1111-4111-8111-111111111111',
+        deviceId: 'device-1',
+        expectedPatrolPointId: 'point-1',
+        nfcUid: '04tag2',
+        scannedAt: '2026-06-19T10:05:00.000Z',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(notificationsService.notifyPatrolIncident).not.toHaveBeenCalled();
   });
 
   it('creates route timing incident after completed patrol exceeds route profile', async () => {

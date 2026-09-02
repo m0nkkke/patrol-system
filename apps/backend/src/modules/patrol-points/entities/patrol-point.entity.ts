@@ -40,7 +40,7 @@ export class PatrolPointEntity {
   name: string = '';
 
   @Column({ nullable: true, type: 'text' })
-  description?: string;
+  description?: string | null;
 
   @Index('idx_patrol_points_photo_file_id')
   @Column({ name: 'photo_file_id', nullable: true, type: 'uuid' })

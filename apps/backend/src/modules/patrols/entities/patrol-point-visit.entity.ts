@@ -57,14 +57,14 @@ export class PatrolPointVisitEntity {
 
   @OneToOne(() => PatrolEventEntity, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'arrival_event_id' })
-  arrivalEvent?: PatrolEventEntity;
+  arrivalEvent?: PatrolEventEntity | null;
 
   @Column({ name: 'departure_event_id', nullable: true, type: 'uuid' })
   departureEventId?: string;
 
   @OneToOne(() => PatrolEventEntity, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'departure_event_id' })
-  departureEvent?: PatrolEventEntity;
+  departureEvent?: PatrolEventEntity | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date = new Date();

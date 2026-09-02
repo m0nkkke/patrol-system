@@ -12,6 +12,57 @@ export type AnonymousAppealStatus = (typeof ANONYMOUS_APPEAL_STATUSES)[number];
 
 const ANONYMOUS_APPEAL_SORT_FIELDS = ['createdAt:desc', 'createdAt:asc'] as const;
 
+export class AnonymousAppealShopDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string = '';
+
+  @ApiProperty()
+  name: string = '';
+
+  @ApiPropertyOptional({ nullable: true })
+  address: string | null = null;
+}
+
+export class AnonymousAppealResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id: string = '';
+
+  @ApiProperty({ format: 'uuid' })
+  shopId: string = '';
+
+  @ApiProperty({ type: AnonymousAppealShopDto })
+  shop: AnonymousAppealShopDto = new AnonymousAppealShopDto();
+
+  @ApiProperty({ enum: ANONYMOUS_APPEAL_CATEGORIES })
+  category: AnonymousAppealCategory = 'message';
+
+  @ApiProperty({ enum: ANONYMOUS_APPEAL_STATUSES })
+  status: AnonymousAppealStatus = 'new';
+
+  @ApiProperty()
+  message: string = '';
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt: string = '';
+
+  @ApiProperty({ format: 'date-time' })
+  updatedAt: string = '';
+}
+
+export class PaginatedAnonymousAppealsResponseDto {
+  @ApiProperty({ type: [AnonymousAppealResponseDto] })
+  items: AnonymousAppealResponseDto[] = [];
+
+  @ApiProperty()
+  limit: number = 0;
+
+  @ApiProperty()
+  page: number = 0;
+
+  @ApiProperty()
+  total: number = 0;
+}
+
 export class CreateAnonymousAppealDto {
   @ApiPropertyOptional({ enum: ANONYMOUS_APPEAL_CATEGORIES, default: 'message' })
   @IsOptional()

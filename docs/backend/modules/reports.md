@@ -129,6 +129,8 @@ Endpoints для СК:
 Endpoints для службы контроля:
 
 - `GET /api/v1/control/shops/:shopId/overview`;
+- `GET /api/v1/control/staff`;
+- `GET /api/v1/control/staff/:id`;
 - `GET /api/v1/control/patrols`;
 - `GET /api/v1/control/patrols/:id`;
 - `GET /api/v1/control/incidents`;
@@ -151,6 +153,15 @@ Endpoints для службы контроля:
 - `recentReports` - latest operational reports with file count.
 
 Access: `admin`, `inspector`. Inspector access is limited to assigned shops.
+
+`GET /api/v1/control/staff` возвращает полный список сотрудников, включая неактивных. Фильтры:
+`shopId`, `role`, `isActive`, `search`, `page`, `limit`, `sort`. Поддерживается сортировка по
+`fullName`, `role` и `isActive`.
+
+`GET /api/v1/control/staff/:id` возвращает ФИО, роль, активность, основной магазин и объединенный
+список назначенных магазинов. Для `inspector` хотя бы одно назначение сотрудника должно пересекаться
+с областью доступа Проверяющего. Read model не содержит ключей доступа, username, sessionVersion,
+refresh-сессий, push-токенов или идентификаторов устройств.
 
 `GET /api/v1/control/patrols` возвращает общую историю обходов в области доступа проверяющего. Фильтры: `shopId`, `employeeId`, `routeId`, `status`, `from`, `to`, `search`, `page`, `limit`, `sort`. Строка истории содержит магазин, сотрудника, маршрут, период, прогресс точек, длительность, норматив маршрута и счетчики связанных инцидентов и отчетов.
 
@@ -288,4 +299,3 @@ Scorecard export использует те же фильтры и не соде�
 - `PATROL_REPORT_NOT_DRAFT` — действие разрешено только для черновика;
 - `PATROL_REPORT_ALREADY_SUBMITTED` — отправленный отчет нельзя отменить через mobile endpoint;
 - `FILE_REQUIRED` — файл фото не передан.
-

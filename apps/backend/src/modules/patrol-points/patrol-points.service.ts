@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CreateNfcTagDto, CreatePatrolPointDto, ReplaceNfcTagDto } from '@patrol/shared';
+import {
+  CreateNfcTagDto,
+  CreatePatrolPointDto,
+  ReplaceNfcTagDto,
+  UpdatePatrolPointDto,
+} from '@patrol/shared';
 
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
@@ -27,13 +32,14 @@ export class PatrolPointsService {
     });
   }
 
-  async createPatrolPoint(dto: CreatePatrolPointDto): Promise<PatrolPointEntity> {
-    if (dto.nfcTagId !== undefined) {
-      const tag = await this.patrolPointsRepository.findNfcTagById(dto.nfcTagId);
+  async createPatrolPoint(
+    dto: CreatePatrolPointDto,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    assertCanManagePoint(actor, dto.shopId);
 
-      if (tag === null) {
-        throw new EntityNotFoundError('NfcTag', dto.nfcTagId);
-      }
+    if (dto.nfcTagId !== undefined) {
+      await this.assertNfcTagCanBeAssigned(dto.nfcTagId);
     }
 
     return this.patrolPointsRepository.createPatrolPoint({
@@ -50,6 +56,24 @@ export class PatrolPointsService {
     return this.patrolPointsRepository.findActiveByShop(shopId);
   }
 
+  findByShopForActor(
+    shopId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity[]> {
+    assertCanAccessPoint(actor, shopId);
+
+    return this.findByShop(shopId);
+  }
+
+  findArchivedByShop(
+    shopId: string,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity[]> {
+    assertCanManagePoint(actor, shopId);
+
+    return this.patrolPointsRepository.findArchivedByShop(shopId);
+  }
+
   findRouteSetupPointsByShop(shopId: string): Promise<PatrolPointEntity[]> {
     return this.patrolPointsRepository.findRouteSetupPointsByShop(shopId);
   }
@@ -58,10 +82,89 @@ export class PatrolPointsService {
     const point = await this.patrolPointsRepository.findPatrolPointById(id);
 
     if (point === null) {
-      throw new EntityNotFoundError('PatrolPoint', id);
+      throw new EntityNotFoundError('PatrolPoint', id, 'PATROL_POINT_NOT_FOUND');
     }
 
     return point;
+  }
+
+  async findOneForActor(id: string, actor: AuthenticatedUser): Promise<PatrolPointEntity> {
+    const point = await this.findOne(id);
+    assertCanAccessPoint(actor, point.shopId);
+
+    return point;
+  }
+
+  async update(
+    id: string,
+    dto: UpdatePatrolPointDto,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    const point = await this.findOne(id);
+    assertCanManagePoint(actor, point.shopId);
+
+    point.name = dto.name ?? point.name;
+    point.description = dto.description === undefined ? point.description : dto.description;
+
+    await this.patrolPointsRepository.savePatrolPoint(point);
+
+    return this.findOne(id);
+  }
+
+  async archive(id: string, actor: AuthenticatedUser): Promise<PatrolPointEntity> {
+    const point = await this.findPointIncludingArchived(id);
+    assertCanManagePoint(actor, point.shopId);
+
+    if (isArchived(point)) {
+      throw new DomainValidationError(
+        'PATROL_POINT_ALREADY_ARCHIVED',
+        'Patrol point is already archived',
+      );
+    }
+
+    const activeRouteCount = await this.patrolPointsRepository.countActiveRoutesByPointId(id);
+    if (activeRouteCount > 0) {
+      throw new DomainValidationError(
+        'PATROL_POINT_IN_ACTIVE_ROUTE',
+        'Patrol point must be removed from active routes before archiving',
+      );
+    }
+
+    await this.patrolPointsRepository.archivePatrolPoint(id);
+
+    return this.findArchivedPoint(id);
+  }
+
+  async restore(id: string, actor: AuthenticatedUser): Promise<PatrolPointEntity> {
+    const point = await this.findPointIncludingArchived(id);
+    assertCanManagePoint(actor, point.shopId);
+
+    if (!isArchived(point)) {
+      throw new DomainValidationError(
+        'PATROL_POINT_NOT_ARCHIVED',
+        'Patrol point is not archived',
+      );
+    }
+
+    let unbindNfcTag = false;
+    if (point.nfcTagId !== undefined && point.nfcTagId !== null) {
+      const assignedPoint = await this.patrolPointsRepository.findPatrolPointByNfcTagId(
+        point.nfcTagId,
+      );
+      unbindNfcTag = assignedPoint !== null && assignedPoint.id !== point.id;
+    }
+
+    try {
+      await this.patrolPointsRepository.restorePatrolPoint(id, unbindNfcTag);
+    } catch (error) {
+      if (!unbindNfcTag && isUniqueConstraintViolation(error)) {
+        await this.patrolPointsRepository.restorePatrolPoint(id, true);
+      } else {
+        throw error;
+      }
+    }
+
+    return this.findOne(id);
   }
 
   async uploadPhoto(
@@ -74,7 +177,7 @@ export class PatrolPointsService {
     }
 
     const point = await this.findOne(pointId);
-    assertCanManagePointPhoto(actor, point.shopId);
+    assertCanManagePoint(actor, point.shopId);
 
     const asset = await this.filesService.createImageAsset({
       file,
@@ -187,8 +290,15 @@ export class PatrolPointsService {
     return this.patrolPointsRepository.savePatrolPoint(point);
   }
 
-  async replaceNfcTag(pointId: string, dto: ReplaceNfcTagDto): Promise<NfcTagReplacementEntity> {
+  async replaceNfcTag(
+    pointId: string,
+    dto: ReplaceNfcTagDto,
+    actor?: AuthenticatedUser,
+  ): Promise<NfcTagReplacementEntity> {
     const point = await this.findOne(pointId);
+    if (actor !== undefined) {
+      assertCanManagePoint(actor, point.shopId);
+    }
     const normalizedUid = normalizeNfcUid(dto.uid);
     const oldTag = point.nfcTag;
 
@@ -244,7 +354,7 @@ export class PatrolPointsService {
       oldNfcUid: oldTag?.uid,
       patrolPointId: point.id,
       reason: dto.reason,
-      replacedBy: dto.replacedBy,
+      replacedBy: actor?.authorizationId ?? actor?.id ?? dto.replacedBy,
     });
   }
 
@@ -255,23 +365,92 @@ export class PatrolPointsService {
   resetRouteSetupPoints(shopId: string): Promise<void> {
     return this.patrolPointsRepository.resetRouteSetupPoints(shopId);
   }
+
+  private async assertNfcTagCanBeAssigned(nfcTagId: string, pointId?: string): Promise<void> {
+    const tag = await this.patrolPointsRepository.findNfcTagById(nfcTagId);
+
+    if (tag === null) {
+      throw new EntityNotFoundError('NfcTag', nfcTagId);
+    }
+
+    if (!tag.isActive) {
+      throw new DomainValidationError('NFC_TAG_NOT_ACTIVE', 'NFC tag is inactive');
+    }
+
+    const assignedPoint = await this.patrolPointsRepository.findPatrolPointByNfcTagId(nfcTagId);
+    if (assignedPoint !== null && assignedPoint.id !== pointId) {
+      throw new DomainValidationError(
+        'NFC_TAG_ALREADY_ASSIGNED',
+        'NFC tag is already assigned to another active patrol point',
+      );
+    }
+  }
+
+  private async findArchivedPoint(id: string): Promise<PatrolPointEntity> {
+    const point = await this.patrolPointsRepository.findPatrolPointById(id, true);
+
+    if (point === null || point.deletedAt === undefined || point.deletedAt === null) {
+      throw new EntityNotFoundError('PatrolPoint', id, 'PATROL_POINT_NOT_FOUND');
+    }
+
+    return point;
+  }
+
+  private async findPointIncludingArchived(id: string): Promise<PatrolPointEntity> {
+    const point = await this.patrolPointsRepository.findPatrolPointById(id, true);
+
+    if (point === null) {
+      throw new EntityNotFoundError('PatrolPoint', id, 'PATROL_POINT_NOT_FOUND');
+    }
+
+    return point;
+  }
 }
 
-function assertCanManagePointPhoto(actor: AuthenticatedUser, shopId: string): void {
+function assertCanManagePoint(actor: AuthenticatedUser, shopId: string): void {
   if (actor.role === 'admin' || actor.role === 'route_setter') {
     return;
   }
 
   if (actor.role !== 'local_route_setter' || !actorHasShop(actor, shopId)) {
     throw new DomainValidationError(
-      'PATROL_POINT_PHOTO_FORBIDDEN',
-      'User cannot update patrol point photo for this shop',
+      'PATROL_POINT_FORBIDDEN',
+      'User cannot manage patrol points for this shop',
+    );
+  }
+}
+
+function assertCanAccessPoint(actor: AuthenticatedUser, shopId: string): void {
+  if (actor.role === 'admin' || actor.role === 'route_setter') {
+    return;
+  }
+
+  if (
+    (actor.role !== 'local_route_setter' && actor.role !== 'inspector') ||
+    !actorHasShop(actor, shopId)
+  ) {
+    throw new DomainValidationError(
+      'PATROL_POINT_FORBIDDEN',
+      'User cannot access patrol points for this shop',
     );
   }
 }
 
 function actorHasShop(actor: AuthenticatedUser, shopId: string): boolean {
   return actor.shopId === shopId || (actor.shopIds?.includes(shopId) ?? false);
+}
+
+function isArchived(point: PatrolPointEntity): boolean {
+  return point.deletedAt !== undefined && point.deletedAt !== null;
+}
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
 }
 
 export function normalizeNfcUid(uid: string): string {

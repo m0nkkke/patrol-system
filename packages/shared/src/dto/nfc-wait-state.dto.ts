@@ -64,6 +64,9 @@ export class NfcWaitStateDto {
   @ApiProperty()
   requiresForegroundNfcListening: boolean = true;
 
+  @ApiProperty({ description: 'Minimum required dwell time at a patrol point', minimum: 0 })
+  pointDwellSeconds: number = 0;
+
   @ApiPropertyOptional({ type: NfcWaitExpectedPointDto })
   expectedPoint?: NfcWaitExpectedPointDto;
 

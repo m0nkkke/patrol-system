@@ -3,10 +3,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { ArchiveResourceType, ListArchiveQueryDto } from '@patrol/shared';
 import { ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { FileAssetEntity } from '../files/entities/file-asset.entity';
 import { NfcTagEntity } from '../patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
+import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolRouteEntity } from '../patrols/entities/patrol-route.entity';
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { UserEntity } from '../users/entities/user.entity';
@@ -52,6 +54,7 @@ export class ArchiveService {
     private readonly shops: Repository<ShopEntity>,
     @InjectRepository(UserEntity)
     private readonly users: Repository<UserEntity>,
+    private readonly patrolPointsService: PatrolPointsService,
   ) {}
 
   async findArchived(
@@ -85,8 +88,18 @@ export class ArchiveService {
     };
   }
 
-  async archive(resourceType: ArchiveResourceType, id: string): Promise<ArchiveItem> {
+  async archive(
+    resourceType: ArchiveResourceType,
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<ArchiveItem> {
     const config = this.getConfig(resourceType);
+
+    if (resourceType === 'patrol-points') {
+      const point = await this.patrolPointsService.archive(id, actor);
+      return toArchiveItem(resourceType, point, config);
+    }
+
     const entity = await this.findEntity(config.repo, id, config.softDelete);
 
     if (entity === null) {
@@ -106,8 +119,18 @@ export class ArchiveService {
     return toArchiveItem(resourceType, archived ?? entity, config);
   }
 
-  async restore(resourceType: ArchiveResourceType, id: string): Promise<ArchiveItem> {
+  async restore(
+    resourceType: ArchiveResourceType,
+    id: string,
+    actor: AuthenticatedUser,
+  ): Promise<ArchiveItem> {
     const config = this.getConfig(resourceType);
+
+    if (resourceType === 'patrol-points') {
+      const point = await this.patrolPointsService.restore(id, actor);
+      return toArchiveItem(resourceType, point, config);
+    }
+
     const entity = await this.findEntity(config.repo, id, true);
 
     if (entity === null) {

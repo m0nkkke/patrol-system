@@ -16,7 +16,20 @@ import { DomainValidationError } from '../../../common/errors/domain-validation.
 import { EntityNotFoundError } from '../../../common/errors/not-found.error';
 import { PatrolEventEntity } from '../../patrols/entities/patrol-event.entity';
 import { PatrolEntity } from '../../patrols/entities/patrol.entity';
-import { ControlPatrolListRecord, ControlPatrolsRepository } from './control-patrols.repository';
+import {
+  ControlPatrolListRecord,
+  ControlPatrolsRepository,
+  FindControlPatrolsQuery,
+} from './control-patrols.repository';
+
+type ControlVisitEvent = {
+  accepted: boolean;
+  deviceId: string;
+  id: string;
+  lateSync: boolean;
+  nfcUid: string;
+  scannedAt: string;
+} | null;
 
 type ControlPatrolSummary = {
   completedAt: string | null;
@@ -85,9 +98,9 @@ type ControlPatrolDetail = ControlPatrolSummary & {
   } | null;
   visits: Array<{
     arrivedAt: string;
-    arrivalEvent: ReturnType<typeof toVisitEvent>;
+    arrivalEvent: ControlVisitEvent;
     departedAt: string | null;
-    departureEvent: ReturnType<typeof toVisitEvent>;
+    departureEvent: ControlVisitEvent;
     dwellSeconds: number | null;
     id: string;
     lockedUntil: string;
@@ -193,7 +206,10 @@ export class ControlPatrolsService {
   }
 }
 
-function buildFindQuery(query: FindControlPatrolsDto, actor: AuthenticatedUser) {
+function buildFindQuery(
+  query: FindControlPatrolsDto,
+  actor: AuthenticatedUser,
+): FindControlPatrolsQuery {
   assertCanUseControlPatrols(actor);
   if (query.shopId !== undefined) assertCanAccessShop(actor, query.shopId);
 
@@ -251,7 +267,7 @@ function calculateDuration(patrol: PatrolEntity): { isFinal: boolean; seconds: n
   return { isFinal: finalAt !== undefined, seconds: Math.max(0, Math.round((end.getTime() - patrol.startedAt.getTime()) / 1000)) };
 }
 
-function toEvent(event: PatrolEventEntity) {
+function toEvent(event: PatrolEventEntity): ControlPatrolDetail['events'][number] {
   return {
     accepted: event.accepted,
     deviceId: event.deviceId,
@@ -275,8 +291,8 @@ function toEvent(event: PatrolEventEntity) {
   };
 }
 
-function toVisitEvent(event: PatrolEventEntity | undefined) {
-  return event === undefined ? null : {
+function toVisitEvent(event: PatrolEventEntity | null | undefined): ControlVisitEvent {
+  return event == null ? null : {
     accepted: event.accepted,
     deviceId: event.deviceId,
     id: event.id,

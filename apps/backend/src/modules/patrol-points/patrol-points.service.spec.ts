@@ -9,18 +9,22 @@ import { PatrolPointsService } from './patrol-points.service';
 
 type PatrolPointsRepositoryMock = Pick<
   PatrolPointsRepository,
+  | 'archivePatrolPoint'
   | 'countActiveByShop'
+  | 'countActiveRoutesByPointId'
   | 'countRegisteredRoutePoints'
   | 'createNfcTag'
   | 'createNfcTagReplacement'
   | 'createPatrolPoint'
   | 'findActiveByShop'
+  | 'findArchivedByShop'
   | 'findNfcTagById'
   | 'findNfcTagByUid'
   | 'findPatrolPointById'
   | 'findPatrolPointByNfcTagId'
   | 'findPatrolPointByShopAndSortOrder'
   | 'findRouteSetupPointsByShop'
+  | 'restorePatrolPoint'
   | 'saveNfcTag'
   | 'savePatrolPoint'
 >;
@@ -32,18 +36,22 @@ describe('PatrolPointsService', () => {
 
   beforeEach(() => {
     repository = {
+      archivePatrolPoint: jest.fn(),
       countActiveByShop: jest.fn(),
+      countActiveRoutesByPointId: jest.fn(),
       countRegisteredRoutePoints: jest.fn(),
       createNfcTag: jest.fn(),
       createNfcTagReplacement: jest.fn(),
       createPatrolPoint: jest.fn(),
       findActiveByShop: jest.fn(),
+      findArchivedByShop: jest.fn(),
       findNfcTagById: jest.fn(),
       findNfcTagByUid: jest.fn(),
       findPatrolPointById: jest.fn(),
       findPatrolPointByNfcTagId: jest.fn(),
       findPatrolPointByShopAndSortOrder: jest.fn(),
       findRouteSetupPointsByShop: jest.fn(),
+      restorePatrolPoint: jest.fn(),
       saveNfcTag: jest.fn(),
       savePatrolPoint: jest.fn(),
     };
@@ -174,7 +182,162 @@ describe('PatrolPointsService', () => {
       DomainValidationError,
     );
   });
+
+  it('updates only point name and description', async () => {
+    const point = createPoint({ description: 'Old description', nfcTagId: 'tag-id' });
+    repository.findPatrolPointById.mockResolvedValue(point);
+    repository.savePatrolPoint.mockImplementation((savedPoint) => Promise.resolve(savedPoint));
+
+    const result = await service.update(
+      point.id,
+      {
+        description: null,
+        name: 'Updated point',
+      },
+      createActor({ role: 'route_setter' }),
+    );
+
+    expect(repository.savePatrolPoint).toHaveBeenCalledWith(point);
+    expect(result).toMatchObject({
+      description: null,
+      name: 'Updated point',
+      nfcTagId: 'tag-id',
+      sortOrder: 1,
+    });
+  });
+
+  it('rejects a local route setter managing another shop point', async () => {
+    const point = createPoint({ shopId: 'other-shop-id' });
+    repository.findPatrolPointById.mockResolvedValue(point);
+
+    await expect(
+      service.update(point.id, { name: 'Updated point' }, createActor()),
+    ).rejects.toMatchObject({ code: 'PATROL_POINT_FORBIDDEN' });
+    expect(repository.savePatrolPoint).not.toHaveBeenCalled();
+  });
+
+  it('rejects archiving a point used by an active route', async () => {
+    const point = createPoint();
+    repository.findPatrolPointById.mockResolvedValue(point);
+    repository.countActiveRoutesByPointId.mockResolvedValue(1);
+
+    await expect(service.archive(point.id, createActor())).rejects.toMatchObject({
+      code: 'PATROL_POINT_IN_ACTIVE_ROUTE',
+    });
+    expect(repository.archivePatrolPoint).not.toHaveBeenCalled();
+  });
+
+  it('archives an unused point and returns its archived representation', async () => {
+    const point = createPoint();
+    const archivedPoint = createPoint({ deletedAt: new Date(), isActive: false });
+    repository.findPatrolPointById.mockResolvedValueOnce(point).mockResolvedValueOnce(archivedPoint);
+    repository.countActiveRoutesByPointId.mockResolvedValue(0);
+
+    await expect(service.archive(point.id, createActor())).resolves.toBe(archivedPoint);
+    expect(repository.archivePatrolPoint).toHaveBeenCalledWith(point.id);
+    expect(repository.findPatrolPointById).toHaveBeenLastCalledWith(point.id, true);
+  });
+
+  it('rejects archiving an already archived point with a stable code', async () => {
+    repository.findPatrolPointById.mockResolvedValue(
+      createPoint({ deletedAt: new Date(), isActive: false }),
+    );
+
+    await expect(service.archive('point-id', createActor())).rejects.toMatchObject({
+      code: 'PATROL_POINT_ALREADY_ARCHIVED',
+    });
+    expect(repository.countActiveRoutesByPointId).not.toHaveBeenCalled();
+    expect(repository.archivePatrolPoint).not.toHaveBeenCalled();
+  });
+
+  it('restores an archived point when its NFC tag is not assigned elsewhere', async () => {
+    const tag = createTag();
+    const archivedPoint = createPoint({
+      deletedAt: new Date(),
+      isActive: false,
+      nfcTag: tag,
+      nfcTagId: tag.id,
+    });
+    const restoredPoint = createPoint({ nfcTag: tag, nfcTagId: tag.id });
+    repository.findPatrolPointById
+      .mockResolvedValueOnce(archivedPoint)
+      .mockResolvedValueOnce(restoredPoint);
+    repository.findPatrolPointByNfcTagId.mockResolvedValue(null);
+
+    await expect(service.restore(archivedPoint.id, createActor())).resolves.toBe(restoredPoint);
+    expect(repository.restorePatrolPoint).toHaveBeenCalledWith(archivedPoint.id, false);
+  });
+
+  it('restores an archived point without reclaiming an NFC tag assigned elsewhere', async () => {
+    const tag = createTag();
+    const archivedPoint = createPoint({
+      deletedAt: new Date(),
+      isActive: false,
+      nfcTag: tag,
+      nfcTagId: tag.id,
+    });
+    const restoredPoint = createPoint({ nfcTag: null, nfcTagId: null });
+    repository.findPatrolPointById
+      .mockResolvedValueOnce(archivedPoint)
+      .mockResolvedValueOnce(restoredPoint);
+    repository.findPatrolPointByNfcTagId.mockResolvedValue(
+      createPoint({ id: 'other-point-id', nfcTagId: tag.id }),
+    );
+
+    await expect(service.restore(archivedPoint.id, createActor())).resolves.toBe(restoredPoint);
+    expect(repository.restorePatrolPoint).toHaveBeenCalledWith(archivedPoint.id, true);
+  });
+
+  it('retries restore without NFC when a concurrent assignment wins', async () => {
+    const archivedPoint = createPoint({
+      deletedAt: new Date(),
+      isActive: false,
+      nfcTagId: 'tag-id',
+    });
+    const restoredPoint = createPoint({ nfcTagId: null });
+    repository.findPatrolPointById
+      .mockResolvedValueOnce(archivedPoint)
+      .mockResolvedValueOnce(restoredPoint);
+    repository.findPatrolPointByNfcTagId.mockResolvedValue(null);
+    repository.restorePatrolPoint
+      .mockRejectedValueOnce({ code: '23505' })
+      .mockResolvedValueOnce();
+
+    await expect(service.restore(archivedPoint.id, createActor())).resolves.toBe(restoredPoint);
+    expect(repository.restorePatrolPoint).toHaveBeenNthCalledWith(1, archivedPoint.id, false);
+    expect(repository.restorePatrolPoint).toHaveBeenNthCalledWith(2, archivedPoint.id, true);
+  });
+
+  it('rejects restoring an active point with a stable code', async () => {
+    repository.findPatrolPointById.mockResolvedValue(createPoint());
+
+    await expect(service.restore('point-id', createActor())).rejects.toMatchObject({
+      code: 'PATROL_POINT_NOT_ARCHIVED',
+    });
+    expect(repository.restorePatrolPoint).not.toHaveBeenCalled();
+  });
+
+  it('returns a patrol-point-specific not found code', async () => {
+    repository.findPatrolPointById.mockResolvedValue(null);
+
+    await expect(service.findOne('missing-point-id')).rejects.toMatchObject({
+      code: 'PATROL_POINT_NOT_FOUND',
+    });
+  });
 });
+
+function createActor(
+  overrides: Partial<Parameters<PatrolPointsService['update']>[2]> = {},
+): Parameters<PatrolPointsService['update']>[2] {
+  return {
+    fullName: 'Local Setter',
+    id: 'setter-id',
+    role: 'local_route_setter',
+    shopId: 'shop-id',
+    username: 'setter',
+    ...overrides,
+  };
+}
 
 function createTag(overrides: Partial<NfcTagEntity> = {}): NfcTagEntity {
   return {

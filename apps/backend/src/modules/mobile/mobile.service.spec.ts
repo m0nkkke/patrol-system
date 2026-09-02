@@ -204,6 +204,7 @@ describe('MobileService', () => {
       canAcceptNfc: true,
       mode: 'waiting_for_nfc',
       patrolId: 'patrol-id',
+      pointDwellSeconds: 90,
       requiresForegroundNfcListening: true,
       scanContract: {
         endpoint: '/api/v1/mobile/patrols/patrol-id/events',

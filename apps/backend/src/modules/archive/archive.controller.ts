@@ -12,6 +12,8 @@ import {
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { ARCHIVE_RESOURCE_TYPES, ArchiveResourceType, ListArchiveQueryDto } from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -42,10 +44,11 @@ export class ArchiveController {
   archive(
     @Param('resourceType') resourceType: ArchiveResourceType,
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<ArchiveService['archive']> {
     assertResourceType(resourceType);
 
-    return this.archiveService.archive(resourceType, id);
+    return this.archiveService.archive(resourceType, id, actor);
   }
 
   @Post(':resourceType/:id/restore')
@@ -54,10 +57,11 @@ export class ArchiveController {
   restore(
     @Param('resourceType') resourceType: ArchiveResourceType,
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<ArchiveService['restore']> {
     assertResourceType(resourceType);
 
-    return this.archiveService.restore(resourceType, id);
+    return this.archiveService.restore(resourceType, id, actor);
   }
 }
 

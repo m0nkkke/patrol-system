@@ -13,7 +13,9 @@ declare module 'supertest' {
   };
 
   type RequestAgent = {
+    delete(url: string): TestRequest;
     get(url: string): TestRequest;
+    patch(url: string): TestRequest;
     post(url: string): TestRequest;
   };
 

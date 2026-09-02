@@ -16,6 +16,9 @@ import { ControlReportsController } from './control/control-reports.controller';
 import { ControlShopOverviewController } from './control/control-shop-overview.controller';
 import { ControlShopOverviewRepository } from './control/control-shop-overview.repository';
 import { ControlShopOverviewService } from './control/control-shop-overview.service';
+import { ControlStaffController } from './control/control-staff.controller';
+import { ControlStaffRepository } from './control/control-staff.repository';
+import { ControlStaffService } from './control/control-staff.service';
 import { PatrolReportFileEntity } from './entities/patrol-report-file.entity';
 import { PatrolReportEntity } from './entities/patrol-report.entity';
 import { ReportOutboxEventEntity } from './entities/report-outbox-event.entity';
@@ -58,6 +61,7 @@ import { REPORTING_CORE_CLIENT } from './outbox/reporting-core-client.port';
     ControlPatrolsController,
     ControlReportsController,
     ControlShopOverviewController,
+    ControlStaffController,
     ManagementBreakdownController,
     ManagementMetricsController,
     ManagementScorecardsController,
@@ -90,6 +94,8 @@ import { REPORTING_CORE_CLIENT } from './outbox/reporting-core-client.port';
     ControlPatrolsService,
     ControlShopOverviewRepository,
     ControlShopOverviewService,
+    ControlStaffRepository,
+    ControlStaffService,
     DisabledReportingCoreClientService,
     HttpReportingCoreClientService,
     ManagementBreakdownRepository,

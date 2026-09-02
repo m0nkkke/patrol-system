@@ -139,7 +139,7 @@ describe('AuthService', () => {
     );
   });
 
-  it('rejects universal route setter on regular login endpoint', async () => {
+  it('requests actor full name for universal route setter on regular login endpoint', async () => {
     const user = createUser({
       isUniversalRouteSetter: true,
       role: 'route_setter',
@@ -149,19 +149,46 @@ describe('AuthService', () => {
 
     await expect(
       service.login({ accessKey: 'SETT-SEED-0001', deviceId: 'device-1' }, '127.0.0.1'),
-    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+    ).rejects.toMatchObject({
+      code: 'AUTH_ACTOR_FULL_NAME_REQUIRED',
+      message: 'Actor full name is required',
+    });
 
-    expect(refreshTokenStore.recordFailedLogin).toHaveBeenCalledWith('127.0.0.1', 'device-1');
+    expect(refreshTokenStore.recordFailedLogin).not.toHaveBeenCalled();
+    expect(refreshTokenStore.clearFailedLogin).not.toHaveBeenCalled();
     expect(refreshTokenStore.save).not.toHaveBeenCalled();
-    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'auth.login.failure',
-        meta: expect.objectContaining({
-          reason: 'universal_route_setter_requires_actor',
-        }),
-        userId: user.id,
-      }),
-    );
+    expect(universalAuthSessionsRepository.create).not.toHaveBeenCalled();
+    const challengeAudit = auditLogService.recordSafely.mock.calls.find(
+      ([entry]) => entry.action === 'auth.universal_route_setter.login.challenge',
+    )?.[0];
+    expect(challengeAudit).toMatchObject({
+      action: 'auth.universal_route_setter.login.challenge',
+      meta: {
+        accessKeyFingerprint: hashToken('SETT-SEED-0001').slice(0, 12),
+        reason: 'actor_full_name_required',
+      },
+      userId: user.id,
+    });
+  });
+
+  it('does not rate-limit repeated universal route setter challenges', async () => {
+    const user = createUser({
+      isUniversalRouteSetter: true,
+      role: 'route_setter',
+      username: 'universal.setter',
+    });
+    usersService.findByAccessKey.mockResolvedValue(user);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(
+        service.login({ accessKey: 'SETT-SEED-0001', deviceId: 'device-1' }, '127.0.0.1'),
+      ).rejects.toMatchObject({ code: 'AUTH_ACTOR_FULL_NAME_REQUIRED' });
+    }
+
+    expect(refreshTokenStore.assertLoginAllowed).toHaveBeenCalledTimes(5);
+    expect(refreshTokenStore.recordFailedLogin).not.toHaveBeenCalled();
+    expect(refreshTokenStore.save).not.toHaveBeenCalled();
+    expect(universalAuthSessionsRepository.create).not.toHaveBeenCalled();
   });
 
   it('rotates refresh token and returns new token pair', async () => {

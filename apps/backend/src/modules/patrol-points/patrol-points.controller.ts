@@ -1,9 +1,12 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   UploadedFile,
   UseGuards,
@@ -18,7 +21,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { CreateNfcTagDto, CreatePatrolPointDto, ReplaceNfcTagDto } from '@patrol/shared';
+import {
+  CreateNfcTagDto,
+  CreatePatrolPointDto,
+  ReplaceNfcTagDto,
+  UpdatePatrolPointDto,
+} from '@patrol/shared';
 
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -46,24 +54,76 @@ export class PatrolPointsController {
   }
 
   @Post()
-  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
+  @Roles('admin', 'route_setter', 'local_route_setter')
   @ApiCreatedResponse({ description: 'Patrol point created' })
-  createPatrolPoint(@Body() dto: CreatePatrolPointDto): Promise<PatrolPointEntity> {
-    return this.patrolPointsService.createPatrolPoint(dto);
+  createPatrolPoint(
+    @Body() dto: CreatePatrolPointDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPointsService.createPatrolPoint(dto, actor);
+  }
+
+  @Get('shop/:shopId/archived')
+  @Roles('admin', 'route_setter', 'local_route_setter')
+  @ApiOkResponse({ description: 'Archived patrol points by shop' })
+  findArchivedByShop(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity[]> {
+    return this.patrolPointsService.findArchivedByShop(shopId, actor);
   }
 
   @Get('shop/:shopId')
   @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Active patrol points by shop' })
-  findByShop(@Param('shopId', ParseUUIDPipe) shopId: string): Promise<PatrolPointEntity[]> {
-    return this.patrolPointsService.findByShop(shopId);
+  findByShop(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity[]> {
+    return this.patrolPointsService.findByShopForActor(shopId, actor);
   }
 
   @Get(':id')
   @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Patrol point details' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<PatrolPointEntity> {
-    return this.patrolPointsService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPointsService.findOneForActor(id, actor);
+  }
+
+  @Patch(':id')
+  @Roles('admin', 'route_setter', 'local_route_setter')
+  @ApiOkResponse({ description: 'Patrol point updated' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePatrolPointDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPointsService.update(id, dto, actor);
+  }
+
+  @Delete(':id')
+  @Roles('admin', 'route_setter', 'local_route_setter')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'Patrol point archived' })
+  archive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPointsService.archive(id, actor);
+  }
+
+  @Post(':id/restore')
+  @Roles('admin', 'route_setter', 'local_route_setter')
+  @HttpCode(200)
+  @ApiOkResponse({ description: 'Patrol point restored' })
+  restore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPointsService.restore(id, actor);
   }
 
   @Post(':id/photo')
@@ -97,7 +157,8 @@ export class PatrolPointsController {
   replaceNfcTag(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReplaceNfcTagDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<NfcTagReplacementEntity> {
-    return this.patrolPointsService.replaceNfcTag(id, dto);
+    return this.patrolPointsService.replaceNfcTag(id, dto, actor);
   }
 }

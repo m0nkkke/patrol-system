@@ -314,6 +314,8 @@ COMMENT ON COLUMN patrol_points.sort_order IS 'Порядок точки в ма
 
 CREATE INDEX idx_patrol_points_shop_id    ON patrol_points(shop_id);
 CREATE INDEX idx_patrol_points_nfc_tag_id ON patrol_points(nfc_tag_id);
+CREATE UNIQUE INDEX uq_patrol_points_active_nfc_tag ON patrol_points(nfc_tag_id)
+  WHERE nfc_tag_id IS NOT NULL AND is_active = TRUE AND deleted_at IS NULL;
 CREATE INDEX idx_patrol_points_photo_file_id ON patrol_points(photo_file_id);
 CREATE INDEX idx_patrol_points_is_active  ON patrol_points(is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_patrol_points_deleted_at ON patrol_points(deleted_at) WHERE deleted_at IS NULL;
@@ -598,6 +600,7 @@ CREATE TABLE patrol_incidents (
   shop_id              UUID NOT NULL REFERENCES shops(id) ON DELETE CASCADE,
   patrol_id            UUID NOT NULL REFERENCES patrols(id) ON DELETE CASCADE,
   patrol_event_id      UUID REFERENCES patrol_events(id) ON DELETE SET NULL,
+  client_local_id      UUID,
   type                 VARCHAR(50) NOT NULL,
   from_patrol_point_id UUID REFERENCES patrol_points(id) ON DELETE SET NULL,
   to_patrol_point_id   UUID REFERENCES patrol_points(id) ON DELETE SET NULL,
@@ -629,6 +632,9 @@ CREATE INDEX idx_patrol_incidents_shop_id ON patrol_incidents(shop_id);
 CREATE INDEX idx_patrol_incidents_patrol_id ON patrol_incidents(patrol_id);
 CREATE INDEX idx_patrol_incidents_type ON patrol_incidents(type);
 CREATE INDEX idx_patrol_incidents_created_at ON patrol_incidents(created_at DESC);
+CREATE UNIQUE INDEX uq_patrol_incidents_patrol_client_local_id
+  ON patrol_incidents(patrol_id, client_local_id)
+  WHERE client_local_id IS NOT NULL;
 
 -- ============================================================
 -- 6. ОПЕРАЦИОННЫЕ ОТЧЕТЫ

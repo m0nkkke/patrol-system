@@ -3,6 +3,8 @@ import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { ShopsService } from '../shops/shops.service';
 import { AnonymousAppealsRepository } from './anonymous-appeals.repository';
 import { AnonymousAppealsService } from './anonymous-appeals.service';
+import { AnonymousAppealEntity } from './entities/anonymous-appeal.entity';
+import { ShopEntity } from '../shops/entities/shop.entity';
 
 type AnonymousAppealsRepositoryMock = Pick<
   AnonymousAppealsRepository,
@@ -42,17 +44,21 @@ describe('AnonymousAppealsService', () => {
       shopIds: [shopId],
       username: 'guard',
     };
-    const created = {
+    const created = createAppeal({
+      deviceId: 'device-1',
       id: '00000000-0000-4000-8000-000000000020',
+      ipAddress: '127.0.0.1',
       message: 'Need attention',
       shopId,
-    };
-    shopsService.findOne.mockResolvedValue({ id: shopId } as Awaited<
+    });
+    shopsService.findOne.mockResolvedValue({
+      address: 'Main street, 1',
+      id: shopId,
+      name: 'Shop 1',
+    } as Awaited<
       ReturnType<ShopsService['findOne']>
     >);
-    repository.create.mockResolvedValue(created as Awaited<
-      ReturnType<AnonymousAppealsRepository['create']>
-    >);
+    repository.create.mockResolvedValue(created);
 
     const result = await service.create(
       {
@@ -70,7 +76,18 @@ describe('AnonymousAppealsService', () => {
       message: 'Need attention',
       shopId,
     });
-    expect(result).toBe(created);
+    expect(result).toEqual({
+      category: 'message',
+      createdAt: created.createdAt.toISOString(),
+      id: created.id,
+      message: created.message,
+      shop: { address: 'Main street, 1', id: shopId, name: 'Shop 1' },
+      shopId,
+      status: 'new',
+      updatedAt: created.updatedAt.toISOString(),
+    });
+    expect(JSON.stringify(result)).not.toContain('deviceId');
+    expect(JSON.stringify(result)).not.toContain('ipAddress');
   });
 
   it('rejects anonymous appeal for unassigned shop', async () => {
@@ -103,14 +120,45 @@ describe('AnonymousAppealsService', () => {
       shopIds: ['00000000-0000-4000-8000-000000000010'],
       username: 'inspector',
     };
-    repository.findMany.mockResolvedValue([[], 0]);
+    const appeal = createAppeal({
+      deviceId: 'device-1',
+      ipAddress: '127.0.0.1',
+      shop: createShop(),
+    });
+    repository.findMany.mockResolvedValue([[appeal], 1]);
 
-    await service.findMany({ limit: 50, page: 1 }, actor);
+    const result = await service.findMany({ limit: 50, page: 1 }, actor);
 
     expect(repository.findMany).toHaveBeenCalledWith(
       { limit: 50, page: 1 },
       ['00000000-0000-4000-8000-000000000010'],
     );
+    expect(result.items[0]).toMatchObject({
+      id: appeal.id,
+      shop: { id: appeal.shopId, name: 'Shop 1' },
+    });
+    expect(JSON.stringify(result)).not.toContain('deviceId');
+    expect(JSON.stringify(result)).not.toContain('ipAddress');
+  });
+
+  it('returns safe anonymous appeal details', async () => {
+    const appeal = createAppeal({
+      deviceId: 'device-1',
+      ipAddress: '127.0.0.1',
+      shop: createShop(),
+    });
+    repository.findById.mockResolvedValue(appeal);
+
+    const result = await service.findOne(appeal.id, {
+      fullName: 'Admin',
+      id: '00000000-0000-4000-8000-000000000003',
+      role: 'admin',
+      username: 'admin',
+    });
+
+    expect(result).toMatchObject({ id: appeal.id, shopId: appeal.shopId });
+    expect(result).not.toHaveProperty('deviceId');
+    expect(result).not.toHaveProperty('ipAddress');
   });
 
   it('rejects non-control roles from listing anonymous appeals', async () => {
@@ -128,3 +176,31 @@ describe('AnonymousAppealsService', () => {
     expect(repository.findMany).not.toHaveBeenCalled();
   });
 });
+
+function createAppeal(overrides: Partial<AnonymousAppealEntity> = {}): AnonymousAppealEntity {
+  return {
+    category: 'message',
+    createdAt: new Date('2026-09-02T10:00:00.000Z'),
+    id: '00000000-0000-4000-8000-000000000020',
+    message: 'Need attention',
+    shopId: '00000000-0000-4000-8000-000000000010',
+    status: 'new',
+    updatedAt: new Date('2026-09-02T10:05:00.000Z'),
+    ...overrides,
+  };
+}
+
+function createShop(overrides: Partial<ShopEntity> = {}): ShopEntity {
+  return {
+    createdAt: new Date(),
+    id: '00000000-0000-4000-8000-000000000010',
+    isActive: true,
+    name: 'Shop 1',
+    routeExpectedPoints: 0,
+    routeRegisteredPoints: 0,
+    routeStatus: 'not_configured',
+    timezone: 'Europe/Moscow',
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}

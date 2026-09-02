@@ -60,6 +60,7 @@ type CreatePointVisitRecord = {
 
 type CreatePatrolIncidentRecord = {
   actualSeconds?: number;
+  clientLocalId?: string;
   expectedSeconds?: number;
   fromPatrolPointId?: string;
   message: string;
@@ -187,6 +188,13 @@ export class PatrolsRepository {
 
   createPatrolIncident(data: CreatePatrolIncidentRecord): Promise<PatrolIncidentEntity> {
     return this.patrolIncidents.save(this.patrolIncidents.create(data));
+  }
+
+  findIncidentByClientLocalId(
+    patrolId: string,
+    clientLocalId: string,
+  ): Promise<PatrolIncidentEntity | null> {
+    return this.patrolIncidents.findOne({ where: { clientLocalId, patrolId } });
   }
 
   createPatrolRouteInterval(
