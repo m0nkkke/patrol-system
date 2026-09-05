@@ -246,7 +246,34 @@ describe('AuthService', () => {
       expect.objectContaining({
         action: 'auth.refresh.failure',
         meta: expect.objectContaining({ reason: 'session_mismatch' }),
-        userId: user.id,
+        userId: null,
+      }),
+    );
+  });
+
+  it('records refresh failure without a stale user foreign key', async () => {
+    const user = createUser();
+    const refreshToken = createRefreshToken(user);
+    const refreshTokenHash = hashToken(refreshToken);
+    refreshTokenStore.get.mockResolvedValue(refreshTokenHash);
+    refreshTokensRepository.findValidByHash.mockResolvedValue({
+      tokenHash: refreshTokenHash,
+      userId: user.id,
+    } as Awaited<ReturnType<RefreshTokensRepository['findValidByHash']>>);
+    usersService.findEntityById.mockResolvedValue(null);
+
+    await expect(
+      service.refresh({ deviceId: 'device-1', refreshToken }),
+    ).rejects.toBeInstanceOf(InvalidCredentialsError);
+
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.refresh.failure',
+        meta: expect.objectContaining({
+          reason: 'user_not_found',
+          tokenSubject: user.id,
+        }),
+        userId: null,
       }),
     );
   });
@@ -271,6 +298,7 @@ describe('AuthService', () => {
   it('revokes refresh token on logout', async () => {
     const user = createUser();
     const refreshToken = createRefreshToken(user);
+    usersService.findEntityById.mockResolvedValue(user);
 
     await expect(
       service.logout({ deviceId: 'device-1', refreshToken }, '127.0.0.1'),
@@ -287,6 +315,24 @@ describe('AuthService', () => {
         deviceId: 'device-1',
         ipAddress: '127.0.0.1',
         userId: user.id,
+      }),
+    );
+  });
+
+  it('logs out with a null audit user when the token subject no longer exists', async () => {
+    const user = createUser();
+    const refreshToken = createRefreshToken(user);
+    usersService.findEntityById.mockResolvedValue(null);
+
+    await expect(
+      service.logout({ deviceId: 'device-1', refreshToken }, '127.0.0.1'),
+    ).resolves.toEqual({ success: true });
+
+    expect(auditLogService.recordSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auth.logout.success',
+        meta: expect.objectContaining({ tokenSubject: user.id }),
+        userId: null,
       }),
     );
   });

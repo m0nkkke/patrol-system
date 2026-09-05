@@ -1,4 +1,6 @@
 import {
+  AnonymousAppealCategory,
+  AnonymousAppealStatus,
   PatrolIncidentType,
   PatrolPointVisitStatus,
   PatrolReportStatus,
@@ -13,6 +15,7 @@ import { dirname, resolve } from 'path';
 import type sharpFactory from 'sharp';
 
 import { formatAccessKey, hashAccessKey } from '../../common/auth/access-key';
+import { AnonymousAppealEntity } from '../../modules/anonymous/entities/anonymous-appeal.entity';
 import { NfcTagEntity } from '../../modules/patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../../modules/patrol-points/entities/patrol-point.entity';
 import { PatrolReportEntity } from '../../modules/reports/entities/patrol-report.entity';
@@ -32,12 +35,15 @@ import { UserEntity } from '../../modules/users/entities/user.entity';
 import dataSource from '../data-source';
 
 const SEED_MARKER = 'scenarios-seed-v030';
+// sharp's CommonJS export is required here for the runtime used by the seed command.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
 const sharp: typeof sharpFactory = require('sharp');
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 const seedNow = new Date();
 
 type Repositories = {
+  anonymousAppeals: Repository<AnonymousAppealEntity>;
   events: Repository<PatrolEventEntity>;
   fileAssets: Repository<FileAssetEntity>;
   incidents: Repository<PatrolIncidentEntity>;
@@ -76,17 +82,20 @@ type UserSeed = {
 
 type PatrolSeed = {
   cancellationReason?: string;
+  cancelledAt?: Date;
   completedAt?: Date;
   completedPointCount: number;
   dueAt?: Date;
   employeeId: string;
   marker: string;
+  openPointArrivedAt?: Date;
   openPointIndex?: number;
+  openPointStatus?: PatrolPointVisitStatus;
   points: PatrolPointEntity[];
   routeId: string;
   scheduleId: string;
   shopId: string;
-  startedAt: Date;
+  startedAt?: Date;
   status: PatrolEntity['status'];
   tags: NfcTagEntity[];
 };
@@ -103,6 +112,7 @@ async function run(): Promise<void> {
 
 function createRepositories(): Repositories {
   return {
+    anonymousAppeals: dataSource.getRepository(AnonymousAppealEntity),
     events: dataSource.getRepository(PatrolEventEntity),
     fileAssets: dataSource.getRepository(FileAssetEntity),
     incidents: dataSource.getRepository(PatrolIncidentEntity),
@@ -179,6 +189,7 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
     ['Entrance', 'Sales floor', 'Back office']);
   await ensurePoints(repositories.points, shops.setup.id, setupTags,
     ['Setup point 1', 'Setup point 2', 'Setup point 3', 'Setup point 4']);
+  const archivedPointId = await ensureArchivedPoint(repositories.points, shops.irkutsk.id);
 
   const routes = {
     irkutskInternal: await ensureRoute(repositories, shops.irkutsk.id, 'Irkutsk internal', 'internal', irkutskPoints),
@@ -214,6 +225,7 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
     }));
   }
   await ensureTimingProfile(repositories.timingProfiles, routes.irkutskInternal, historyDurations);
+  if (history[0] !== undefined) await ensureEventVariants(repositories.events, history[0].id);
 
   const fastStart = minutesAgo(240);
   const fastPatrol = await ensurePatrol(repositories, {
@@ -223,7 +235,37 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
     shopId: shops.irkutsk.id, startedAt: fastStart, status: 'completed', tags: irkutskTags,
   });
   await ensureIncident(repositories.incidents, fastPatrol, PatrolIncidentType.ROUTE_TOO_FAST,
-    'Route completed faster than its learned norm', 1200, 480);
+    'Route completed faster than its learned norm', 1200, 480, {
+      fromPatrolPointId: irkutskPoints[0]?.id,
+      toPatrolPointId: irkutskPoints[1]?.id,
+    });
+  await ensureIncident(repositories.incidents, fastPatrol, PatrolIncidentType.SHORT_INTERVAL,
+    'Travel time between control points is below the allowed interval', 180, 45, {
+      fromPatrolPointId: irkutskPoints[0]?.id,
+      toPatrolPointId: irkutskPoints[1]?.id,
+    });
+  await ensureIncident(repositories.incidents, fastPatrol, PatrolIncidentType.POINT_DWELL_TOO_SHORT,
+    'The employee departed before the minimum point dwell time elapsed', 60, 15, {
+      fromPatrolPointId: irkutskPoints[1]?.id,
+      toPatrolPointId: irkutskPoints[1]?.id,
+    });
+
+  const suspiciousStart = minutesAgo(215);
+  const suspiciousPatrol = await ensurePatrol(repositories, {
+    completedAt: new Date(suspiciousStart.getTime() + 5 * MINUTE_MS),
+    completedPointCount: irkutskPoints.length,
+    employeeId: guardIrkutsk.id,
+    marker: `${SEED_MARKER}:suspicious-fast`,
+    points: irkutskPoints,
+    routeId: routes.irkutskInternal.id,
+    scheduleId: schedules.irkutskMorning.id,
+    shopId: shops.irkutsk.id,
+    startedAt: suspiciousStart,
+    status: 'completed',
+    tags: irkutskTags,
+  });
+  await ensureIncident(repositories.incidents, suspiciousPatrol, PatrolIncidentType.ROUTE_SUSPICIOUSLY_FAST,
+    'Route duration is implausibly short compared with its learned norm', 1200, 300);
 
   const slowStart = minutesAgo(190);
   const slowPatrol = await ensurePatrol(repositories, {
@@ -234,6 +276,33 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
   });
   await ensureIncident(repositories.incidents, slowPatrol, PatrolIncidentType.ROUTE_TOO_SLOW,
     'Route completed slower than its learned norm', 1200, 2100);
+  await ensureIncident(repositories.incidents, slowPatrol, PatrolIncidentType.LONG_INTERVAL,
+    'Travel time between control points exceeded the allowed interval', 300, 780, {
+      fromPatrolPointId: irkutskPoints[1]?.id,
+      toPatrolPointId: irkutskPoints[2]?.id,
+    });
+
+  const cancelledAt = minutesAgo(115);
+  const cancelled = await ensurePatrol(repositories, {
+    cancellationReason: 'Route obstruction reported during the patrol',
+    cancelledAt,
+    completedPointCount: 2,
+    dueAt: minutesAgo(90),
+    employeeId: guardIrkutsk.id,
+    marker: `${SEED_MARKER}:cancelled`,
+    points: irkutskPoints,
+    routeId: routes.irkutskInternal.id,
+    scheduleId: schedules.irkutskMorning.id,
+    shopId: shops.irkutsk.id,
+    startedAt: minutesAgo(135),
+    status: 'cancelled',
+    tags: irkutskTags,
+  });
+  await ensureIncident(repositories.incidents, cancelled, PatrolIncidentType.MISSED_POINT,
+    'Patrol was cancelled before all route points were visited', undefined, undefined, {
+      fromPatrolPointId: irkutskPoints[1]?.id,
+      toPatrolPointId: irkutskPoints[2]?.id,
+    });
 
   const overdue = await ensurePatrol(repositories, {
     completedPointCount: 1, dueAt: minutesAgo(60), employeeId: guardMoscow.id,
@@ -244,19 +313,64 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
   await ensureIncident(repositories.incidents, overdue, PatrolIncidentType.PATROL_OVERDUE,
     'Patrol was not completed by its due time');
 
+  const scheduleDeviationPatrol = history[1];
+  if (scheduleDeviationPatrol !== undefined) {
+    await ensureIncident(repositories.incidents, scheduleDeviationPatrol, PatrolIncidentType.SCHEDULE_DEVIATION,
+      'Patrol started outside its configured schedule window', 0, 42 * 60);
+  }
+
   const active = await ensurePatrol(repositories, {
     completedPointCount: 0, dueAt: minutesAhead(50), employeeId: guardMoscow.id,
     marker: `${SEED_MARKER}:active`, openPointIndex: 0, points: moscowPoints,
     routeId: routes.moscowInternal.id, scheduleId: schedules.moscowNoon.id,
     shopId: shops.moscow.id, startedAt: minutesAgo(5), status: 'in_progress', tags: moscowTags,
   });
-  await ensureReports(repositories, shops.irkutsk.id, guardIrkutsk.id,
+  const lockedActive = await ensurePatrol(repositories, {
+    completedPointCount: 0,
+    dueAt: minutesAhead(70),
+    employeeId: guardIrkutsk.id,
+    marker: `${SEED_MARKER}:active-locked`,
+    openPointArrivedAt: new Date(seedNow.getTime() - 30_000),
+    openPointIndex: 0,
+    openPointStatus: PatrolPointVisitStatus.ARRIVED,
+    points: irkutskPoints,
+    routeId: routes.irkutskInternal.id,
+    scheduleId: schedules.irkutskMorning.id,
+    shopId: shops.irkutsk.id,
+    startedAt: minutesAgo(1),
+    status: 'in_progress',
+    tags: irkutskTags,
+  });
+  const pending = await ensurePatrol(repositories, {
+    completedPointCount: 0,
+    dueAt: minutesAhead(180),
+    employeeId: guardMoscow.id,
+    marker: `${SEED_MARKER}:pending`,
+    points: moscowPoints,
+    routeId: routes.moscowInternal.id,
+    scheduleId: schedules.moscowNoon.id,
+    shopId: shops.moscow.id,
+    status: 'pending',
+    tags: moscowTags,
+  });
+  const reports = await ensureReports(repositories, shops.irkutsk.id, guardIrkutsk.id,
     history[0], routes.irkutskInternal.id, schedules.irkutskMorning.id);
+  const anonymousAppeals = await ensureAnonymousAppeals(repositories.anonymousAppeals, shops);
 
   return {
+    anonymousAppeals: Object.fromEntries(
+      Object.entries(anonymousAppeals).map(([key, appeal]) => [key, appeal.id]),
+    ),
     credentials: Object.fromEntries(Object.entries(users).map(([key, user]) => [key, user.accessKey])),
     ids: {
-      activePatrolId: active.id, fastPatrolId: fastPatrol.id, overduePatrolId: overdue.id,
+      activePatrolId: active.id,
+      activeLockedPatrolId: lockedActive.id,
+      archivedPointId,
+      cancelledPatrolId: cancelled.id,
+      fastPatrolId: fastPatrol.id,
+      overduePatrolId: overdue.id,
+      pendingPatrolId: pending.id,
+      suspiciousFastPatrolId: suspiciousPatrol.id,
       timingRouteId: routes.irkutskInternal.id,
     },
     nfcUids: {
@@ -265,6 +379,7 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
       moscow: moscowTags.map((tag) => tag.uid),
     },
     shops: Object.fromEntries(Object.entries(shops).map(([key, shop]) => [key, shop.id])),
+    reports: Object.fromEntries(Object.entries(reports).map(([key, report]) => [key, report.id])),
     timingProfile: { averageMinutes: 20, sampleCount: historyDurations.length },
   };
 }
@@ -352,6 +467,23 @@ async function ensurePoints(repository: Repository<PatrolPointEntity>, shopId: s
   return result;
 }
 
+async function ensureArchivedPoint(repository: Repository<PatrolPointEntity>, shopId: string): Promise<string> {
+  const name = 'Archived demo point';
+  const existing = await repository.findOne({ where: { name, shopId }, withDeleted: true });
+  if (existing?.deletedAt !== undefined) await repository.restore(existing.id);
+  const point = await repository.save(repository.create({
+    description: 'Archived control point for restore scenarios',
+    id: existing?.id,
+    isActive: false,
+    name,
+    nfcTagId: null,
+    shopId,
+    sortOrder: 99,
+  }));
+  await repository.softDelete(point.id);
+  return point.id;
+}
+
 async function ensureRoute(repositories: Repositories, shopId: string, name: string, category: PatrolRouteEntity['category'], points: PatrolPointEntity[]): Promise<PatrolRouteEntity> {
   const existing = await repositories.routes.findOne({ where: { name, shopId } });
   const route = await repositories.routes.save(repositories.routes.create({
@@ -376,7 +508,7 @@ async function ensurePatrol(repositories: Repositories, input: PatrolSeed): Prom
   const existing = await repositories.patrols.findOne({ where: { notes: input.marker } });
   const patrol = await repositories.patrols.save(repositories.patrols.create({
     cancellationReason: input.cancellationReason,
-    cancelledAt: input.status === 'cancelled' ? input.completedAt : undefined,
+    cancelledAt: input.cancelledAt,
     completedAt: input.completedAt, dueAt: input.dueAt, employeeId: input.employeeId,
     id: existing?.id, notes: input.marker, routeId: input.routeId,
     scannedPoints: input.completedPointCount, scheduleId: input.scheduleId,
@@ -386,27 +518,41 @@ async function ensurePatrol(repositories: Repositories, input: PatrolSeed): Prom
   await repositories.events.delete({ patrolId: patrol.id });
   await repositories.visits.delete({ patrolId: patrol.id });
 
-  const durationMs = (input.completedAt?.getTime() ?? seedNow.getTime()) - input.startedAt.getTime();
+  const hasVisits = input.completedPointCount > 0 || input.openPointIndex !== undefined;
+  if (hasVisits && input.startedAt === undefined) {
+    throw new Error(`Patrol ${input.marker} requires startedAt when visits are seeded`);
+  }
+  const startedAt = input.startedAt ?? seedNow;
+  const durationMs = (input.completedAt?.getTime() ?? seedNow.getTime()) - startedAt.getTime();
   const stepMs = Math.max(3 * MINUTE_MS, Math.floor(durationMs / Math.max(input.points.length, 1)));
   for (let index = 0; index < input.completedPointCount; index += 1) {
     await ensureVisit(repositories, patrol, input.points[index], input.tags[index],
-      new Date(input.startedAt.getTime() + index * stepMs + MINUTE_MS), true);
+      new Date(startedAt.getTime() + index * stepMs + MINUTE_MS), true);
   }
   if (input.openPointIndex !== undefined) {
     await ensureVisit(repositories, patrol, input.points[input.openPointIndex], input.tags[input.openPointIndex],
-      new Date(seedNow.getTime() - 3 * MINUTE_MS), false);
+      input.openPointArrivedAt ?? new Date(seedNow.getTime() - 3 * MINUTE_MS), false,
+      input.openPointStatus ?? PatrolPointVisitStatus.READY_TO_DEPART);
   }
   return patrol;
 }
 
-async function ensureVisit(repositories: Repositories, patrol: PatrolEntity, point: PatrolPointEntity | undefined, tag: NfcTagEntity | undefined, arrivedAt: Date, completed: boolean): Promise<void> {
+async function ensureVisit(
+  repositories: Repositories,
+  patrol: PatrolEntity,
+  point: PatrolPointEntity | undefined,
+  tag: NfcTagEntity | undefined,
+  arrivedAt: Date,
+  completed: boolean,
+  activeStatus: PatrolPointVisitStatus = PatrolPointVisitStatus.READY_TO_DEPART,
+): Promise<void> {
   if (point === undefined || tag === undefined) return;
   const departedAt = new Date(arrivedAt.getTime() + 90_000);
   const visit = await repositories.visits.save(repositories.visits.create({
     arrivedAt, departedAt: completed ? departedAt : undefined,
     dwellSeconds: completed ? 90 : undefined, lockedUntil: departedAt,
     patrolId: patrol.id, patrolPointId: point.id,
-    status: completed ? PatrolPointVisitStatus.COMPLETED : PatrolPointVisitStatus.READY_TO_DEPART,
+    status: completed ? PatrolPointVisitStatus.COMPLETED : activeStatus,
   }));
   const arrival = await saveEvent(repositories.events, patrol, point, tag, visit.id, PatrolScanAction.ARRIVE, arrivedAt);
   visit.arrivalEventId = arrival.id;
@@ -415,6 +561,22 @@ async function ensureVisit(repositories: Repositories, patrol: PatrolEntity, poi
     visit.departureEventId = departure.id;
   }
   await repositories.visits.save(visit);
+}
+
+async function ensureEventVariants(repository: Repository<PatrolEventEntity>, patrolId: string): Promise<void> {
+  const events = await repository.find({ order: { scannedAt: 'ASC' }, where: { patrolId } });
+  const lateSyncEvent = events[0];
+  if (lateSyncEvent !== undefined) {
+    lateSyncEvent.clientLocalId = '00000000-0000-4000-8000-000000000301';
+    lateSyncEvent.lateSync = true;
+    lateSyncEvent.receivedAt = new Date(lateSyncEvent.scannedAt.getTime() + 2 * 60 * MINUTE_MS);
+    await repository.save(lateSyncEvent);
+  }
+  const deactivatedPointEvent = events[1];
+  if (deactivatedPointEvent !== undefined) {
+    deactivatedPointEvent.pointDeactivatedAfterScan = true;
+    await repository.save(deactivatedPointEvent);
+  }
 }
 
 function saveEvent(repository: Repository<PatrolEventEntity>, patrol: PatrolEntity, point: PatrolPointEntity, tag: NfcTagEntity, pointVisitId: string, scanAction: PatrolScanAction, scannedAt: Date): Promise<PatrolEventEntity> {
@@ -440,16 +602,32 @@ async function ensureTimingProfile(repository: Repository<RouteTimingProfileEnti
   }));
 }
 
-async function ensureIncident(repository: Repository<PatrolIncidentEntity>, patrol: PatrolEntity, type: PatrolIncidentType, message: string, expectedSeconds?: number, actualSeconds?: number): Promise<void> {
+async function ensureIncident(
+  repository: Repository<PatrolIncidentEntity>,
+  patrol: PatrolEntity,
+  type: PatrolIncidentType,
+  message: string,
+  expectedSeconds?: number,
+  actualSeconds?: number,
+  points: Pick<PatrolIncidentEntity, 'fromPatrolPointId' | 'toPatrolPointId'> = {},
+): Promise<void> {
   const existing = await repository.findOne({ where: { patrolId: patrol.id, type } });
   await repository.save(repository.create({
-    actualSeconds, expectedSeconds, id: existing?.id, message,
+    ...points, actualSeconds, expectedSeconds, id: existing?.id, message,
     patrolId: patrol.id, shopId: patrol.shopId, type,
   }));
 }
 
-async function ensureReports(repositories: Repositories, shopId: string, employeeId: string, patrol: PatrolEntity | undefined, routeId: string, scheduleId: string): Promise<void> {
+async function ensureReports(
+  repositories: Repositories,
+  shopId: string,
+  employeeId: string,
+  patrol: PatrolEntity | undefined,
+  routeId: string,
+  scheduleId: string,
+): Promise<Record<string, PatrolReportEntity>> {
   const types: PatrolReportType[] = ['photo_report', 'morning', 'closing', 'sunday', 'heating', 'evacuation'];
+  const result: Record<string, PatrolReportEntity> = {};
   for (const reportType of types) {
     const comment = `${SEED_MARKER}:${reportType}`;
     const existing = await repositories.reports.findOne({ where: { comment } });
@@ -460,8 +638,85 @@ async function ensureReports(repositories: Repositories, shopId: string, employe
       reportType, routeId, scheduleId, shopId, status,
       submittedAt: status === 'submitted' ? minutesAgo(30) : undefined,
     }));
+    result[`${reportType}:${status}`] = report;
     if (reportType === 'photo_report') await ensureReportPhoto(repositories, report, employeeId);
   }
+  const cancelledComment = `${SEED_MARKER}:closing:cancelled`;
+  const existingCancelled = await repositories.reports.findOne({ where: { comment: cancelledComment } });
+  result['closing:cancelled'] = await repositories.reports.save(repositories.reports.create({
+    comment: cancelledComment,
+    employeeId,
+    fields: { cancellationReason: 'Created to test the cancelled report state', seed: true },
+    id: existingCancelled?.id,
+    patrolId: patrol?.id,
+    period: 'evening',
+    reportType: 'closing',
+    routeId,
+    scheduleId,
+    shopId,
+    status: 'cancelled',
+  }));
+  return result;
+}
+
+async function ensureAnonymousAppeals(
+  repository: Repository<AnonymousAppealEntity>,
+  shops: Record<string, ShopEntity>,
+): Promise<Record<string, AnonymousAppealEntity>> {
+  const inputs: Array<{
+    category: AnonymousAppealCategory;
+    createdAt: Date;
+    message: string;
+    shop: ShopEntity | undefined;
+    status: AnonymousAppealStatus;
+  }> = [
+    {
+      category: 'message',
+      createdAt: daysAgo(0, 7),
+      message: `[${SEED_MARKER}:anonymous:message:new] General anonymous message for control service`,
+      shop: shops.irkutsk,
+      status: 'new',
+    },
+    {
+      category: 'complaint',
+      createdAt: daysAgo(1, 12),
+      message: `[${SEED_MARKER}:anonymous:complaint:in-review] Complaint awaiting inspector decision`,
+      shop: shops.moscow,
+      status: 'in_review',
+    },
+    {
+      category: 'safety',
+      createdAt: daysAgo(3, 9),
+      message: `[${SEED_MARKER}:anonymous:safety:resolved] Resolved safety concern near an evacuation exit`,
+      shop: shops.irkutsk,
+      status: 'resolved',
+    },
+    {
+      category: 'other',
+      createdAt: daysAgo(8, 16),
+      message: `[${SEED_MARKER}:anonymous:other:archived] Archived anonymous suggestion`,
+      shop: shops.moscow,
+      status: 'archived',
+    },
+  ];
+  const result: Record<string, AnonymousAppealEntity> = {};
+  for (const input of inputs) {
+    if (input.shop === undefined) throw new Error('Anonymous appeal seed shop was not created');
+    const existing = await repository.findOne({ where: { message: input.message } });
+    const appeal = await repository.save(repository.create({
+      category: input.category,
+      createdAt: input.createdAt,
+      deviceId: `scenario-${input.category}-device`,
+      id: existing?.id,
+      ipAddress: '127.0.0.1',
+      message: input.message,
+      shopId: input.shop.id,
+      status: input.status,
+      updatedAt: input.createdAt,
+    }));
+    result[`${input.category}:${input.status}`] = appeal;
+  }
+  return result;
 }
 
 async function ensureReportPhoto(repositories: Repositories, report: PatrolReportEntity, uploadedBy: string): Promise<void> {

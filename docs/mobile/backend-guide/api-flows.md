@@ -11,14 +11,14 @@
 
 ## 2. Вход универсального Настройщика
 
-1. Показать отдельный экран входа Настройщика.
-2. Запросить ключ доступа и ФИО реального исполнителя.
-3. Вызвать `POST /api/v1/auth/universal-route-setter/login`.
+1. На общем экране вызвать `POST /api/v1/auth/login` с ключом и `deviceId`.
+2. При ошибке `AUTH_ACTOR_FULL_NAME_REQUIRED` показать второй шаг с вводом ФИО.
+3. Вызвать `POST /api/v1/auth/universal-route-setter/login` с тем же ключом, `deviceId` и ФИО.
 4. Сохранить токены, `authorizationId` и `authorizationFullName`.
 5. Вызвать `GET /api/v1/mobile/me`.
 6. Открыть сценарий настройки маршрутов.
 
-Обычный `/auth/login` для универсальной учетной записи вернет ошибку.
+Нельзя определять универсальный ключ по префиксу или тексту ошибки: используется только поле `code`.
 
 ## 3. Выбор магазина СК
 
@@ -73,6 +73,9 @@ GET /api/v1/mobile/patrols/active/nfc-wait-state
 
 Если `mode = waiting_for_nfc` или `mode = waiting_for_departure`, экран обхода должен сам включить foreground NFC listening. Отдельная кнопка "сканировать" по ТЗ 0.3.0 не нужна.
 
+Поле `pointDwellSeconds` из wait-state задает минимальное время пребывания на точке. Оно является
+источником для локального таймера вместо прошитого значения.
+
 При чтении метки отправить событие в `scanContract.endpoint`:
 
 ```json
@@ -126,6 +129,7 @@ Body:
 
 ```json
 {
+  "clientLocalId": "<local UUID persisted until successful sync>",
   "expectedPatrolPointId": "<expectedPoint.id>",
   "attemptedPatrolPointId": "<scannedPoint.id>",
   "nfcUid": "04a1b2c3d4e5f6",
@@ -133,6 +137,10 @@ Body:
   "deviceId": "android-device-01"
 }
 ```
+
+Повторный запрос должен использовать тот же `clientLocalId`. Ответ `204` означает, что попытка
+принята либо уже была принята ранее, и является конечным ответом для удаления записи из очереди.
+Backend принимает позднюю доставку также после перехода обхода в `completed` или `cancelled`.
 
 ## 8. Offline sync NFC
 

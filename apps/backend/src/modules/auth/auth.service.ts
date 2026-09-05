@@ -214,6 +214,7 @@ export class AuthService {
       throw error;
     }
 
+    const user = (await this.usersService.findEntityById(payload.sub)) ?? null;
     const tokenHash = hashToken(dto.refreshToken);
     const storedTokenHash = await this.refreshTokenStore.get(payload.sub, dto.deviceId);
     const auditToken = await this.refreshTokensRepository.findValidByHash(tokenHash, new Date());
@@ -222,13 +223,15 @@ export class AuthService {
       await this.recordAuthAuditSafely('auth.refresh.failure', {
         deviceId: dto.deviceId,
         ipAddress,
-        meta: { reason: 'session_mismatch', username: payload.username },
-        userId: payload.sub,
+        meta: {
+          reason: 'session_mismatch',
+          tokenSubject: payload.sub,
+          username: payload.username,
+        },
+        userId: user?.id ?? null,
       });
       throw new InvalidCredentialsError();
     }
-
-    const user = await this.usersService.findEntityById(payload.sub);
 
     if (user === null || !user.isActive || user.sessionVersion !== payload.sessionVersion) {
       await this.recordAuthAuditSafely('auth.refresh.failure', {
@@ -237,9 +240,10 @@ export class AuthService {
         meta: {
           reason:
             user === null ? 'user_not_found' : !user.isActive ? 'inactive_user' : 'session_version_changed',
+          tokenSubject: payload.sub,
           username: payload.username,
         },
-        userId: payload.sub,
+        userId: user?.id ?? null,
       });
       throw new InvalidCredentialsError();
     }
@@ -307,6 +311,7 @@ export class AuthService {
   async logout(dto: LogoutDto, ipAddress?: string): Promise<{ success: true }> {
     const payload = this.verifyRefreshToken(dto.refreshToken);
     const tokenHash = hashToken(dto.refreshToken);
+    const user = (await this.usersService.findEntityById(payload.sub)) ?? null;
 
     await this.refreshTokensRepository.revokeByHash(tokenHash, new Date());
     await this.refreshTokenStore.revoke(payload.sub, dto.deviceId);
@@ -319,9 +324,10 @@ export class AuthService {
       meta: {
         authorizationFullName: payload.authorizationFullName,
         authorizationId: payload.authorizationId,
+        tokenSubject: payload.sub,
         username: payload.username,
       },
-      userId: payload.sub,
+      userId: user?.id ?? null,
     });
 
     return { success: true };

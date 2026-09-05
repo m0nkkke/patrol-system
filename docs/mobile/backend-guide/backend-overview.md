@@ -62,7 +62,18 @@ Refresh-токен ротируется. После успешного refresh �
 
 ## Универсальный Настройщик
 
-Универсальная учетная запись Настройщика не входит через обычный `/auth/login`. Для нее используется отдельный сценарный endpoint:
+Mobile начинает вход всех ролей через обычный `/auth/login`. Для активного универсального
+Настройщика этот endpoint не выдает токены, а возвращает `400`:
+
+```json
+{
+  "code": "AUTH_ACTOR_FULL_NAME_REQUIRED",
+  "message": "Actor full name is required",
+  "statusCode": 400
+}
+```
+
+После challenge приложение показывает второй шаг с ФИО и вызывает сценарный endpoint:
 
 ```http
 POST /api/v1/auth/universal-route-setter/login
@@ -91,7 +102,8 @@ Body:
 
 Практический смысл: учетная запись общая, но каждое использование привязано к конкретному введенному ФИО и уникальному `authorizationId`. Backend добавляет эти поля в audit log для последующих действий.
 
-Для mobile это означает отдельный экран входа Настройщика: ключ доступа, deviceId, обязательное ФИО исполнителя.
+Для mobile это означает один начальный экран и второй шаг с обязательным ФИО исполнителя только
+после `AUTH_ACTOR_FULL_NAME_REQUIRED`.
 
 ## Роли и capabilities
 
@@ -171,3 +183,10 @@ Backend пишет защищенный audit log для изменяющих з
 ## Inspector Web API
 
 `GET /api/v1/control/shops/:shopId/overview` returns the inspector shop card with recent patrols, triggers, staff and report summary. This is a web/backend API for `inspector` and `admin`; the mobile guard flow does not use it.
+
+Полный список сотрудников для рабочего места Проверяющего:
+
+- `GET /api/v1/control/staff` с `shopId`, `role`, `isActive`, `search`, `page`, `limit`, `sort`;
+- `GET /api/v1/control/staff/:id` с основным и дополнительными назначениями.
+
+Ответ является безопасным read model и не содержит ключей, сессий, push-токенов и device ID.

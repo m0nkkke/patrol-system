@@ -19,6 +19,29 @@ describe('AuditLogService', () => {
     service = new AuditLogService(repository as unknown as AuditLogRepository);
   });
 
+  it('retries an audit write without userId after a foreign key violation', async () => {
+    repository.create
+      .mockRejectedValueOnce({ code: '23503' })
+      .mockResolvedValueOnce(createAuditLog());
+
+    await expect(
+      service.recordSafely({
+        action: 'auth.logout.success',
+        meta: { username: 'removed.user' },
+        userId: '00000000-0000-4000-8000-000000000001',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(repository.create).toHaveBeenNthCalledWith(2, {
+      action: 'auth.logout.success',
+      meta: {
+        unresolvedUserId: '00000000-0000-4000-8000-000000000001',
+        username: 'removed.user',
+      },
+      userId: null,
+    });
+  });
+
   it('returns audit log for admin', async () => {
     repository.findMany.mockResolvedValue([[createAuditLog()], 1]);
 

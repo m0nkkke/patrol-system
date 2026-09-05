@@ -7,7 +7,8 @@
 `audit_log`:
 
 - `id` — BIGSERIAL;
-- `user_id` — пользователь, выполнивший действие;
+- `user_id` — пользователь, выполнивший действие; nullable для неавторизованных событий и токенов
+  удалённых пользователей;
 - `action` — HTTP-действие, например `POST /shops`;
 - `entity_type` — первый сегмент API-ресурса;
 - `entity_id` — UUID сущности из route params или ответа;
@@ -41,6 +42,10 @@ Auth-сценарии пишутся точечно внутри `AuthService`:
 - `auth.logout.success`.
 
 Для `accessKey` сохраняется только короткий fingerprint, сам ключ в журнал не попадает.
+
+Для `refresh/logout` по устаревшему токену несуществующего пользователя `user_id` записывается как
+`NULL`, а UUID из JWT сохраняется в `meta.tokenSubject`. Если пользователь исчез между проверкой и
+INSERT, audit writer повторяет запись без FK и добавляет `meta.unresolvedUserId`.
 
 `meta` содержит:
 

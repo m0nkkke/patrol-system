@@ -28,8 +28,24 @@ export class AuditLogService {
     try {
       await this.record(data);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.stack ?? error.message : String(error);
-      this.logger.error('Failed to write audit log event', message);
+      if (data.userId != null && isForeignKeyViolation(error)) {
+        try {
+          await this.record({
+            ...data,
+            meta: {
+              ...(data.meta ?? {}),
+              unresolvedUserId: data.userId,
+            },
+            userId: null,
+          });
+          return;
+        } catch (retryError: unknown) {
+          this.logWriteFailure(retryError);
+          return;
+        }
+      }
+
+      this.logWriteFailure(error);
     }
   }
 
@@ -62,6 +78,20 @@ export class AuditLogService {
 
     return auditLog;
   }
+
+  private logWriteFailure(error: unknown): void {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    this.logger.error('Failed to write audit log event', message);
+  }
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23503'
+  );
 }
 
 function assertCanAccessAuditLog(actor: AuthenticatedUser): void {
