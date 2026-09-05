@@ -694,6 +694,55 @@ describe('PatrolsService', () => {
     expect(notificationsService.notifyPatrolIncident).not.toHaveBeenCalled();
   });
 
+  it.each(['completed', 'cancelled'] as const)(
+    'accepts an idempotent late missed point attempt for a %s patrol',
+    async (status) => {
+      const patrol = createPatrol({ status });
+      patrolsRepository.findById.mockResolvedValue(patrol);
+      patrolPointsService.findOne
+        .mockResolvedValueOnce(createPatrolPoint({ id: 'point-1', sortOrder: 1 }))
+        .mockResolvedValueOnce(createPatrolPoint({ id: 'point-2', sortOrder: 2 }));
+
+      await expect(
+        service.recordMissedPointAttempt(patrol.id, {
+          attemptedPatrolPointId: 'point-2',
+          clientLocalId: '11111111-1111-4111-8111-111111111111',
+          deviceId: 'device-1',
+          expectedPatrolPointId: 'point-1',
+          nfcUid: '04tag2',
+          scannedAt: '2026-06-19T10:05:00.000Z',
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(patrolsRepository.createPatrolIncident).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientLocalId: '11111111-1111-4111-8111-111111111111',
+          patrolId: patrol.id,
+          type: PatrolIncidentType.MISSED_POINT,
+        }),
+      );
+      expect(notificationsService.notifyPatrolIncident).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('rejects a missed point attempt before the patrol starts', async () => {
+    const patrol = createPatrol({ status: 'pending' });
+    patrolsRepository.findById.mockResolvedValue(patrol);
+
+    await expect(
+      service.recordMissedPointAttempt(patrol.id, {
+        attemptedPatrolPointId: 'point-2',
+        clientLocalId: '11111111-1111-4111-8111-111111111111',
+        deviceId: 'device-1',
+        expectedPatrolPointId: 'point-1',
+        nfcUid: '04tag2',
+        scannedAt: '2026-06-19T10:05:00.000Z',
+      }),
+    ).rejects.toMatchObject({ code: 'PATROL_NOT_IN_PROGRESS' });
+
+    expect(patrolsRepository.createPatrolIncident).not.toHaveBeenCalled();
+  });
+
   it('creates route timing incident after completed patrol exceeds route profile', async () => {
     const patrol = createPatrol({
       routeId: 'route-id',

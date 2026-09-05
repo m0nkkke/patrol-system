@@ -1,7 +1,8 @@
 node_modules/
 dist/
 coverage/
-storage/
+/storage/
+/apps/backend/storage/
 .env
 .env.*
 !.env.example

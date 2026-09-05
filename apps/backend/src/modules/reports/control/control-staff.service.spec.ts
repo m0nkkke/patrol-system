@@ -60,7 +60,7 @@ describe('ControlStaffService', () => {
     );
   });
 
-  it('returns details when an employee assignment intersects inspector shops', async () => {
+  it('returns only intersecting assignments to an inspector', async () => {
     const primaryShop = createShop();
     const assignedShop = createShop({
       id: '00000000-0000-4000-8000-000000000102',
@@ -75,8 +75,32 @@ describe('ControlStaffService', () => {
       createActor('inspector', { shopIds: [assignedShop.id] }),
     );
 
-    expect(result.shops).toHaveLength(2);
-    expect(result.shops.map((shop) => shop.id)).toEqual([primaryShop.id, assignedShop.id]);
+    expect(result.primaryShopId).toBeNull();
+    expect(result.shops).toEqual([
+      expect.objectContaining({ id: assignedShop.id }),
+    ]);
+  });
+
+  it('limits inspector list response shops to the actor scope', async () => {
+    const visibleShop = createShop();
+    const hiddenShop = createShop({
+      id: '00000000-0000-4000-8000-000000000102',
+      name: 'Hidden shop',
+    });
+    repository.findMany.mockResolvedValue([
+      [createUser({ shop: visibleShop, shops: [visibleShop, hiddenShop] })],
+      1,
+    ]);
+
+    const result = await service.findMany(
+      { limit: 20, page: 1 },
+      createActor('inspector', { shopIds: [visibleShop.id] }),
+    );
+
+    expect(result.items[0]).toMatchObject({
+      primaryShopId: visibleShop.id,
+      shops: [{ id: visibleShop.id }],
+    });
   });
 
   it('rejects details outside inspector shop scope', async () => {

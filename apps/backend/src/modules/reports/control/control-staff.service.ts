@@ -24,7 +24,7 @@ export class ControlStaffService {
     const [users, total] = await this.repository.findMany(query, allowedShopIds);
 
     return {
-      items: users.map(toResponseDto),
+      items: users.map((user) => toResponseDto(user, allowedShopIds)),
       limit: query.limit,
       page: query.page,
       total,
@@ -39,35 +39,50 @@ export class ControlStaffService {
       throw new EntityNotFoundError('ControlStaff', id);
     }
 
-    if (actor.role === 'inspector' && !hasShopIntersection(user, getActorShopIds(actor))) {
+    const allowedShopIds = actor.role === 'inspector' ? getActorShopIds(actor) : undefined;
+    if (allowedShopIds !== undefined && !hasShopIntersection(user, allowedShopIds)) {
       throw new DomainValidationError(
         'CONTROL_STAFF_FORBIDDEN',
         'User cannot access staff outside assigned shops',
       );
     }
 
-    return toResponseDto(user);
+    return toResponseDto(user, allowedShopIds);
   }
 }
 
-function toResponseDto(user: UserEntity): ControlStaffResponseDto {
+function toResponseDto(
+  user: UserEntity,
+  allowedShopIds?: string[],
+): ControlStaffResponseDto {
   const shops = new Map<string, ControlStaffResponseDto['shops'][number]>();
 
-  if (user.shop !== undefined) {
+  if (user.shop !== undefined && canExposeShop(user.shop.id, allowedShopIds)) {
     shops.set(user.shop.id, toShopDto(user.shop));
   }
   for (const shop of user.shops ?? []) {
-    shops.set(shop.id, toShopDto(shop));
+    if (canExposeShop(shop.id, allowedShopIds)) {
+      shops.set(shop.id, toShopDto(shop));
+    }
   }
+
+  const primaryShopId = user.shopId ?? null;
 
   return {
     fullName: user.fullName,
     id: user.id,
     isActive: user.isActive,
-    primaryShopId: user.shopId ?? null,
+    primaryShopId:
+      primaryShopId !== null && canExposeShop(primaryShopId, allowedShopIds)
+        ? primaryShopId
+        : null,
     role: user.role,
     shops: [...shops.values()],
   };
+}
+
+function canExposeShop(shopId: string, allowedShopIds?: string[]): boolean {
+  return allowedShopIds === undefined || allowedShopIds.includes(shopId);
 }
 
 function toShopDto(shop: NonNullable<UserEntity['shop']>): ControlStaffResponseDto['shops'][number] {

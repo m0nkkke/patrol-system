@@ -616,10 +616,10 @@ export class PatrolsService {
 
     const patrol = await this.findOne(patrolId);
 
-    if (patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
+    if (patrol.status === 'pending') {
       throw new DomainValidationError(
         'PATROL_NOT_IN_PROGRESS',
-        'Cannot report missed point attempt for inactive patrol',
+        'Cannot report missed point attempt before patrol starts',
       );
     }
 

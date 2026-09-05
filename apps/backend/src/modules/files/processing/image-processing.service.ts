@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import sharp from 'sharp';
+import type sharpFactory from 'sharp';
 
 import { DomainValidationError } from '../../../common/errors/domain-validation.error';
 import { AppConfig } from '../../../config/app.config';
+
+// sharp 0.35 is CommonJS at runtime in the current backend build.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-var-requires
+const sharp: typeof sharpFactory = require('sharp');
 
 export type ProcessedImage = {
   buffer: Buffer;
