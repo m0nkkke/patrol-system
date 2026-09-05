@@ -106,6 +106,7 @@ Seed предназначен только для development и тестовы�
 
 - все состояния обхода: `pending`, `in_progress`, `completed`, `overdue`, `cancelled`;
 - оба состояния ожидания повторного NFC-сканирования: заблокированная точка и `ready_to_depart`;
+- индивидуальные выдержки точек маршрута, включая граничные значения `0` и `120` секунд;
 - завершенные `arrive`/`depart` посещения, поздно синхронизированное событие и событие деактивированной после сканирования точки;
 - все типы инцидентов: `short_interval`, `long_interval`, `missed_point`, `patrol_overdue`, `point_dwell_too_short`, `route_suspiciously_fast`, `route_too_fast`, `route_too_slow`, `schedule_deviation`;
 - все шесть типов операционных отчетов и статусы `draft`, `submitted`, `cancelled`;

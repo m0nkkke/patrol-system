@@ -10,6 +10,7 @@ import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolPointVisitEntity } from './entities/patrol-point-visit.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
+import { PatrolRoutePointEntity } from './entities/patrol-route-point.entity';
 import { PatrolEntity } from './entities/patrol.entity';
 import { RouteTimingProfileEntity } from './entities/route-timing-profile.entity';
 import { PatrolRoutesService } from './routes/patrol-routes.service';
@@ -283,6 +284,7 @@ describe('PatrolsService', () => {
       id: 'point-2',
       name: 'Point 2',
       nfcTagId: 'tag-2',
+      pointDwellSeconds: 0,
       photoFileId: 'photo-2',
       sortOrder: 2,
     });
@@ -306,7 +308,7 @@ describe('PatrolsService', () => {
       },
       mode: 'waiting_for_nfc',
       patrolId: patrol.id,
-      pointDwellSeconds: 90,
+      pointDwellSeconds: 0,
       routeId: 'route-id',
       scanContract: {
         endpoint: `/api/v1/mobile/patrols/${patrol.id}/point-visits/scan`,
@@ -467,7 +469,9 @@ describe('PatrolsService', () => {
     });
     patrolsRepository.findById.mockResolvedValue(createPatrol());
     patrolsRepository.findAcceptedEventByPatrolPointAndAction.mockResolvedValue(existingEvent);
-    patrolPointsService.findOne.mockResolvedValue(createPatrolPoint({ id: 'point-2', nfcTagId: 'tag-2' }));
+    patrolPointsService.findOne.mockResolvedValue(
+      createPatrolPoint({ id: 'point-2', nfcTagId: 'tag-2' }),
+    );
     patrolPointsService.findActiveTagByUid.mockResolvedValue({
       id: 'tag-2',
       isActive: true,
@@ -495,6 +499,42 @@ describe('PatrolsService', () => {
     expect(result).toEqual({ event: existingEvent, status: 'duplicate' });
     expect(patrolsRepository.createPatrolEvent).not.toHaveBeenCalled();
     expect(patrolsRepository.updateScanProgress).not.toHaveBeenCalled();
+  });
+
+  it('uses the route point dwell setting when an arrival starts a visit', async () => {
+    const scannedAt = new Date('2026-06-19T10:05:00.000Z');
+    const patrol = createPatrol({ routeId: 'route-id' });
+    const point = createPatrolPoint({ id: 'point-2', nfcTagId: 'tag-2' });
+    const visit = createPointVisit({ arrivedAt: scannedAt, lockedUntil: scannedAt });
+    const event = createEvent({ patrolPointId: point.id, scanAction: PatrolScanAction.ARRIVE });
+    patrolsRepository.findById.mockResolvedValue(patrol);
+    patrolPointsService.findOne.mockResolvedValue(point);
+    patrolRoutesService.assertPointInRoute.mockResolvedValue({
+      dwellSeconds: 0,
+      sortOrder: 2,
+    } as PatrolRoutePointEntity);
+    patrolPointsService.findActiveTagByUid.mockResolvedValue({
+      id: 'tag-2',
+      isActive: true,
+      uid: '04tag2',
+    } as Awaited<ReturnType<PatrolPointsService['findActiveTagByUid']>>);
+    patrolsRepository.createPointVisit.mockResolvedValue(visit);
+    patrolsRepository.createPatrolEvent.mockResolvedValue(event);
+
+    await service.recordEvent(patrol.id, {
+      deviceId: 'device-1',
+      nfcUid: '04TAG2',
+      patrolPointId: point.id,
+      scanAction: PatrolScanAction.ARRIVE,
+      scannedAt: scannedAt.toISOString(),
+    });
+
+    expect(patrolsRepository.createPointVisit).toHaveBeenCalledWith({
+      arrivedAt: scannedAt,
+      lockedUntil: scannedAt,
+      patrolId: patrol.id,
+      patrolPointId: point.id,
+    });
   });
 
   it('stores late offline sync event without changing patrol progress', async () => {
@@ -759,7 +799,10 @@ describe('PatrolsService', () => {
     patrolPointsService.findOne.mockResolvedValue(
       createPatrolPoint({ id: 'point-3', nfcTagId: 'tag-3', sortOrder: 3 }),
     );
-    patrolRoutesService.assertPointInRoute.mockResolvedValue(3);
+    patrolRoutesService.assertPointInRoute.mockResolvedValue({
+      dwellSeconds: 90,
+      sortOrder: 3,
+    } as PatrolRoutePointEntity);
     patrolPointsService.findActiveTagByUid.mockResolvedValue({
       id: 'tag-3',
       isActive: true,

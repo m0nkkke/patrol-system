@@ -79,6 +79,28 @@ describe('Control patrols API contract', () => {
         });
       });
   });
+
+  it('returns a pending patrol with startedAt null without failing duration calculation', async () => {
+    repository.findById.mockResolvedValue({
+      ...createPatrol(),
+      completedAt: null,
+      startedAt: null,
+      status: 'pending',
+    });
+    repository.findVisits.mockResolvedValue([]);
+
+    await request(app.getHttpServer())
+      .get('/api/v1/control/patrols/00000000-0000-4000-8000-000000000020')
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toMatchObject({
+          durationIsFinal: false,
+          durationSeconds: null,
+          startedAt: null,
+          status: 'pending',
+        });
+      });
+  });
 });
 
 function createPatrol(): PatrolEntity {

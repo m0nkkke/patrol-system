@@ -73,15 +73,28 @@ export class MobileService {
     return this.notificationsService.registerDevicePushToken(user.id, dto);
   }
 
-  startRouteSetup(shopId: string, dto: StartRouteSetupDto): ReturnType<ShopsService['startRouteSetup']> {
+  async startRouteSetup(
+    user: AuthenticatedUser,
+    shopId: string,
+    dto: StartRouteSetupDto,
+  ): ReturnType<ShopsService['startRouteSetup']> {
+    assertRouteSetterCanUseShop(user, shopId);
     return this.shopsService.startRouteSetup(shopId, dto);
   }
 
-  getRouteSetup(shopId: string): ReturnType<ShopsService['getRouteSetup']> {
+  async getRouteSetup(
+    user: AuthenticatedUser,
+    shopId: string,
+  ): ReturnType<ShopsService['getRouteSetup']> {
+    assertRouteSetterCanUseShop(user, shopId);
     return this.shopsService.getRouteSetup(shopId);
   }
 
-  resetRouteSetup(shopId: string): ReturnType<ShopsService['resetRouteSetup']> {
+  async resetRouteSetup(
+    user: AuthenticatedUser,
+    shopId: string,
+  ): ReturnType<ShopsService['resetRouteSetup']> {
+    assertRouteSetterCanUseShop(user, shopId);
     return this.shopsService.resetRouteSetup(shopId);
   }
 
@@ -120,16 +133,20 @@ export class MobileService {
 
     const shops = this.getAssignedShops(user);
     const plans = await Promise.all(
-      shops.map((shop) => this.patrolSchedulesService.getMobileSchedulePlanForShop(shop.id, user, days)),
+      shops.map((shop) =>
+        this.patrolSchedulesService.getMobileSchedulePlanForShop(shop.id, user, days),
+      ),
     );
-    const items = plans.flatMap((plan) => plan.items).sort((left, right) => {
-      const plannedStart = left.plannedStartAt.getTime() - right.plannedStartAt.getTime();
-      if (plannedStart !== 0) {
-        return plannedStart;
-      }
+    const items = plans
+      .flatMap((plan) => plan.items)
+      .sort((left, right) => {
+        const plannedStart = left.plannedStartAt.getTime() - right.plannedStartAt.getTime();
+        if (plannedStart !== 0) {
+          return plannedStart;
+        }
 
-      return left.shopName.localeCompare(right.shopName);
-    });
+        return left.shopName.localeCompare(right.shopName);
+      });
 
     return {
       days: Math.min(Math.max(days, 1), 31),
@@ -152,10 +169,7 @@ export class MobileService {
     return this.patrolsService.getNfcWaitState(patrol.id, user);
   }
 
-  getPatrolNfcWaitState(
-    user: AuthenticatedUser,
-    patrolId: string,
-  ): Promise<NfcWaitStateDto> {
+  getPatrolNfcWaitState(user: AuthenticatedUser, patrolId: string): Promise<NfcWaitStateDto> {
     return this.patrolsService.getNfcWaitState(patrolId, user);
   }
 
@@ -252,9 +266,14 @@ export class MobileService {
     const items: SyncPatrolEventResult[] = [];
 
     for (const syncEvent of dto.events) {
-      const result = await this.patrolsService.recordEventWithStatus(patrolId, syncEvent, ipAddress, {
-        clientLocalId: syncEvent.localId,
-      });
+      const result = await this.patrolsService.recordEventWithStatus(
+        patrolId,
+        syncEvent,
+        ipAddress,
+        {
+          clientLocalId: syncEvent.localId,
+        },
+      );
 
       items.push({
         localId: syncEvent.localId,
@@ -267,9 +286,11 @@ export class MobileService {
   }
 
   async scanNextRoutePoint(
+    user: AuthenticatedUser,
     shopId: string,
     dto: BindRoutePointNfcDto,
   ): ReturnType<ShopsService['bindRoutePointNfc']> {
+    assertRouteSetterCanUseShop(user, shopId);
     const state = await this.shopsService.getRouteSetup(shopId);
 
     if (state.expectedPoints === 0) {
@@ -325,5 +346,20 @@ function assertUserCanUseShop(user: AuthenticatedUser, shopId: string): void {
   throw new DomainValidationError(
     'MOBILE_SHOP_FORBIDDEN',
     'Selected shop is not assigned to current mobile user',
+  );
+}
+
+function assertRouteSetterCanUseShop(user: AuthenticatedUser, shopId: string): void {
+  if (user.role === 'admin' || user.role === 'route_setter') return;
+  if (
+    user.role === 'local_route_setter' &&
+    (user.shopId === shopId || user.shopIds?.includes(shopId) === true)
+  ) {
+    return;
+  }
+
+  throw new DomainValidationError(
+    'MOBILE_ROUTE_SETUP_FORBIDDEN',
+    'Route setter cannot configure this shop',
   );
 }

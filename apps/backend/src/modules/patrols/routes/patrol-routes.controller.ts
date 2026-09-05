@@ -1,7 +1,18 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { CreatePatrolRouteDto, UpdatePatrolRouteDto } from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
@@ -18,22 +29,31 @@ export class PatrolRoutesController {
   @Post()
   @Roles('admin', 'route_setter', 'local_route_setter')
   @ApiCreatedResponse({ description: 'Patrol route created' })
-  create(@Body() dto: CreatePatrolRouteDto): Promise<PatrolRouteEntity> {
-    return this.patrolRoutesService.create(dto);
+  create(
+    @Body() dto: CreatePatrolRouteDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolRouteEntity> {
+    return this.patrolRoutesService.create(dto, actor);
   }
 
   @Get('shop/:shopId')
   @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Patrol routes by shop' })
-  findByShop(@Param('shopId', ParseUUIDPipe) shopId: string): Promise<PatrolRouteEntity[]> {
-    return this.patrolRoutesService.findByShop(shopId);
+  findByShop(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolRouteEntity[]> {
+    return this.patrolRoutesService.findByShopForActor(shopId, actor);
   }
 
   @Get(':id')
   @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
   @ApiOkResponse({ description: 'Patrol route details' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<PatrolRouteEntity> {
-    return this.patrolRoutesService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolRouteEntity> {
+    return this.patrolRoutesService.findOneForActor(id, actor);
   }
 
   @Patch(':id')
@@ -42,14 +62,18 @@ export class PatrolRoutesController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePatrolRouteDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PatrolRouteEntity> {
-    return this.patrolRoutesService.update(id, dto);
+    return this.patrolRoutesService.update(id, dto, actor);
   }
 
   @Post(':id/archive')
   @Roles('admin', 'route_setter', 'local_route_setter')
   @ApiOkResponse({ description: 'Patrol route archived' })
-  archive(@Param('id', ParseUUIDPipe) id: string): Promise<PatrolRouteEntity> {
-    return this.patrolRoutesService.deactivate(id);
+  archive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolRouteEntity> {
+    return this.patrolRoutesService.deactivate(id, actor);
   }
 }

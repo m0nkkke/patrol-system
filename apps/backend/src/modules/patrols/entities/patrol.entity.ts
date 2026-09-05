@@ -65,13 +65,13 @@ export class PatrolEntity {
 
   @Index('idx_patrols_started_at')
   @Column({ name: 'started_at', nullable: true, type: 'timestamptz' })
-  startedAt?: Date;
+  startedAt?: Date | null;
 
   @Column({ name: 'completed_at', nullable: true, type: 'timestamptz' })
-  completedAt?: Date;
+  completedAt?: Date | null;
 
   @Column({ name: 'cancelled_at', nullable: true, type: 'timestamptz' })
-  cancelledAt?: Date;
+  cancelledAt?: Date | null;
 
   @Index('idx_patrols_due_at')
   @Column({ name: 'due_at', nullable: true, type: 'timestamptz' })

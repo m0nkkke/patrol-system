@@ -35,6 +35,9 @@ export class PatrolRoutePointEntity {
   @Column({ name: 'sort_order', type: 'smallint' })
   sortOrder: number = 0;
 
+  @Column({ default: 90, name: 'dwell_seconds', type: 'smallint' })
+  dwellSeconds: number = 90;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date = new Date();
 }

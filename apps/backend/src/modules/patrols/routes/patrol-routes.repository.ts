@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { PatrolRouteCategory } from '@patrol/shared';
+import { DEFAULT_PATROL_POINT_DWELL_SECONDS, PatrolRouteCategory } from '@patrol/shared';
 import { Repository } from 'typeorm';
 
 import { PatrolRoutePointEntity } from '../entities/patrol-route-point.entity';
@@ -11,6 +11,7 @@ type CreatePatrolRouteRecord = {
   isActive: boolean;
   name: string;
   pointIds: string[];
+  pointSettings?: Array<{ dwellSeconds: number; patrolPointId: string }>;
   shopId: string;
 };
 
@@ -19,6 +20,7 @@ type UpdatePatrolRouteRecord = {
   isActive?: boolean;
   name?: string;
   pointIds?: string[];
+  pointSettings?: Array<{ dwellSeconds: number; patrolPointId: string }>;
 };
 
 @Injectable()
@@ -39,7 +41,7 @@ export class PatrolRoutesRepository {
         shopId: data.shopId,
       }),
     );
-    await this.replacePoints(route.id, data.pointIds);
+    await this.replacePoints(route.id, data.pointIds, data.pointSettings);
 
     return this.findById(route.id) as Promise<PatrolRouteEntity>;
   }
@@ -67,7 +69,9 @@ export class PatrolRoutesRepository {
     });
 
     if (data.pointIds !== undefined) {
-      await this.replacePoints(id, data.pointIds);
+      await this.replacePoints(id, data.pointIds, data.pointSettings);
+    } else if (data.pointSettings !== undefined) {
+      await this.updatePointSettings(id, data.pointSettings);
     }
   }
 
@@ -84,7 +88,14 @@ export class PatrolRoutesRepository {
     return this.routePoints.findOne({ where: { patrolPointId, routeId } });
   }
 
-  private async replacePoints(routeId: string, pointIds: string[]): Promise<void> {
+  private async replacePoints(
+    routeId: string,
+    pointIds: string[],
+    pointSettings: Array<{ dwellSeconds: number; patrolPointId: string }> = [],
+  ): Promise<void> {
+    const dwellByPointId = new Map(
+      pointSettings.map((setting) => [setting.patrolPointId, setting.dwellSeconds]),
+    );
     await this.routePoints.delete({ routeId });
     await this.routePoints.save(
       pointIds.map((patrolPointId, index) =>
@@ -92,8 +103,22 @@ export class PatrolRoutesRepository {
           patrolPointId,
           routeId,
           sortOrder: index + 1,
+          dwellSeconds:
+            dwellByPointId.get(patrolPointId) ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
         }),
       ),
     );
+  }
+
+  private async updatePointSettings(
+    routeId: string,
+    pointSettings: Array<{ dwellSeconds: number; patrolPointId: string }>,
+  ): Promise<void> {
+    for (const setting of pointSettings) {
+      await this.routePoints.update(
+        { patrolPointId: setting.patrolPointId, routeId },
+        { dwellSeconds: setting.dwellSeconds },
+      );
+    }
   }
 }

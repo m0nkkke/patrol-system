@@ -70,8 +70,9 @@ export class MobileController {
   startRouteSetup(
     @Param('shopId', ParseUUIDPipe) shopId: string,
     @Body() dto: StartRouteSetupDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<MobileService['startRouteSetup']> {
-    return this.mobileService.startRouteSetup(shopId, dto);
+    return this.mobileService.startRouteSetup(actor, shopId, dto);
   }
 
   @Get('shops/:shopId/route-setup')
@@ -80,8 +81,9 @@ export class MobileController {
   @ApiOkResponse({ description: 'Mobile route setup state' })
   getRouteSetup(
     @Param('shopId', ParseUUIDPipe) shopId: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<MobileService['getRouteSetup']> {
-    return this.mobileService.getRouteSetup(shopId);
+    return this.mobileService.getRouteSetup(actor, shopId);
   }
 
   @Post('shops/:shopId/route-setup/scan')
@@ -92,8 +94,9 @@ export class MobileController {
   scanNextRoutePoint(
     @Param('shopId', ParseUUIDPipe) shopId: string,
     @Body() dto: BindRoutePointNfcDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<MobileService['scanNextRoutePoint']> {
-    return this.mobileService.scanNextRoutePoint(shopId, dto);
+    return this.mobileService.scanNextRoutePoint(actor, shopId, dto);
   }
 
   @Post('shops/:shopId/route-setup/reset')
@@ -103,8 +106,9 @@ export class MobileController {
   @ApiOkResponse({ description: 'Mobile route setup cancelled and reset' })
   resetRouteSetup(
     @Param('shopId', ParseUUIDPipe) shopId: string,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<MobileService['resetRouteSetup']> {
-    return this.mobileService.resetRouteSetup(shopId);
+    return this.mobileService.resetRouteSetup(actor, shopId);
   }
 
   @Get('shops')

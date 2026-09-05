@@ -6,6 +6,7 @@ import {
   FindPatrolIncidentsDto,
   FindPatrolsDto,
   NfcWaitStateDto,
+  DEFAULT_PATROL_POINT_DWELL_SECONDS,
   PatrolIncidentType,
   PatrolPointVisitStatus,
   PatrolScanAction,
@@ -31,7 +32,6 @@ import { ExpectedPatrolPointRecord, PatrolsRepository } from './patrols.reposito
 
 const MIN_INTERVAL_FACTOR = 0.5;
 const MAX_INTERVAL_FACTOR = 2;
-const DEFAULT_POINT_DWELL_SECONDS = 90;
 const ROUTE_TIMING_LOOKBACK_DAYS = 14;
 const ROUTE_TIMING_MIN_SAMPLE_COUNT = 5;
 const ROUTE_SUSPICIOUS_FAST_FACTOR = 0.5;
@@ -83,7 +83,9 @@ export class PatrolsService {
     }
 
     const schedule =
-      dto.scheduleId === undefined ? undefined : await this.patrolSchedulesService.findOne(dto.scheduleId);
+      dto.scheduleId === undefined
+        ? undefined
+        : await this.patrolSchedulesService.findOne(dto.scheduleId);
     const routeId = dto.routeId ?? schedule?.routeId;
 
     if (
@@ -163,10 +165,7 @@ export class PatrolsService {
       assertCanAccessPatrolShop(actor, shopId);
     }
 
-    const [items, total] = await this.patrolsRepository.findByShop(
-      shopId,
-      query,
-    );
+    const [items, total] = await this.patrolsRepository.findByShop(shopId, query);
 
     return {
       items,
@@ -183,8 +182,7 @@ export class PatrolsService {
   ): Promise<PaginatedPatrols> {
     await this.usersService.findOne(employeeId);
 
-    const inspectorShopIds =
-      actor.shopIds ?? (actor.shopId === undefined ? [] : [actor.shopId]);
+    const inspectorShopIds = actor.shopIds ?? (actor.shopId === undefined ? [] : [actor.shopId]);
 
     if (actor.role === 'inspector' && inspectorShopIds.length === 0) {
       throw new DomainValidationError(
@@ -334,7 +332,7 @@ export class PatrolsService {
               : 'inactive',
       patrolId: patrol.id,
       pointVisitStatus,
-      pointDwellSeconds: DEFAULT_POINT_DWELL_SECONDS,
+      pointDwellSeconds: expectedPoint?.pointDwellSeconds ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
       remainingLockSeconds,
       requiresForegroundNfcListening: true,
       routeId: patrol.routeId,
@@ -375,14 +373,19 @@ export class PatrolsService {
     }
 
     const point = await this.patrolPointsService.findOne(dto.patrolPointId);
-    const routeSortOrder =
+    const routePoint =
       patrol.routeId === undefined
-        ? point.sortOrder
+        ? null
         : await this.patrolRoutesService.assertPointInRoute(patrol.routeId, point.id);
+    const routeSortOrder = routePoint?.sortOrder ?? point.sortOrder;
+    const pointDwellSeconds = routePoint?.dwellSeconds ?? DEFAULT_PATROL_POINT_DWELL_SECONDS;
     const pointDeactivatedAfterScan = options.clientLocalId !== undefined && !point.isActive;
 
     if (point.shopId !== patrol.shopId) {
-      throw new DomainValidationError('PATROL_POINT_WRONG_SHOP', 'Patrol point belongs to another shop');
+      throw new DomainValidationError(
+        'PATROL_POINT_WRONG_SHOP',
+        'Patrol point belongs to another shop',
+      );
     }
 
     const tag =
@@ -402,11 +405,12 @@ export class PatrolsService {
       point.id,
     );
     const scanAction = dto.scanAction ?? inferScanAction(existingVisit?.status);
-    const existingActionEvent = await this.patrolsRepository.findAcceptedEventByPatrolPointAndAction(
-      patrol.id,
-      point.id,
-      scanAction,
-    );
+    const existingActionEvent =
+      await this.patrolsRepository.findAcceptedEventByPatrolPointAndAction(
+        patrol.id,
+        point.id,
+        scanAction,
+      );
 
     if (existingActionEvent !== null) {
       return { event: existingActionEvent, status: 'duplicate' };
@@ -446,7 +450,7 @@ export class PatrolsService {
       scanAction === PatrolScanAction.ARRIVE && !lateSync && !pointDeactivatedAfterScan
         ? await this.patrolsRepository.createPointVisit({
             arrivedAt: scannedAt,
-            lockedUntil: addSeconds(scannedAt, DEFAULT_POINT_DWELL_SECONDS),
+            lockedUntil: addSeconds(scannedAt, pointDwellSeconds),
             patrolId: patrol.id,
             patrolPointId: point.id,
           })
@@ -493,7 +497,7 @@ export class PatrolsService {
       const incident = await this.patrolsRepository.createPatrolIncident({
         actualSeconds:
           existingVisit === null ? undefined : secondsBetween(existingVisit.arrivedAt, scannedAt),
-        expectedSeconds: DEFAULT_POINT_DWELL_SECONDS,
+        expectedSeconds: pointDwellSeconds,
         fromPatrolPointId: point.id,
         message: `Point departure scan was rejected before lock expired`,
         patrolEventId: event.id,
@@ -567,12 +571,7 @@ export class PatrolsService {
     }
 
     const completedAt = new Date();
-    await this.patrolsRepository.markCompleted(
-      id,
-      completedAt,
-      patrol.notes,
-      dto.completionReport,
-    );
+    await this.patrolsRepository.markCompleted(id, completedAt, patrol.notes, dto.completionReport);
     await this.createBaselineIntervalsIfNeeded(patrol.id, patrol.shopId);
     await this.analyzeRouteTimingIncident(patrol, completedAt);
 
@@ -586,7 +585,11 @@ export class PatrolsService {
       return patrol;
     }
 
-    if (patrol.status !== 'pending' && patrol.status !== 'in_progress' && patrol.status !== 'overdue') {
+    if (
+      patrol.status !== 'pending' &&
+      patrol.status !== 'in_progress' &&
+      patrol.status !== 'overdue'
+    ) {
       throw new DomainValidationError('PATROL_CANNOT_BE_CANCELLED', 'Patrol cannot be cancelled');
     }
 
@@ -803,7 +806,7 @@ export class PatrolsService {
     completedAt: Date,
     patrolEvent?: PatrolEventEntity,
   ): Promise<void> {
-    if (patrol.routeId === undefined || patrol.startedAt === undefined) {
+    if (patrol.routeId == null || patrol.startedAt == null) {
       return;
     }
 
@@ -840,7 +843,11 @@ export class PatrolsService {
     const incident = await this.patrolsRepository.createPatrolIncident({
       actualSeconds,
       expectedSeconds: profile.averageTotalSeconds,
-      message: buildRouteTimingIncidentMessage(incidentType, actualSeconds, profile.averageTotalSeconds),
+      message: buildRouteTimingIncidentMessage(
+        incidentType,
+        actualSeconds,
+        profile.averageTotalSeconds,
+      ),
       patrolEventId: patrolEvent?.id,
       patrolId: patrol.id,
       shopId: patrol.shopId,
@@ -893,7 +900,10 @@ function secondsBetween(from: Date, to: Date): number {
 }
 
 function inferScanAction(status?: PatrolPointVisitStatus): PatrolScanAction {
-  if (status === PatrolPointVisitStatus.ARRIVED || status === PatrolPointVisitStatus.READY_TO_DEPART) {
+  if (
+    status === PatrolPointVisitStatus.ARRIVED ||
+    status === PatrolPointVisitStatus.READY_TO_DEPART
+  ) {
     return PatrolScanAction.DEPART;
   }
 

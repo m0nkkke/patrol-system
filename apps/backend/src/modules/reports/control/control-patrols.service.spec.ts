@@ -9,7 +9,13 @@ import { ControlPatrolsService } from './control-patrols.service';
 
 type RepositoryMock = Pick<
   ControlPatrolsRepository,
-  'findById' | 'findEvents' | 'findIncidents' | 'findMany' | 'findReports' | 'findTimingProfile' | 'findVisits'
+  | 'findById'
+  | 'findEvents'
+  | 'findIncidents'
+  | 'findMany'
+  | 'findReports'
+  | 'findTimingProfile'
+  | 'findVisits'
 >;
 
 describe('ControlPatrolsService', () => {
@@ -30,19 +36,28 @@ describe('ControlPatrolsService', () => {
   });
 
   it('returns patrol history scoped to inspector shops', async () => {
-    repository.findMany.mockResolvedValue([[
-      { expectedSeconds: 900, incidentCount: 2, patrol: createPatrol(), reportCount: 1 },
-    ], 1]);
+    repository.findMany.mockResolvedValue([
+      [{ expectedSeconds: 900, incidentCount: 2, patrol: createPatrol(), reportCount: 1 }],
+      1,
+    ]);
 
     const result = await service.findMany(
       { limit: 20, page: 1, status: 'completed' },
-      { fullName: 'Inspector', id: 'inspector-id', role: 'inspector', shopIds: ['shop-id'], username: 'inspector' },
+      {
+        fullName: 'Inspector',
+        id: 'inspector-id',
+        role: 'inspector',
+        shopIds: ['shop-id'],
+        username: 'inspector',
+      },
     );
 
-    expect(repository.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      allowedShopIds: ['shop-id'],
-      status: 'completed',
-    }));
+    expect(repository.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedShopIds: ['shop-id'],
+        status: 'completed',
+      }),
+    );
     expect(result).toMatchObject({
       items: [{ expectedSeconds: 900, incidentCount: 2, reportCount: 1, shop: { id: 'shop-id' } }],
       total: 1,
@@ -58,7 +73,10 @@ describe('ControlPatrolsService', () => {
     repository.findVisits.mockResolvedValue([]);
 
     const result = await service.findOne('patrol-id', {
-      fullName: 'Admin', id: 'admin-id', role: 'admin', username: 'admin',
+      fullName: 'Admin',
+      id: 'admin-id',
+      role: 'admin',
+      username: 'admin',
     });
 
     expect(result).toMatchObject({
@@ -70,21 +88,55 @@ describe('ControlPatrolsService', () => {
     });
   });
 
+  it('returns a null duration when PostgreSQL loads a pending patrol with startedAt null', async () => {
+    repository.findMany.mockResolvedValue([
+      [
+        {
+          expectedSeconds: null,
+          incidentCount: 0,
+          patrol: { ...createPatrol(), completedAt: null, startedAt: null, status: 'pending' },
+          reportCount: 0,
+        },
+      ],
+      1,
+    ]);
+
+    const result = await service.findMany(
+      { limit: 20, page: 1 },
+      { fullName: 'Admin', id: 'admin-id', role: 'admin', username: 'admin' },
+    );
+
+    expect(result.items[0]).toMatchObject({
+      durationIsFinal: false,
+      durationSeconds: null,
+      startedAt: null,
+      status: 'pending',
+    });
+  });
+
   it('rejects an inspector reading another shop patrol', async () => {
     repository.findById.mockResolvedValue(createPatrol());
 
-    await expect(service.findOne('patrol-id', {
-      fullName: 'Inspector', id: 'inspector-id', role: 'inspector', shopIds: ['other-shop-id'], username: 'inspector',
-    })).rejects.toBeInstanceOf(DomainValidationError);
+    await expect(
+      service.findOne('patrol-id', {
+        fullName: 'Inspector',
+        id: 'inspector-id',
+        role: 'inspector',
+        shopIds: ['other-shop-id'],
+        username: 'inspector',
+      }),
+    ).rejects.toBeInstanceOf(DomainValidationError);
 
     expect(repository.findEvents).not.toHaveBeenCalled();
   });
 
   it('rejects non-control roles', async () => {
-    await expect(service.findMany(
-      { limit: 20, page: 1 },
-      { fullName: 'Guard', id: 'guard-id', role: 'security_guard', username: 'guard' },
-    )).rejects.toBeInstanceOf(DomainValidationError);
+    await expect(
+      service.findMany(
+        { limit: 20, page: 1 },
+        { fullName: 'Guard', id: 'guard-id', role: 'security_guard', username: 'guard' },
+      ),
+    ).rejects.toBeInstanceOf(DomainValidationError);
   });
 });
 

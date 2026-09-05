@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { CreatePatrolRouteDto, UpdatePatrolRouteDto } from '@patrol/shared';
+import {
+  CreatePatrolRouteDto,
+  DEFAULT_PATROL_POINT_DWELL_SECONDS,
+  UpdatePatrolRouteDto,
+} from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../../common/errors/not-found.error';
 import { PatrolPointsService } from '../../patrol-points/patrol-points.service';
 import { ShopsService } from '../../shops/shops.service';
+import { PatrolRoutePointEntity } from '../entities/patrol-route-point.entity';
 import { PatrolRouteEntity } from '../entities/patrol-route.entity';
 import { PatrolRoutesRepository } from './patrol-routes.repository';
 
@@ -16,15 +22,18 @@ export class PatrolRoutesService {
     private readonly shopsService: ShopsService,
   ) {}
 
-  async create(dto: CreatePatrolRouteDto): Promise<PatrolRouteEntity> {
+  async create(dto: CreatePatrolRouteDto, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
+    assertCanManageRoute(actor, dto.shopId);
     await this.shopsService.findOne(dto.shopId);
     await this.assertPointsBelongToShop(dto.patrolPointIds, dto.shopId);
+    assertPointSettingsBelongToRoute(dto.pointSettings, dto.patrolPointIds);
 
     return this.patrolRoutesRepository.create({
       category: dto.category,
       isActive: dto.isActive ?? true,
       name: dto.name,
       pointIds: dto.patrolPointIds,
+      pointSettings: dto.pointSettings,
       shopId: dto.shopId,
     });
   }
@@ -33,6 +42,11 @@ export class PatrolRoutesService {
     await this.shopsService.findOne(shopId);
 
     return (await this.patrolRoutesRepository.findByShop(shopId)).map(sortRoutePoints);
+  }
+
+  findByShopForActor(shopId: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity[]> {
+    assertCanAccessRoute(actor, shopId);
+    return this.findByShop(shopId);
   }
 
   async findOne(id: string): Promise<PatrolRouteEntity> {
@@ -45,25 +59,44 @@ export class PatrolRoutesService {
     return sortRoutePoints(route);
   }
 
-  async update(id: string, dto: UpdatePatrolRouteDto): Promise<PatrolRouteEntity> {
+  async findOneForActor(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
     const route = await this.findOne(id);
+    assertCanAccessRoute(actor, route.shopId);
+    return route;
+  }
+
+  async update(
+    id: string,
+    dto: UpdatePatrolRouteDto,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolRouteEntity> {
+    const route = await this.findOne(id);
+    assertCanManageRoute(actor, route.shopId);
 
     if (dto.patrolPointIds !== undefined) {
       await this.assertPointsBelongToShop(dto.patrolPointIds, route.shopId);
     }
+    const routePointIds =
+      dto.patrolPointIds ?? (route.points ?? []).map((point) => point.patrolPointId);
+    assertPointSettingsBelongToRoute(dto.pointSettings, routePointIds);
+    const pointSettings =
+      dto.patrolPointIds === undefined
+        ? dto.pointSettings
+        : mergePointSettings(route.points ?? [], routePointIds, dto.pointSettings);
 
     await this.patrolRoutesRepository.update(id, {
       category: dto.category,
       isActive: dto.isActive,
       name: dto.name,
       pointIds: dto.patrolPointIds,
+      pointSettings,
     });
 
     return this.findOne(id);
   }
 
-  deactivate(id: string): Promise<PatrolRouteEntity> {
-    return this.update(id, { isActive: false });
+  deactivate(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
+    return this.update(id, { isActive: false }, actor);
   }
 
   async assertRouteUsable(routeId: string, shopId: string): Promise<void> {
@@ -85,7 +118,10 @@ export class PatrolRoutesService {
     return this.patrolRoutesRepository.countActivePoints(routeId);
   }
 
-  async assertPointInRoute(routeId: string, patrolPointId: string): Promise<number> {
+  async assertPointInRoute(
+    routeId: string,
+    patrolPointId: string,
+  ): Promise<PatrolRoutePointEntity> {
     const routePoint = await this.patrolRoutesRepository.findPoint(routeId, patrolPointId);
 
     if (routePoint === null) {
@@ -95,7 +131,7 @@ export class PatrolRoutesService {
       );
     }
 
-    return routePoint.sortOrder;
+    return routePoint;
   }
 
   private async assertPointsBelongToShop(pointIds: string[], shopId: string): Promise<void> {
@@ -110,6 +146,68 @@ export class PatrolRoutesService {
       }
     }
   }
+}
+
+function assertPointSettingsBelongToRoute(
+  pointSettings: CreatePatrolRouteDto['pointSettings'],
+  routePointIds: string[],
+): void {
+  const routePointIdSet = new Set(routePointIds);
+  const unknownPoint = pointSettings?.find(
+    (setting) => !routePointIdSet.has(setting.patrolPointId),
+  );
+  if (unknownPoint !== undefined) {
+    throw new DomainValidationError(
+      'PATROL_ROUTE_POINT_SETTING_NOT_IN_ROUTE',
+      'Point dwell setting refers to a point outside the route',
+    );
+  }
+}
+
+function mergePointSettings(
+  existingPoints: PatrolRoutePointEntity[],
+  pointIds: string[],
+  overrides: CreatePatrolRouteDto['pointSettings'],
+): Array<{ dwellSeconds: number; patrolPointId: string }> {
+  const dwellByPointId = new Map(
+    existingPoints.map((point) => [point.patrolPointId, point.dwellSeconds]),
+  );
+  for (const override of overrides ?? []) {
+    dwellByPointId.set(override.patrolPointId, override.dwellSeconds);
+  }
+
+  return pointIds.map((patrolPointId) => ({
+    dwellSeconds:
+      dwellByPointId.get(patrolPointId) ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
+    patrolPointId,
+  }));
+}
+
+function assertCanManageRoute(actor: AuthenticatedUser, shopId: string): void {
+  if (actor.role === 'admin' || actor.role === 'route_setter') return;
+  if (actor.role !== 'local_route_setter' || !actorHasShop(actor, shopId)) {
+    throw new DomainValidationError(
+      'PATROL_ROUTE_FORBIDDEN',
+      'User cannot manage patrol routes for this shop',
+    );
+  }
+}
+
+function assertCanAccessRoute(actor: AuthenticatedUser, shopId: string): void {
+  if (actor.role === 'admin' || actor.role === 'route_setter') return;
+  if (
+    (actor.role !== 'local_route_setter' && actor.role !== 'inspector') ||
+    !actorHasShop(actor, shopId)
+  ) {
+    throw new DomainValidationError(
+      'PATROL_ROUTE_FORBIDDEN',
+      'User cannot access patrol routes for this shop',
+    );
+  }
+}
+
+function actorHasShop(actor: AuthenticatedUser, shopId: string): boolean {
+  return actor.shopId === shopId || actor.shopIds?.includes(shopId) === true;
 }
 
 function sortRoutePoints(route: PatrolRouteEntity): PatrolRouteEntity {

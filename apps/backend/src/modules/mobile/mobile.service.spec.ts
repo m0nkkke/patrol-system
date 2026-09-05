@@ -117,7 +117,11 @@ describe('MobileService', () => {
       shopId: 'shop-id',
     });
 
-    await service.scanNextRoutePoint('shop-id', { uid: '04A1B2C3' });
+    await service.scanNextRoutePoint(
+      createUser({ role: 'local_route_setter', shopId: 'shop-id' }),
+      'shop-id',
+      { uid: '04A1B2C3' },
+    );
 
     expect(shopsService.bindRoutePointNfc).toHaveBeenCalledWith('shop-id', 2, {
       uid: '04A1B2C3',
@@ -133,9 +137,36 @@ describe('MobileService', () => {
       shopId: 'shop-id',
     });
 
-    await expect(service.scanNextRoutePoint('shop-id', { uid: '04A1B2C3' })).rejects.toBeInstanceOf(
-      DomainValidationError,
-    );
+    await expect(
+      service.scanNextRoutePoint(
+        createUser({ role: 'local_route_setter', shopId: 'shop-id' }),
+        'shop-id',
+        { uid: '04A1B2C3' },
+      ),
+    ).rejects.toBeInstanceOf(DomainValidationError);
+  });
+
+  it('rejects local route setup for a shop outside the setter assignments', async () => {
+    await expect(
+      service.startRouteSetup(
+        createUser({ role: 'local_route_setter', shopId: 'shop-id' }),
+        'other-shop-id',
+        { expectedPoints: 3 },
+      ),
+    ).rejects.toMatchObject({ code: 'MOBILE_ROUTE_SETUP_FORBIDDEN' });
+
+    expect(shopsService.startRouteSetup).not.toHaveBeenCalled();
+  });
+
+  it('rejects local route setup for an unassigned shop', async () => {
+    await expect(
+      service.getRouteSetup(
+        createUser({ role: 'local_route_setter', shopId: 'assigned-shop-id' }),
+        'other-shop-id',
+      ),
+    ).rejects.toMatchObject({ code: 'MOBILE_ROUTE_SETUP_FORBIDDEN' });
+
+    expect(shopsService.getRouteSetup).not.toHaveBeenCalled();
   });
 
   it('returns per-event status for offline sync', async () => {
@@ -148,21 +179,17 @@ describe('MobileService', () => {
       status: 'duplicate',
     } as Awaited<ReturnType<PatrolsService['recordEventWithStatus']>>);
 
-    const result = await service.syncPatrolEvents(
-      createUser({ id: 'user-id' }),
-      'patrol-id',
-      {
-        events: [
-          {
-            deviceId: 'device-1',
-            localId: '11111111-1111-4111-8111-111111111111',
-            nfcUid: '04A1B2C3',
-            patrolPointId: '22222222-2222-4222-8222-222222222222',
-            scannedAt: '2026-06-19T10:00:00.000Z',
-          },
-        ],
-      },
-    );
+    const result = await service.syncPatrolEvents(createUser({ id: 'user-id' }), 'patrol-id', {
+      events: [
+        {
+          deviceId: 'device-1',
+          localId: '11111111-1111-4111-8111-111111111111',
+          nfcUid: '04A1B2C3',
+          patrolPointId: '22222222-2222-4222-8222-222222222222',
+          scannedAt: '2026-06-19T10:00:00.000Z',
+        },
+      ],
+    });
 
     expect(result).toEqual({
       items: [
@@ -183,10 +210,9 @@ describe('MobileService', () => {
       status: 'in_progress',
     } as Awaited<ReturnType<PatrolsService['start']>>);
 
-    await service.startPatrol(
-      createUser({ id: 'user-id', shopIds: ['shop-1', 'shop-2'] }),
-      { shopId: 'shop-2' },
-    );
+    await service.startPatrol(createUser({ id: 'user-id', shopIds: ['shop-1', 'shop-2'] }), {
+      shopId: 'shop-2',
+    });
 
     expect(patrolsService.start).toHaveBeenCalledWith({
       employeeId: 'user-id',
@@ -219,23 +245,25 @@ describe('MobileService', () => {
 
     const result = await service.getActivePatrolNfcWaitState(createUser({ id: 'user-id' }));
 
-    expect(patrolsService.getNfcWaitState).toHaveBeenCalledWith('patrol-id', createUser({ id: 'user-id' }));
+    expect(patrolsService.getNfcWaitState).toHaveBeenCalledWith(
+      'patrol-id',
+      createUser({ id: 'user-id' }),
+    );
     expect(result?.mode).toBe('waiting_for_nfc');
   });
 
   it('returns null NFC wait state when user has no active patrol', async () => {
     patrolsService.findActiveByEmployee.mockResolvedValue(null);
 
-    await expect(service.getActivePatrolNfcWaitState(createUser({ id: 'user-id' }))).resolves.toBeNull();
+    await expect(
+      service.getActivePatrolNfcWaitState(createUser({ id: 'user-id' })),
+    ).resolves.toBeNull();
     expect(patrolsService.getNfcWaitState).not.toHaveBeenCalled();
   });
 
   it('rejects patrol start for unassigned shop', async () => {
     await expect(
-      service.startPatrol(
-        createUser({ id: 'user-id', shopIds: ['shop-1'] }),
-        { shopId: 'shop-2' },
-      ),
+      service.startPatrol(createUser({ id: 'user-id', shopIds: ['shop-1'] }), { shopId: 'shop-2' }),
     ).rejects.toBeInstanceOf(DomainValidationError);
     expect(patrolsService.start).not.toHaveBeenCalled();
   });

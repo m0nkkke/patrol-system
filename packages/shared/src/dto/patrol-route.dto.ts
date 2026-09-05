@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   ArrayUnique,
+  IsInt,
   IsArray,
   IsBoolean,
   IsIn,
@@ -9,13 +10,30 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  Max,
   MinLength,
+  Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
-import {
-  PATROL_ROUTE_CATEGORIES,
-  PatrolRouteCategory,
-} from '../enums/patrol-route-category';
+import { PATROL_ROUTE_CATEGORIES, PatrolRouteCategory } from '../enums/patrol-route-category';
+
+export const DEFAULT_PATROL_POINT_DWELL_SECONDS = 90;
+export const MAX_PATROL_POINT_DWELL_SECONDS = 120;
+export const MIN_PATROL_POINT_DWELL_SECONDS = 0;
+
+export class PatrolRoutePointSettingDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  patrolPointId: string = '';
+
+  @ApiProperty({ default: DEFAULT_PATROL_POINT_DWELL_SECONDS, maximum: 120, minimum: 0 })
+  @IsInt()
+  @Min(MIN_PATROL_POINT_DWELL_SECONDS)
+  @Max(MAX_PATROL_POINT_DWELL_SECONDS)
+  dwellSeconds: number = DEFAULT_PATROL_POINT_DWELL_SECONDS;
+}
 
 export class CreatePatrolRouteDto {
   @ApiProperty({ format: 'uuid' })
@@ -39,6 +57,17 @@ export class CreatePatrolRouteDto {
   @IsUUID('4', { each: true })
   patrolPointIds: string[] = [];
 
+  @ApiPropertyOptional({
+    description: 'Per-route dwell overrides. Omitted points use 90 seconds.',
+    type: [PatrolRoutePointSettingDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique((setting: PatrolRoutePointSettingDto) => setting.patrolPointId)
+  @ValidateNested({ each: true })
+  @Type(() => PatrolRoutePointSettingDto)
+  pointSettings?: PatrolRoutePointSettingDto[];
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
@@ -58,13 +87,27 @@ export class UpdatePatrolRouteDto {
   @IsIn(PATROL_ROUTE_CATEGORIES)
   category?: PatrolRouteCategory;
 
-  @ApiPropertyOptional({ description: 'Full ordered replacement list of route points.', type: [String] })
+  @ApiPropertyOptional({
+    description: 'Full ordered replacement list of route points.',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   patrolPointIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Per-route dwell overrides. Omitted points use 90 seconds.',
+    type: [PatrolRoutePointSettingDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique((setting: PatrolRoutePointSettingDto) => setting.patrolPointId)
+  @ValidateNested({ each: true })
+  @Type(() => PatrolRoutePointSettingDto)
+  pointSettings?: PatrolRoutePointSettingDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

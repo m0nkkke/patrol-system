@@ -109,6 +109,7 @@ export type ExpectedPatrolPointRecord = {
   photoFileId?: string | null;
   pointVisitId?: string | null;
   pointVisitStatus?: PatrolPointVisitStatus | null;
+  pointDwellSeconds?: number | null;
   lockedUntil?: Date | null;
   sortOrder: number;
 };
@@ -147,7 +148,9 @@ export class PatrolsRepository {
     patrolPointId: string,
     scanAction: PatrolScanAction,
   ): Promise<PatrolEventEntity | null> {
-    return this.patrolEvents.findOne({ where: { accepted: true, patrolId, patrolPointId, scanAction } });
+    return this.patrolEvents.findOne({
+      where: { accepted: true, patrolId, patrolPointId, scanAction },
+    });
   }
 
   findPointVisitByPatrolAndPoint(
@@ -221,9 +224,12 @@ export class PatrolsRepository {
     query: FindPatrolsDto,
     shopIds?: string[],
   ): Promise<[PatrolEntity[], number]> {
-    const builder = this.createPatrolListBuilder(query).andWhere('patrol.employee_id = :employeeId', {
-      employeeId,
-    });
+    const builder = this.createPatrolListBuilder(query).andWhere(
+      'patrol.employee_id = :employeeId',
+      {
+        employeeId,
+      },
+    );
 
     if (shopIds !== undefined) {
       builder.andWhere('patrol.shop_id IN (:...shopIds)', { shopIds });
@@ -258,10 +264,7 @@ export class PatrolsRepository {
     });
   }
 
-  findExistingScheduledPatrol(
-    scheduleId: string,
-    dueAt: Date,
-  ): Promise<PatrolEntity | null> {
+  findExistingScheduledPatrol(scheduleId: string, dueAt: Date): Promise<PatrolEntity | null> {
     return this.patrols
       .createQueryBuilder('patrol')
       .where('patrol.schedule_id = :scheduleId', { scheduleId })
@@ -464,11 +467,7 @@ export class PatrolsRepository {
     await this.patrols.update(id, { completedAt, completionReport, notes, status: 'completed' });
   }
 
-  async markCancelled(
-    id: string,
-    cancelledAt: Date,
-    cancellationReason?: string,
-  ): Promise<void> {
+  async markCancelled(id: string, cancelledAt: Date, cancellationReason?: string): Promise<void> {
     await this.patrols.update(id, { cancellationReason, cancelledAt, status: 'cancelled' });
   }
 
@@ -517,6 +516,7 @@ export class PatrolsRepository {
         visit.id AS "pointVisitId",
         visit.status AS "pointVisitStatus",
         visit.locked_until AS "lockedUntil",
+        route_point.dwell_seconds AS "pointDwellSeconds",
         route_point.sort_order AS "sortOrder"
       FROM patrol_route_points route_point
       INNER JOIN patrol_points point ON point.id = route_point.patrol_point_id
@@ -550,6 +550,7 @@ export class PatrolsRepository {
         visit.id AS "pointVisitId",
         visit.status AS "pointVisitStatus",
         visit.locked_until AS "lockedUntil",
+        90 AS "pointDwellSeconds",
         point.sort_order AS "sortOrder"
       FROM patrol_points point
       LEFT JOIN patrol_point_visits visit
@@ -568,7 +569,9 @@ export class PatrolsRepository {
   }
 }
 
-function parsePatrolSort(sort: FindPatrolsDto['sort']): ['createdAt' | 'startedAt' | 'status', 'ASC' | 'DESC'] {
+function parsePatrolSort(
+  sort: FindPatrolsDto['sort'],
+): ['createdAt' | 'startedAt' | 'status', 'ASC' | 'DESC'] {
   if (sort === undefined) {
     return ['createdAt', 'DESC'];
   }

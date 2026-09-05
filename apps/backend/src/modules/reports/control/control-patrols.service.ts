@@ -120,7 +120,10 @@ type PaginatedControlPatrols = {
 export class ControlPatrolsService {
   constructor(private readonly repository: ControlPatrolsRepository) {}
 
-  async findMany(query: FindControlPatrolsDto, actor: AuthenticatedUser): Promise<PaginatedControlPatrols> {
+  async findMany(
+    query: FindControlPatrolsDto,
+    actor: AuthenticatedUser,
+  ): Promise<PaginatedControlPatrols> {
     const repositoryQuery = buildFindQuery(query, actor);
     const [records, total] = await this.repository.findMany(repositoryQuery);
 
@@ -178,15 +181,18 @@ export class ControlPatrolsService {
         status: report.status,
         submittedAt: report.submittedAt?.toISOString() ?? null,
       })),
-      timingProfile: timingProfile === null ? null : {
-        averageTotalSeconds: timingProfile.averageTotalSeconds,
-        calculatedFrom: timingProfile.calculatedFrom.toISOString(),
-        calculatedTo: timingProfile.calculatedTo.toISOString(),
-        fastSeconds: timingProfile.fastSeconds,
-        sampleCount: timingProfile.sampleCount,
-        slowSeconds: timingProfile.slowSeconds,
-        suspiciousFastSeconds: timingProfile.suspiciousFastSeconds,
-      },
+      timingProfile:
+        timingProfile === null
+          ? null
+          : {
+              averageTotalSeconds: timingProfile.averageTotalSeconds,
+              calculatedFrom: timingProfile.calculatedFrom.toISOString(),
+              calculatedTo: timingProfile.calculatedTo.toISOString(),
+              fastSeconds: timingProfile.fastSeconds,
+              sampleCount: timingProfile.sampleCount,
+              slowSeconds: timingProfile.slowSeconds,
+              suspiciousFastSeconds: timingProfile.suspiciousFastSeconds,
+            },
       visits: visits.map((visit) => ({
         arrivedAt: visit.arrivedAt.toISOString(),
         arrivalEvent: toVisitEvent(visit.arrivalEvent),
@@ -195,11 +201,14 @@ export class ControlPatrolsService {
         dwellSeconds: visit.dwellSeconds ?? null,
         id: visit.id,
         lockedUntil: visit.lockedUntil.toISOString(),
-        patrolPoint: visit.patrolPoint === undefined ? null : {
-          id: visit.patrolPoint.id,
-          name: visit.patrolPoint.name,
-          sortOrder: visit.patrolPoint.sortOrder,
-        },
+        patrolPoint:
+          visit.patrolPoint === undefined
+            ? null
+            : {
+                id: visit.patrolPoint.id,
+                name: visit.patrolPoint.name,
+                sortOrder: visit.patrolPoint.sortOrder,
+              },
         status: visit.status,
       })),
     };
@@ -215,7 +224,10 @@ function buildFindQuery(
 
   const allowedShopIds = actor.role === 'inspector' ? getInspectorShopIds(actor) : undefined;
   if (actor.role === 'inspector' && allowedShopIds?.length === 0) {
-    throw new DomainValidationError('CONTROL_PATROLS_FORBIDDEN', 'Inspector must be assigned to a shop to view patrols');
+    throw new DomainValidationError(
+      'CONTROL_PATROLS_FORBIDDEN',
+      'Inspector must be assigned to a shop to view patrols',
+    );
   }
 
   return {
@@ -261,10 +273,13 @@ function toSummary(record: ControlPatrolListRecord): ControlPatrolSummary {
 }
 
 function calculateDuration(patrol: PatrolEntity): { isFinal: boolean; seconds: number | null } {
-  if (patrol.startedAt === undefined) return { isFinal: false, seconds: null };
+  if (patrol.startedAt == null) return { isFinal: false, seconds: null };
   const finalAt = patrol.completedAt ?? patrol.cancelledAt;
   const end = finalAt ?? new Date();
-  return { isFinal: finalAt !== undefined, seconds: Math.max(0, Math.round((end.getTime() - patrol.startedAt.getTime()) / 1000)) };
+  return {
+    isFinal: finalAt != null,
+    seconds: Math.max(0, Math.round((end.getTime() - patrol.startedAt.getTime()) / 1000)),
+  };
 }
 
 function toEvent(event: PatrolEventEntity): ControlPatrolDetail['events'][number] {
@@ -278,11 +293,14 @@ function toEvent(event: PatrolEventEntity): ControlPatrolDetail['events'][number
     lat: event.lat === undefined ? null : Number(event.lat),
     lng: event.lng === undefined ? null : Number(event.lng),
     nfcUid: event.nfcUid,
-    patrolPoint: event.patrolPoint === undefined ? null : {
-      id: event.patrolPoint.id,
-      name: event.patrolPoint.name,
-      sortOrder: event.patrolPoint.sortOrder,
-    },
+    patrolPoint:
+      event.patrolPoint === undefined
+        ? null
+        : {
+            id: event.patrolPoint.id,
+            name: event.patrolPoint.name,
+            sortOrder: event.patrolPoint.sortOrder,
+          },
     receivedAt: event.receivedAt.toISOString(),
     rejectionReason: event.rejectionReason ?? null,
     scanAction: event.scanAction,
@@ -292,14 +310,16 @@ function toEvent(event: PatrolEventEntity): ControlPatrolDetail['events'][number
 }
 
 function toVisitEvent(event: PatrolEventEntity | null | undefined): ControlVisitEvent {
-  return event == null ? null : {
-    accepted: event.accepted,
-    deviceId: event.deviceId,
-    id: event.id,
-    lateSync: event.lateSync,
-    nfcUid: event.nfcUid,
-    scannedAt: event.scannedAt.toISOString(),
-  };
+  return event == null
+    ? null
+    : {
+        accepted: event.accepted,
+        deviceId: event.deviceId,
+        id: event.id,
+        lateSync: event.lateSync,
+        nfcUid: event.nfcUid,
+        scannedAt: event.scannedAt.toISOString(),
+      };
 }
 
 function severityByIncidentType(type: PatrolIncidentType): AlertSeverity {
@@ -312,14 +332,20 @@ function severityByIncidentType(type: PatrolIncidentType): AlertSeverity {
 
 function assertCanUseControlPatrols(actor: AuthenticatedUser): void {
   if (actor.role !== 'admin' && actor.role !== 'inspector') {
-    throw new DomainValidationError('CONTROL_PATROLS_FORBIDDEN', 'User cannot access control patrols');
+    throw new DomainValidationError(
+      'CONTROL_PATROLS_FORBIDDEN',
+      'User cannot access control patrols',
+    );
   }
 }
 
 function assertCanAccessShop(actor: AuthenticatedUser, shopId: string): void {
   if (actor.role === 'admin') return;
   if (actor.role !== 'inspector' || !getInspectorShopIds(actor).includes(shopId)) {
-    throw new DomainValidationError('CONTROL_PATROLS_FORBIDDEN', 'User cannot access patrols for this shop');
+    throw new DomainValidationError(
+      'CONTROL_PATROLS_FORBIDDEN',
+      'User cannot access patrols for this shop',
+    );
   }
 }
 
