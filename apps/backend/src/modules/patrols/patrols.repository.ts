@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   FindPatrolsDto,
+  DEFAULT_PATROL_POINT_DWELL_SECONDS,
+  PatrolSnapshotPoint,
   PatrolIncidentType,
   PatrolPointVisitStatus,
   PatrolScanAction,
@@ -15,6 +17,10 @@ import { PatrolPointVisitEntity } from './entities/patrol-point-visit.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
 import { PatrolEntity } from './entities/patrol.entity';
 import { RouteTimingProfileEntity } from './entities/route-timing-profile.entity';
+import { PatrolRouteEntity } from './entities/patrol-route.entity';
+import { PatrolRoutePointEntity } from './entities/patrol-route-point.entity';
+import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
+import { DomainValidationError } from '../../common/errors/domain-validation.error';
 
 type CreatePatrolRecord = {
   dueAt?: Date;
@@ -132,7 +138,46 @@ export class PatrolsRepository {
   ) {}
 
   createPatrol(data: CreatePatrolRecord): Promise<PatrolEntity> {
-    return this.patrols.save(this.patrols.create(data));
+    return this.patrols.manager.transaction(async (manager) => {
+      let routeSnapshot: PatrolSnapshotPoint[];
+      if (data.routeId != null) {
+        // Serialize snapshot capture with edits of the route and its point links.
+        const route = await manager.getRepository(PatrolRouteEntity).findOne({
+          where: { id: data.routeId },
+          lock: { mode: 'pessimistic_read' },
+        });
+        if (route === null || !route.isActive || route.shopId !== data.shopId) {
+          throw new DomainValidationError('PATROL_ROUTE_INACTIVE', 'Patrol route is unavailable');
+        }
+        const links = await manager.getRepository(PatrolRoutePointEntity).find({
+          where: { routeId: data.routeId },
+          order: { sortOrder: 'ASC' },
+          relations: { patrolPoint: { nfcTag: true } },
+        });
+        routeSnapshot = links
+          .filter((link) => link.patrolPoint?.isActive)
+          .map((link) => snapshotPoint(link.patrolPoint!, link.sortOrder, link.dwellSeconds));
+      } else {
+        const points = await manager.getRepository(PatrolPointEntity).find({
+          where: { shopId: data.shopId, isActive: true },
+          order: { sortOrder: 'ASC', createdAt: 'ASC' },
+          relations: { nfcTag: true },
+        });
+        routeSnapshot = points.map((point) =>
+          snapshotPoint(point, point.sortOrder, DEFAULT_PATROL_POINT_DWELL_SECONDS),
+        );
+      }
+      if (routeSnapshot.length === 0) {
+        throw new DomainValidationError(
+          'PATROL_ROUTE_EMPTY',
+          'Cannot start patrol without active patrol points',
+        );
+      }
+      const patrols = manager.getRepository(PatrolEntity);
+      return patrols.save(
+        patrols.create({ ...data, routeSnapshot, totalPoints: routeSnapshot.length }),
+      );
+    });
   }
 
   createPatrolEvent(data: CreatePatrolEventRecord): Promise<PatrolEventEntity> {
@@ -247,7 +292,25 @@ export class PatrolsRepository {
   }
 
   async findNextExpectedPoint(patrol: PatrolEntity): Promise<ExpectedPatrolPointRecord | null> {
-    if (patrol.routeId !== undefined) {
+    if (patrol.routeSnapshot != null) {
+      const [point] = await this.patrols.query<ExpectedPatrolPointRecord[]>(
+        `
+        SELECT point.id, point.name, point.description,
+          point.nfc_tag_id AS "nfcTagId", point.photo_file_id AS "photoFileId",
+          snapshot."sortOrder", snapshot."dwellSeconds" AS "pointDwellSeconds",
+          visit.id AS "pointVisitId", visit.status AS "pointVisitStatus", visit.locked_until AS "lockedUntil"
+        FROM jsonb_to_recordset($2::jsonb) AS snapshot(id uuid, "sortOrder" int, "dwellSeconds" int)
+        JOIN patrol_points point ON point.id = snapshot.id
+        LEFT JOIN patrol_point_visits visit ON visit.patrol_id = $1 AND visit.patrol_point_id = point.id
+        WHERE point.is_active = TRUE AND point.deleted_at IS NULL
+          AND (visit.id IS NULL OR visit.status != 'completed')
+        ORDER BY snapshot."sortOrder" ASC LIMIT 1
+      `,
+        [patrol.id, JSON.stringify(patrol.routeSnapshot)],
+      );
+      return point ?? null;
+    }
+    if (patrol.routeId != null) {
       return this.findNextExpectedRoutePoint(patrol.id, patrol.routeId);
     }
 
@@ -358,8 +421,10 @@ export class PatrolsRepository {
       .where('event.patrol_id = :patrolId', { patrolId })
       .andWhere('event.accepted = TRUE')
       .andWhere('event.scan_action = :scanAction', { scanAction: PatrolScanAction.DEPART })
-      .andWhere('point.sort_order < :currentSortOrder', { currentSortOrder })
-      .orderBy('point.sortOrder', 'DESC')
+      .innerJoin('event.patrol', 'patrol')
+      .addSelect(PATROL_POINT_ORDER_SQL, 'point_sort_order')
+      .andWhere(`${PATROL_POINT_ORDER_SQL} < :currentSortOrder`, { currentSortOrder })
+      .orderBy(PATROL_POINT_ORDER_SQL, 'DESC')
       .addOrderBy('event.scannedAt', 'DESC')
       .getOne();
   }
@@ -371,7 +436,9 @@ export class PatrolsRepository {
       .where('event.patrol_id = :patrolId', { patrolId })
       .andWhere('event.accepted = TRUE')
       .andWhere('event.scan_action = :scanAction', { scanAction: PatrolScanAction.DEPART })
-      .orderBy('point.sortOrder', 'ASC')
+      .innerJoin('event.patrol', 'patrol')
+      .addSelect(PATROL_POINT_ORDER_SQL, 'point_sort_order')
+      .orderBy(PATROL_POINT_ORDER_SQL, 'ASC')
       .addOrderBy('event.scannedAt', 'ASC')
       .getMany();
   }
@@ -567,6 +634,37 @@ export class PatrolsRepository {
 
     return raw ?? null;
   }
+}
+
+const PATROL_POINT_ORDER_SQL = `COALESCE((
+  SELECT (snapshot->>'sortOrder')::int FROM jsonb_array_elements(patrol.route_snapshot) snapshot
+  WHERE snapshot->>'id' = point.id::text
+), point.sort_order)`;
+
+function snapshotPoint(
+  point: PatrolPointEntity,
+  sortOrder: number,
+  dwellSeconds: number,
+): PatrolSnapshotPoint {
+  return {
+    id: point.id,
+    shopId: point.shopId,
+    name: point.name,
+    isActive: point.isActive,
+    description: point.description ?? undefined,
+    photoFileId: point.photoFileId ?? undefined,
+    nfcTagId: point.nfcTagId ?? undefined,
+    nfcTag:
+      point.nfcTag == null
+        ? undefined
+        : {
+            id: point.nfcTag.id,
+            uid: point.nfcTag.uid,
+            isActive: point.nfcTag.isActive,
+          },
+    sortOrder,
+    dwellSeconds,
+  };
 }
 
 function parsePatrolSort(

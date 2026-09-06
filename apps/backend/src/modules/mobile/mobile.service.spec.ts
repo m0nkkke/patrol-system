@@ -6,6 +6,7 @@ import { PatrolSchedulesService } from '../patrols/schedules/patrol-schedules.se
 import { PatrolsService } from '../patrols/patrols.service';
 import { ShopsService } from '../shops/shops.service';
 import { MobileService } from './mobile.service';
+import { PatrolEntity } from '../patrols/entities/patrol.entity';
 
 type PatrolPointsServiceMock = Pick<PatrolPointsService, 'findByShop'>;
 type NotificationsServiceMock = Pick<NotificationsService, 'registerDevicePushToken'>;
@@ -74,6 +75,68 @@ describe('MobileService', () => {
 
     expect(profile.capabilities.canRegisterRoutes).toBe(true);
     expect(profile.capabilities.canRunPatrols).toBe(false);
+  });
+
+  it('forwards the explicitly selected route when starting a mobile patrol', async () => {
+    await service.startPatrol(createUser({ role: 'security_guard', shopId: 'shop-id' }), {
+      shopId: 'shop-id',
+      routeId: 'route-b',
+    });
+    expect(patrolsService.start).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: 'shop-id', routeId: 'route-b' }),
+    );
+  });
+
+  it('returns only the active patrol snapshot with route order and individual dwell times', async () => {
+    const routeSnapshot = [
+      {
+        id: 'point-b',
+        shopId: 'shop-id',
+        name: 'B',
+        sortOrder: 1,
+        dwellSeconds: 0,
+        isActive: true,
+      },
+      {
+        id: 'point-a',
+        shopId: 'shop-id',
+        name: 'A',
+        sortOrder: 2,
+        dwellSeconds: 120,
+        isActive: true,
+      },
+    ];
+    patrolsService.findActiveByEmployee.mockResolvedValue(
+      Object.assign(new PatrolEntity(), {
+        shopId: 'shop-id',
+        routeId: 'route-b',
+        routeSnapshot,
+      }),
+    );
+    await expect(
+      service.getRouteForShop(createUser({ role: 'security_guard', shopId: 'shop-id' }), 'shop-id'),
+    ).resolves.toEqual(routeSnapshot);
+    expect(patrolPointsService.findByShop).not.toHaveBeenCalled();
+  });
+
+  it('does not substitute shop points when there is no matching active patrol or snapshot', async () => {
+    const user = createUser({ role: 'security_guard', shopIds: ['shop-id', 'other-shop'] });
+    for (const patrol of [null, Object.assign(new PatrolEntity(), { shopId: 'other-shop' })]) {
+      patrolsService.findActiveByEmployee.mockResolvedValue(patrol);
+      await expect(service.getRouteForShop(user, 'shop-id')).rejects.toMatchObject({
+        code: 'MOBILE_ACTIVE_PATROL_REQUIRED',
+      });
+    }
+    patrolsService.findActiveByEmployee.mockResolvedValue(
+      Object.assign(new PatrolEntity(), { shopId: 'shop-id' }),
+    );
+    await expect(service.getRouteForShop(user, 'shop-id')).rejects.toMatchObject({
+      code: 'PATROL_ROUTE_SNAPSHOT_UNAVAILABLE',
+    });
+    await expect(service.getRouteForShop(user, 'unassigned')).rejects.toMatchObject({
+      code: 'MOBILE_SHOP_FORBIDDEN',
+    });
+    expect(patrolPointsService.findByShop).not.toHaveBeenCalled();
   });
 
   it('registers current device push token', async () => {

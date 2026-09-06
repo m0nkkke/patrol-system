@@ -501,40 +501,114 @@ describe('PatrolsService', () => {
     expect(patrolsRepository.updateScanProgress).not.toHaveBeenCalled();
   });
 
-  it('uses the route point dwell setting when an arrival starts a visit', async () => {
-    const scannedAt = new Date('2026-06-19T10:05:00.000Z');
-    const patrol = createPatrol({ routeId: 'route-id' });
-    const point = createPatrolPoint({ id: 'point-2', nfcTagId: 'tag-2' });
-    const visit = createPointVisit({ arrivedAt: scannedAt, lockedUntil: scannedAt });
-    const event = createEvent({ patrolPointId: point.id, scanAction: PatrolScanAction.ARRIVE });
+  it.each([0, 120])(
+    'uses snapshot dwell %i after the current route has changed',
+    async (dwellSeconds) => {
+      const scannedAt = new Date('2026-06-19T10:05:00.000Z');
+      const patrol = createPatrol({
+        routeId: 'route-id',
+        routeSnapshot: [
+          {
+            id: 'point-2',
+            shopId: 'shop-id',
+            name: 'Point',
+            sortOrder: 1,
+            dwellSeconds,
+            isActive: true,
+          },
+        ],
+      });
+      const point = createPatrolPoint({ id: 'point-2', nfcTagId: 'tag-2' });
+      const visit = createPointVisit({ arrivedAt: scannedAt, lockedUntil: scannedAt });
+      const event = createEvent({ patrolPointId: point.id, scanAction: PatrolScanAction.ARRIVE });
+      patrolsRepository.findById.mockResolvedValue(patrol);
+      patrolPointsService.findOne.mockResolvedValue(point);
+      patrolRoutesService.assertPointInRoute.mockResolvedValue({
+        dwellSeconds: 0,
+        sortOrder: 2,
+      } as PatrolRoutePointEntity);
+      patrolPointsService.findActiveTagByUid.mockResolvedValue({
+        id: 'tag-2',
+        isActive: true,
+        uid: '04tag2',
+      } as Awaited<ReturnType<PatrolPointsService['findActiveTagByUid']>>);
+      patrolsRepository.createPointVisit.mockResolvedValue(visit);
+      patrolsRepository.createPatrolEvent.mockResolvedValue(event);
+
+      await service.recordEvent(patrol.id, {
+        deviceId: 'device-1',
+        nfcUid: '04TAG2',
+        patrolPointId: point.id,
+        scanAction: PatrolScanAction.ARRIVE,
+        scannedAt: scannedAt.toISOString(),
+      });
+
+      expect(patrolsRepository.createPointVisit).toHaveBeenCalledWith({
+        arrivedAt: scannedAt,
+        lockedUntil: new Date(scannedAt.getTime() + dwellSeconds * 1000),
+        patrolId: patrol.id,
+        patrolPointId: point.id,
+      });
+      expect(patrolRoutesService.assertPointInRoute).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a shop point that was not captured in the patrol snapshot', async () => {
+    const patrol = createPatrol({ routeId: 'route-id', routeSnapshot: [] });
     patrolsRepository.findById.mockResolvedValue(patrol);
-    patrolPointsService.findOne.mockResolvedValue(point);
-    patrolRoutesService.assertPointInRoute.mockResolvedValue({
-      dwellSeconds: 0,
-      sortOrder: 2,
-    } as PatrolRoutePointEntity);
-    patrolPointsService.findActiveTagByUid.mockResolvedValue({
-      id: 'tag-2',
-      isActive: true,
-      uid: '04tag2',
-    } as Awaited<ReturnType<PatrolPointsService['findActiveTagByUid']>>);
-    patrolsRepository.createPointVisit.mockResolvedValue(visit);
-    patrolsRepository.createPatrolEvent.mockResolvedValue(event);
+    patrolPointsService.findOne.mockResolvedValue(createPatrolPoint({ id: 'new-point' }));
+    await expect(
+      service.recordEvent(patrol.id, {
+        deviceId: 'test',
+        nfcUid: '04aabbcc',
+        patrolPointId: 'new-point',
+        scanAction: PatrolScanAction.ARRIVE,
+        scannedAt: new Date().toISOString(),
+      }),
+    ).rejects.toMatchObject({ code: 'PATROL_POINT_NOT_IN_ROUTE' });
+    expect(patrolsRepository.createPointVisit).not.toHaveBeenCalled();
+  });
 
-    await service.recordEvent(patrol.id, {
-      deviceId: 'device-1',
-      nfcUid: '04TAG2',
-      patrolPointId: point.id,
-      scanAction: PatrolScanAction.ARRIVE,
-      scannedAt: scannedAt.toISOString(),
+  it('detects skipped points using snapshot order even when shop order is reversed', async () => {
+    const patrol = createPatrol({
+      routeSnapshot: [
+        {
+          id: 'point-a',
+          shopId: 'shop-id',
+          name: 'A',
+          sortOrder: 1,
+          dwellSeconds: 0,
+          isActive: true,
+        },
+        {
+          id: 'point-b',
+          shopId: 'shop-id',
+          name: 'B',
+          sortOrder: 2,
+          dwellSeconds: 120,
+          isActive: true,
+        },
+      ],
     });
-
-    expect(patrolsRepository.createPointVisit).toHaveBeenCalledWith({
-      arrivedAt: scannedAt,
-      lockedUntil: scannedAt,
-      patrolId: patrol.id,
-      patrolPointId: point.id,
+    patrolsRepository.findById.mockResolvedValue(patrol);
+    patrolPointsService.findOne
+      .mockResolvedValueOnce(createPatrolPoint({ id: 'point-a', sortOrder: 20 }))
+      .mockResolvedValueOnce(createPatrolPoint({ id: 'point-b', sortOrder: 10 }));
+    await service.recordMissedPointAttempt(patrol.id, {
+      clientLocalId: 'attempt-id',
+      expectedPatrolPointId: 'point-a',
+      attemptedPatrolPointId: 'point-b',
+      nfcUid: '04aabbcc',
+      deviceId: 'test',
+      scannedAt: new Date().toISOString(),
     });
+    expect(patrolsRepository.createPatrolIncident).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromPatrolPointId: 'point-a',
+        toPatrolPointId: 'point-b',
+        type: PatrolIncidentType.MISSED_POINT,
+      }),
+    );
   });
 
   it('stores late offline sync event without changing patrol progress', async () => {

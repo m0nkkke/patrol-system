@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DEFAULT_PATROL_POINT_DWELL_SECONDS, PatrolRouteCategory } from '@patrol/shared';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
+
+import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
+import { DomainValidationError } from '../../../common/errors/domain-validation.error';
+import { PatrolRouteVersionEntity } from '../entities/patrol-route-version.entity';
 
 import { PatrolRoutePointEntity } from '../entities/patrol-route-point.entity';
 import { PatrolRouteEntity } from '../entities/patrol-route.entity';
@@ -32,18 +36,25 @@ export class PatrolRoutesRepository {
     private readonly routePoints: Repository<PatrolRoutePointEntity>,
   ) {}
 
-  async create(data: CreatePatrolRouteRecord): Promise<PatrolRouteEntity> {
-    const route = await this.routes.save(
-      this.routes.create({
-        category: data.category,
-        isActive: data.isActive,
-        name: data.name,
-        shopId: data.shopId,
-      }),
-    );
-    await this.replacePoints(route.id, data.pointIds, data.pointSettings);
-
-    return this.findById(route.id) as Promise<PatrolRouteEntity>;
+  async create(
+    data: CreatePatrolRouteRecord,
+    actor: AuthenticatedUser,
+  ): Promise<PatrolRouteEntity> {
+    return this.routes.manager.transaction(async (manager) => {
+      const repository = this.inTransaction(manager);
+      const route = await repository.routes.save(
+        repository.routes.create({
+          category: data.category,
+          isActive: data.isActive,
+          name: data.name,
+          shopId: data.shopId,
+        }),
+      );
+      await repository.replacePoints(route.id, data.pointIds, data.pointSettings);
+      const result = (await repository.findById(route.id))!;
+      await this.saveVersion(manager, result, actor);
+      return result;
+    });
   }
 
   findById(id: string): Promise<PatrolRouteEntity | null> {
@@ -61,18 +72,89 @@ export class PatrolRoutesRepository {
     });
   }
 
-  async update(id: string, data: UpdatePatrolRouteRecord): Promise<void> {
-    await this.routes.update(id, {
-      category: data.category,
-      isActive: data.isActive,
-      name: data.name,
+  async update(id: string, data: UpdatePatrolRouteRecord, actor: AuthenticatedUser): Promise<void> {
+    await this.routes.manager.transaction(async (manager) => {
+      const repository = this.inTransaction(manager);
+      const route = await repository.routes.findOneOrFail({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const existing = await repository.routePoints.find({ where: { routeId: id } });
+      const pointIds = data.pointIds ?? existing.map((point) => point.patrolPointId);
+      if (data.pointSettings?.some((setting) => !pointIds.includes(setting.patrolPointId))) {
+        throw new DomainValidationError(
+          'PATROL_ROUTE_POINT_SETTING_NOT_IN_ROUTE',
+          'Point dwell setting refers to a point outside the route',
+        );
+      }
+      route.category = data.category ?? route.category;
+      route.isActive = data.isActive ?? route.isActive;
+      route.name = data.name ?? route.name;
+      await repository.routes.save(route);
+      if (data.pointIds !== undefined) {
+        const dwell = new Map(existing.map((point) => [point.patrolPointId, point.dwellSeconds]));
+        for (const setting of data.pointSettings ?? [])
+          dwell.set(setting.patrolPointId, setting.dwellSeconds);
+        await repository.replacePoints(
+          id,
+          data.pointIds,
+          data.pointIds.map((patrolPointId) => ({
+            patrolPointId,
+            dwellSeconds: dwell.get(patrolPointId) ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
+          })),
+        );
+      } else if (data.pointSettings !== undefined) {
+        await repository.updatePointSettings(id, data.pointSettings);
+      }
+      await this.saveVersion(manager, (await repository.findById(id))!, actor);
     });
+  }
 
-    if (data.pointIds !== undefined) {
-      await this.replacePoints(id, data.pointIds, data.pointSettings);
-    } else if (data.pointSettings !== undefined) {
-      await this.updatePointSettings(id, data.pointSettings);
-    }
+  findVersions(routeId: string): Promise<PatrolRouteVersionEntity[]> {
+    return this.routes.manager.getRepository(PatrolRouteVersionEntity).find({
+      where: { routeId },
+      order: { version: 'DESC' },
+    });
+  }
+
+  private inTransaction(manager: EntityManager): PatrolRoutesRepository {
+    return new PatrolRoutesRepository(
+      manager.getRepository(PatrolRouteEntity),
+      manager.getRepository(PatrolRoutePointEntity),
+    );
+  }
+
+  private async saveVersion(
+    manager: EntityManager,
+    route: PatrolRouteEntity,
+    actor: AuthenticatedUser,
+  ): Promise<void> {
+    const versions = manager.getRepository(PatrolRouteVersionEntity);
+    const previous = await versions.findOne({
+      where: { routeId: route.id },
+      order: { version: 'DESC' },
+    });
+    await versions.save(
+      versions.create({
+        routeId: route.id,
+        version: (previous?.version ?? 0) + 1,
+        actorId: actor.id,
+        actorFullName: actor.authorizationFullName ?? actor.fullName,
+        authorizationId: actor.authorizationId,
+        snapshot: {
+          name: route.name,
+          category: route.category,
+          isActive: route.isActive,
+          points: [...(route.points ?? [])]
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((point) => ({
+              patrolPointId: point.patrolPointId,
+              sortOrder: point.sortOrder,
+              dwellSeconds: point.dwellSeconds,
+            })),
+        },
+      }),
+    );
   }
 
   countActivePoints(routeId: string): Promise<number> {
@@ -103,8 +185,7 @@ export class PatrolRoutesRepository {
           patrolPointId,
           routeId,
           sortOrder: index + 1,
-          dwellSeconds:
-            dwellByPointId.get(patrolPointId) ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
+          dwellSeconds: dwellByPointId.get(patrolPointId) ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
         }),
       ),
     );

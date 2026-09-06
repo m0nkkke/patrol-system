@@ -5,6 +5,7 @@ import { ArchiveService } from './archive.service';
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { PatrolRouteEntity } from '../patrols/entities/patrol-route.entity';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
+import { PatrolRoutesService } from '../patrols/routes/patrol-routes.service';
 
 type RepositoryMock = Pick<
   Repository<any>,
@@ -19,6 +20,7 @@ describe('ArchiveService', () => {
   let shops: jest.Mocked<RepositoryMock>;
   let users: jest.Mocked<RepositoryMock>;
   let service: ArchiveService;
+  let patrolRoutesService: jest.Mocked<Pick<PatrolRoutesService, 'deactivate' | 'update'>>;
   let patrolPointsService: jest.Mocked<Pick<PatrolPointsService, 'archive' | 'restore'>>;
 
   beforeEach(() => {
@@ -32,6 +34,7 @@ describe('ArchiveService', () => {
       archive: jest.fn(),
       restore: jest.fn(),
     };
+    patrolRoutesService = { deactivate: jest.fn(), update: jest.fn() };
     service = new ArchiveService(
       fileAssets as unknown as Repository<any>,
       nfcTags as unknown as Repository<any>,
@@ -40,6 +43,7 @@ describe('ArchiveService', () => {
       shops as unknown as Repository<any>,
       users as unknown as Repository<any>,
       patrolPointsService as unknown as PatrolPointsService,
+      patrolRoutesService as unknown as PatrolRoutesService,
     );
   });
 
@@ -96,9 +100,8 @@ describe('ArchiveService', () => {
   });
 
   it('restores an inactive patrol route without soft delete', async () => {
-    const archivedRoute = createRoute(false);
     const restoredRoute = createRoute(true);
-    patrolRoutes.findOne.mockResolvedValueOnce(archivedRoute).mockResolvedValueOnce(restoredRoute);
+    patrolRoutesService.update.mockResolvedValue(restoredRoute);
 
     await expect(
       service.restore('patrol-routes', 'route-id', createAdminActor()),
@@ -109,7 +112,12 @@ describe('ArchiveService', () => {
       resourceType: 'patrol-routes',
     });
     expect(patrolRoutes.restore).not.toHaveBeenCalled();
-    expect(patrolRoutes.update).toHaveBeenCalledWith('route-id', { isActive: true });
+    expect(patrolRoutes.update).not.toHaveBeenCalled();
+    expect(patrolRoutesService.update).toHaveBeenCalledWith(
+      'route-id',
+      { isActive: true },
+      createAdminActor(),
+    );
   });
 
   it('delegates patrol point archive to patrol point business rules', async () => {

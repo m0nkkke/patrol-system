@@ -6,6 +6,7 @@ import { NfcTagEntity } from '../patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
 import { PatrolPointsModule } from '../patrol-points/patrol-points.module';
 import { PatrolRouteEntity } from '../patrols/entities/patrol-route.entity';
+import { PatrolsModule } from '../patrols/patrols.module';
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { UserEntity } from '../users/entities/user.entity';
 import { ArchiveController } from './archive.controller';
@@ -15,6 +16,7 @@ import { ArchiveService } from './archive.service';
   controllers: [ArchiveController],
   imports: [
     PatrolPointsModule,
+    PatrolsModule,
     TypeOrmModule.forFeature([
       FileAssetEntity,
       NfcTagEntity,

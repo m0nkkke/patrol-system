@@ -127,6 +127,7 @@ export interface Patrol {
   employeeId: string;
   employee?: PatrolEmployee;
   routeId?: string;
+  routeSnapshot?: PatrolSnapshotPoint[] | null;
   shop?: PatrolShop;
   status: PatrolStatus;
   startedAt?: string;
@@ -164,9 +165,33 @@ export interface PatrolRoute {
   points?: Array<{
     id: string;
     sortOrder: number;
+    dwellSeconds: number;
     patrolPoint: RoutePoint;
     patrolPointId: string;
   }>;
+}
+
+/** Immutable point configuration captured when a patrol starts. */
+export interface PatrolSnapshotPoint extends RoutePoint {
+  dwellSeconds: number;
+}
+
+export interface PatrolRouteVersionSnapshot {
+  name: string;
+  category: PatrolRouteCategory;
+  isActive: boolean;
+  points: Array<{ patrolPointId: string; sortOrder: number; dwellSeconds: number }>;
+}
+
+export interface PatrolRouteVersion {
+  id: string;
+  routeId: string;
+  version: number;
+  createdAt: string;
+  actorId?: string | null;
+  actorFullName?: string | null;
+  authorizationId?: string | null;
+  snapshot: PatrolRouteVersionSnapshot;
 }
 
 export interface AvailablePatrolSchedule extends PatrolSchedule {

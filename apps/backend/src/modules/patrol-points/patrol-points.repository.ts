@@ -6,6 +6,7 @@ import { NfcTagEntity } from './entities/nfc-tag.entity';
 import { NfcTagReplacementEntity } from './entities/nfc-tag-replacement.entity';
 import { PatrolPointEntity } from './entities/patrol-point.entity';
 import { PatrolRoutePointEntity } from '../patrols/entities/patrol-route-point.entity';
+import { DomainValidationError } from '../../common/errors/domain-validation.error';
 
 type CreateNfcTagRecord = {
   isActive: boolean;
@@ -52,6 +53,36 @@ export class PatrolPointsRepository {
 
   createPatrolPoint(data: CreatePatrolPointRecord): Promise<PatrolPointEntity> {
     return this.patrolPoints.save(this.patrolPoints.create(data));
+  }
+
+  async createPatrolPointWithNfc(
+    data: CreatePatrolPointRecord,
+    tag: CreateNfcTagRecord,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPoints.manager.transaction(async (manager) => {
+      const tags = manager.getRepository(NfcTagEntity);
+      const points = manager.getRepository(PatrolPointEntity);
+      let savedTag: NfcTagEntity;
+      try {
+        savedTag = await tags.save(tags.create(tag));
+      } catch (error) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === '23505'
+        ) {
+          throw new DomainValidationError(
+            'NFC_UID_ALREADY_REGISTERED',
+            'NFC UID is already registered',
+          );
+        }
+        throw error;
+      }
+      const point = await points.save(points.create({ ...data, nfcTagId: savedTag.id }));
+      point.nfcTag = savedTag;
+      return point;
+    });
   }
 
   createNfcTagReplacement(data: CreateNfcTagReplacementRecord): Promise<NfcTagReplacementEntity> {

@@ -88,10 +88,14 @@ Authorization: Bearer <accessToken>
 
 Backend рассчитывает `expectedPoint` и `expectedScanAction` из `patrol_point_visits` и уже сохраненных `patrol_events`:
 
-- если у обхода есть `routeId`, порядок берется из `patrol_route_points.sort_order`;
-- если `routeId` нет, используется порядок активных `patrol_points.sort_order` магазина;
+- для новых обходов порядок и выдержки берутся из сохранённого при старте `patrols.route_snapshot`, независимо от последующего редактирования маршрута;
+- только для старых обходов без снимка используется прежний порядок маршрута или магазина;
 - точки со статусом `completed` исключаются;
 - точка со статусом `arrived` остается ожидаемой до принятого `depart`;
 - неактивные точки не предлагаются как ожидаемые.
 
 Новая логика посещения точки описана в [Route Timing And Point Visits](route-timing-and-point-visits.md).
+
+Для offline клиент сохраняет полный `routeSnapshot` из ответа старта обхода или получает его
+через `GET /api/v1/mobile/shops/:shopId/route`. Поле `dwellSeconds` каждой точки задаёт выдержку
+после перехода к ней без сети; текущее `pointDwellSeconds` wait state не заменяет настройки остальных точек.

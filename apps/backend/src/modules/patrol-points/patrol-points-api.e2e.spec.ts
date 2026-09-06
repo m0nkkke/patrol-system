@@ -10,7 +10,10 @@ import { PatrolPointEntity } from './entities/patrol-point.entity';
 import { PatrolPointsController } from './patrol-points.controller';
 import { PatrolPointsService } from './patrol-points.service';
 
-type PatrolPointsServiceMock = Pick<PatrolPointsService, 'archive' | 'restore' | 'update'>;
+type PatrolPointsServiceMock = Pick<
+  PatrolPointsService,
+  'archive' | 'restore' | 'update' | 'createPatrolPointWithNfc'
+>;
 
 describe('Patrol points API contract', () => {
   let app: INestApplication;
@@ -19,6 +22,7 @@ describe('Patrol points API contract', () => {
   beforeEach(async () => {
     service = {
       archive: jest.fn(),
+      createPatrolPointWithNfc: jest.fn(),
       restore: jest.fn(),
       update: jest.fn(),
     };
@@ -75,6 +79,30 @@ describe('Patrol points API contract', () => {
       { description: 'Updated description', name: 'Updated point' },
       expect.objectContaining({ role: 'local_route_setter' }),
     );
+  });
+
+  it('validates atomic point registration and passes authenticated actor', async () => {
+    service.createPatrolPointWithNfc.mockResolvedValue(createPoint());
+    const body = { shopId: '00000000-0000-4000-8000-000000000010', name: 'Point', uid: '04AABBCC' };
+    await request(app.getHttpServer())
+      .post('/api/v1/patrol-points/with-nfc')
+      .send(body)
+      .expect(201);
+    expect(service.createPatrolPointWithNfc).toHaveBeenCalledWith(
+      body,
+      expect.objectContaining({ role: 'local_route_setter' }),
+    );
+    for (const invalid of [
+      { ...body, uid: '' },
+      { ...body, nfcTagId: body.shopId },
+      { ...body, registeredBy: body.shopId },
+    ]) {
+      await request(app.getHttpServer())
+        .post('/api/v1/patrol-points/with-nfc')
+        .send(invalid)
+        .expect(400);
+    }
+    expect(service.createPatrolPointWithNfc).toHaveBeenCalledTimes(1);
   });
 
   it('rejects route order and NFC binding in the generic PATCH contract', async () => {

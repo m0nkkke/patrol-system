@@ -56,6 +56,16 @@ export class PatrolRoutesController {
     return this.patrolRoutesService.findOneForActor(id, actor);
   }
 
+  @Get(':id/versions')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector')
+  @ApiOkResponse({ description: 'Immutable route versions, newest first' })
+  findVersions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): ReturnType<PatrolRoutesService['findVersions']> {
+    return this.patrolRoutesService.findVersions(id, actor);
+  }
+
   @Patch(':id')
   @Roles('admin', 'route_setter', 'local_route_setter')
   @ApiOkResponse({ description: 'Patrol route updated' })

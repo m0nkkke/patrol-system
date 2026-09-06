@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  CreatePatrolRouteDto,
-  DEFAULT_PATROL_POINT_DWELL_SECONDS,
-  UpdatePatrolRouteDto,
-} from '@patrol/shared';
+import { CreatePatrolRouteDto, UpdatePatrolRouteDto } from '@patrol/shared';
 
 import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../../common/errors/domain-validation.error';
@@ -28,14 +24,17 @@ export class PatrolRoutesService {
     await this.assertPointsBelongToShop(dto.patrolPointIds, dto.shopId);
     assertPointSettingsBelongToRoute(dto.pointSettings, dto.patrolPointIds);
 
-    return this.patrolRoutesRepository.create({
-      category: dto.category,
-      isActive: dto.isActive ?? true,
-      name: dto.name,
-      pointIds: dto.patrolPointIds,
-      pointSettings: dto.pointSettings,
-      shopId: dto.shopId,
-    });
+    return this.patrolRoutesRepository.create(
+      {
+        category: dto.category,
+        isActive: dto.isActive ?? true,
+        name: dto.name,
+        pointIds: dto.patrolPointIds,
+        pointSettings: dto.pointSettings,
+        shopId: dto.shopId,
+      },
+      actor,
+    );
   }
 
   async findByShop(shopId: string): Promise<PatrolRouteEntity[]> {
@@ -79,24 +78,32 @@ export class PatrolRoutesService {
     const routePointIds =
       dto.patrolPointIds ?? (route.points ?? []).map((point) => point.patrolPointId);
     assertPointSettingsBelongToRoute(dto.pointSettings, routePointIds);
-    const pointSettings =
-      dto.patrolPointIds === undefined
-        ? dto.pointSettings
-        : mergePointSettings(route.points ?? [], routePointIds, dto.pointSettings);
 
-    await this.patrolRoutesRepository.update(id, {
-      category: dto.category,
-      isActive: dto.isActive,
-      name: dto.name,
-      pointIds: dto.patrolPointIds,
-      pointSettings,
-    });
+    await this.patrolRoutesRepository.update(
+      id,
+      {
+        category: dto.category,
+        isActive: dto.isActive,
+        name: dto.name,
+        pointIds: dto.patrolPointIds,
+        pointSettings: dto.pointSettings,
+      },
+      actor,
+    );
 
     return this.findOne(id);
   }
 
   deactivate(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
     return this.update(id, { isActive: false }, actor);
+  }
+
+  async findVersions(
+    id: string,
+    actor: AuthenticatedUser,
+  ): ReturnType<PatrolRoutesRepository['findVersions']> {
+    await this.findOneForActor(id, actor);
+    return this.patrolRoutesRepository.findVersions(id);
   }
 
   async assertRouteUsable(routeId: string, shopId: string): Promise<void> {
@@ -162,25 +169,6 @@ function assertPointSettingsBelongToRoute(
       'Point dwell setting refers to a point outside the route',
     );
   }
-}
-
-function mergePointSettings(
-  existingPoints: PatrolRoutePointEntity[],
-  pointIds: string[],
-  overrides: CreatePatrolRouteDto['pointSettings'],
-): Array<{ dwellSeconds: number; patrolPointId: string }> {
-  const dwellByPointId = new Map(
-    existingPoints.map((point) => [point.patrolPointId, point.dwellSeconds]),
-  );
-  for (const override of overrides ?? []) {
-    dwellByPointId.set(override.patrolPointId, override.dwellSeconds);
-  }
-
-  return pointIds.map((patrolPointId) => ({
-    dwellSeconds:
-      dwellByPointId.get(patrolPointId) ?? DEFAULT_PATROL_POINT_DWELL_SECONDS,
-    patrolPointId,
-  }));
 }
 
 function assertCanManageRoute(actor: AuthenticatedUser, shopId: string): void {

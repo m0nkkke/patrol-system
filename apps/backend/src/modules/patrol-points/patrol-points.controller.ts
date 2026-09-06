@@ -24,6 +24,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import {
   CreateNfcTagDto,
   CreatePatrolPointDto,
+  CreatePatrolPointWithNfcDto,
   ReplaceNfcTagDto,
   UpdatePatrolPointDto,
 } from '@patrol/shared';
@@ -61,6 +62,16 @@ export class PatrolPointsController {
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PatrolPointEntity> {
     return this.patrolPointsService.createPatrolPoint(dto, actor);
+  }
+
+  @Post('with-nfc')
+  @Roles('admin', 'route_setter', 'local_route_setter')
+  @ApiCreatedResponse({ description: 'Patrol point and NFC tag created atomically' })
+  createWithNfc(
+    @Body() dto: CreatePatrolPointWithNfcDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ): Promise<PatrolPointEntity> {
+    return this.patrolPointsService.createPatrolPointWithNfc(dto, actor);
   }
 
   @Get('shop/:shopId/archived')

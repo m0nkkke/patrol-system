@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   CreateNfcTagDto,
   CreatePatrolPointDto,
+  CreatePatrolPointWithNfcDto,
   ReplaceNfcTagDto,
   UpdatePatrolPointDto,
 } from '@patrol/shared';
@@ -56,19 +57,34 @@ export class PatrolPointsService {
     return this.patrolPointsRepository.findActiveByShop(shopId);
   }
 
-  findByShopForActor(
-    shopId: string,
+  createPatrolPointWithNfc(
+    dto: CreatePatrolPointWithNfcDto,
     actor: AuthenticatedUser,
-  ): Promise<PatrolPointEntity[]> {
+  ): Promise<PatrolPointEntity> {
+    assertCanManagePoint(actor, dto.shopId);
+    const uid = normalizeNfcUid(dto.uid);
+    if (uid.length < 4 || uid.length > 32) {
+      throw new DomainValidationError('NFC_UID_INVALID', 'NFC UID must contain 4 to 32 characters');
+    }
+    return this.patrolPointsRepository.createPatrolPointWithNfc(
+      {
+        shopId: dto.shopId,
+        name: dto.name,
+        description: dto.description,
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: dto.isActive ?? true,
+      },
+      { uid, payload: dto.payload, isActive: true, registeredBy: actor.id },
+    );
+  }
+
+  findByShopForActor(shopId: string, actor: AuthenticatedUser): Promise<PatrolPointEntity[]> {
     assertCanAccessPoint(actor, shopId);
 
     return this.findByShop(shopId);
   }
 
-  findArchivedByShop(
-    shopId: string,
-    actor: AuthenticatedUser,
-  ): Promise<PatrolPointEntity[]> {
+  findArchivedByShop(shopId: string, actor: AuthenticatedUser): Promise<PatrolPointEntity[]> {
     assertCanManagePoint(actor, shopId);
 
     return this.patrolPointsRepository.findArchivedByShop(shopId);
@@ -140,10 +156,7 @@ export class PatrolPointsService {
     assertCanManagePoint(actor, point.shopId);
 
     if (!isArchived(point)) {
-      throw new DomainValidationError(
-        'PATROL_POINT_NOT_ARCHIVED',
-        'Patrol point is not archived',
-      );
+      throw new DomainValidationError('PATROL_POINT_NOT_ARCHIVED', 'Patrol point is not archived');
     }
 
     let unbindNfcTag = false;
@@ -202,7 +215,10 @@ export class PatrolPointsService {
     const tag = await this.patrolPointsRepository.findNfcTagByUid(normalizedUid);
 
     if (tag === null || !tag.isActive) {
-      throw new DomainValidationError('NFC_TAG_NOT_ACTIVE', 'NFC tag is not registered or inactive');
+      throw new DomainValidationError(
+        'NFC_TAG_NOT_ACTIVE',
+        'NFC tag is not registered or inactive',
+      );
     }
 
     return tag;

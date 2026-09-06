@@ -10,6 +10,7 @@ import { NfcTagEntity } from '../patrol-points/entities/nfc-tag.entity';
 import { PatrolPointEntity } from '../patrol-points/entities/patrol-point.entity';
 import { PatrolPointsService } from '../patrol-points/patrol-points.service';
 import { PatrolRouteEntity } from '../patrols/entities/patrol-route.entity';
+import { PatrolRoutesService } from '../patrols/routes/patrol-routes.service';
 import { ShopEntity } from '../shops/entities/shop.entity';
 import { UserEntity } from '../users/entities/user.entity';
 
@@ -55,6 +56,7 @@ export class ArchiveService {
     @InjectRepository(UserEntity)
     private readonly users: Repository<UserEntity>,
     private readonly patrolPointsService: PatrolPointsService,
+    private readonly patrolRoutesService: PatrolRoutesService,
   ) {}
 
   async findArchived(
@@ -99,6 +101,13 @@ export class ArchiveService {
       const point = await this.patrolPointsService.archive(id, actor);
       return toArchiveItem(resourceType, point, config);
     }
+    if (resourceType === 'patrol-routes') {
+      return toArchiveItem(
+        resourceType,
+        await this.patrolRoutesService.deactivate(id, actor),
+        config,
+      );
+    }
 
     const entity = await this.findEntity(config.repo, id, config.softDelete);
 
@@ -129,6 +138,13 @@ export class ArchiveService {
     if (resourceType === 'patrol-points') {
       const point = await this.patrolPointsService.restore(id, actor);
       return toArchiveItem(resourceType, point, config);
+    }
+    if (resourceType === 'patrol-routes') {
+      return toArchiveItem(
+        resourceType,
+        await this.patrolRoutesService.update(id, { isActive: true }, actor),
+        config,
+      );
     }
 
     const entity = await this.findEntity(config.repo, id, true);
@@ -250,7 +266,9 @@ function toArchiveItem<Entity extends { id: string }>(
 ): ArchiveItem {
   const deletedAt = 'deletedAt' in entity ? (entity.deletedAt as Date | undefined) : undefined;
   const inactive =
-    config.inactiveColumn === undefined ? false : (entity[config.inactiveColumn] as boolean) === false;
+    config.inactiveColumn === undefined
+      ? false
+      : (entity[config.inactiveColumn] as boolean) === false;
   const archived = (deletedAt !== undefined && deletedAt !== null) || inactive;
 
   return {

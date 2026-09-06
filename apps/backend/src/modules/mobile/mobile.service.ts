@@ -7,6 +7,7 @@ import {
   MobileSchedulePlanDto,
   MobileSchedulePlanQueryDto,
   NfcWaitStateDto,
+  PatrolSnapshotPoint,
   RegisterDevicePushTokenDto,
   ReportMissedPointAttemptDto,
   StartRouteSetupDto,
@@ -104,19 +105,34 @@ export class MobileService {
     return shops.filter((shop) => shop.isActive);
   }
 
-  getRoute(user: AuthenticatedUser): ReturnType<PatrolPointsService['findByShop']> {
+  getRoute(user: AuthenticatedUser): Promise<PatrolSnapshotPoint[]> {
     const shopId = requireUserShopId(user);
 
     return this.getRouteForShop(user, shopId);
   }
 
-  getRouteForShop(
-    user: AuthenticatedUser,
-    shopId: string,
-  ): ReturnType<PatrolPointsService['findByShop']> {
+  async getRouteForShop(user: AuthenticatedUser, shopId: string): Promise<PatrolSnapshotPoint[]> {
     assertUserCanUseShop(user, shopId);
-
-    return this.patrolPointsService.findByShop(shopId);
+    if (user.role !== 'security_guard') {
+      throw new DomainValidationError(
+        'MOBILE_PATROL_FORBIDDEN',
+        'Only security guards can read their active patrol route',
+      );
+    }
+    const patrol = await this.patrolsService.findActiveByEmployee(user.id);
+    if (patrol === null || patrol.shopId !== shopId) {
+      throw new DomainValidationError(
+        'MOBILE_ACTIVE_PATROL_REQUIRED',
+        'No active patrol for the selected shop',
+      );
+    }
+    if (patrol.routeSnapshot == null) {
+      throw new DomainValidationError(
+        'PATROL_ROUTE_SNAPSHOT_UNAVAILABLE',
+        'This patrol started before route snapshots were introduced',
+      );
+    }
+    return patrol.routeSnapshot;
   }
 
   async getSchedulePlan(
@@ -195,6 +211,7 @@ export class MobileService {
 
     return this.patrolsService.start({
       employeeId: user.id,
+      routeId: dto.routeId,
       scheduleId: dto.scheduleId,
       shopId: dto.shopId,
     });

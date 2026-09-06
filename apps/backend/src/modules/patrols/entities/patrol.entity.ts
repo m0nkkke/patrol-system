@@ -1,4 +1,4 @@
-import { PatrolStatus } from '@patrol/shared';
+import { PatrolSnapshotPoint, PatrolStatus } from '@patrol/shared';
 import {
   Column,
   CreateDateColumn,
@@ -34,6 +34,9 @@ export class PatrolEntity {
   @Index('idx_patrols_route_id')
   @Column({ name: 'route_id', nullable: true, type: 'uuid' })
   routeId?: string;
+
+  @Column({ name: 'route_snapshot', nullable: true, type: 'jsonb' })
+  routeSnapshot?: PatrolSnapshotPoint[] | null;
 
   @ManyToOne(() => PatrolRouteEntity, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'route_id' })

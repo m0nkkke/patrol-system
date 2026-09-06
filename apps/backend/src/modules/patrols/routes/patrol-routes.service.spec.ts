@@ -10,7 +10,7 @@ import { PatrolRoutesService } from './patrol-routes.service';
 type PatrolPointsServiceMock = Pick<PatrolPointsService, 'findOne'>;
 type PatrolRoutesRepositoryMock = Pick<
   PatrolRoutesRepository,
-  'create' | 'findById' | 'findByShop' | 'findPoint' | 'update'
+  'create' | 'findById' | 'findByShop' | 'findPoint' | 'update' | 'findVersions'
 >;
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
 
@@ -29,6 +29,7 @@ describe('PatrolRoutesService', () => {
       findById: jest.fn(),
       findByShop: jest.fn(),
       findPoint: jest.fn(),
+      findVersions: jest.fn(),
       update: jest.fn(),
     };
     shopsService = {
@@ -65,14 +66,17 @@ describe('PatrolRoutesService', () => {
       createActor(),
     );
 
-    expect(repository.create).toHaveBeenCalledWith({
-      category: 'internal',
-      isActive: true,
-      name: 'Morning route',
-      pointIds: ['point-1', 'point-2'],
-      pointSettings: [{ dwellSeconds: 0, patrolPointId: 'point-1' }],
-      shopId: 'shop-id',
-    });
+    expect(repository.create).toHaveBeenCalledWith(
+      {
+        category: 'internal',
+        isActive: true,
+        name: 'Morning route',
+        pointIds: ['point-1', 'point-2'],
+        pointSettings: [{ dwellSeconds: 0, patrolPointId: 'point-1' }],
+        shopId: 'shop-id',
+      },
+      createActor(),
+    );
   });
 
   it('rejects dwell settings for points outside the route', async () => {
@@ -143,7 +147,7 @@ describe('PatrolRoutesService', () => {
     expect(shopsService.findOne).not.toHaveBeenCalled();
   });
 
-  it('preserves existing dwell settings when route points are reordered', async () => {
+  it('passes reorder without stale dwell overrides to the transactional repository', async () => {
     repository.findById
       .mockResolvedValueOnce(
         createRoute({
@@ -171,13 +175,28 @@ describe('PatrolRoutesService', () => {
       'route-id',
       expect.objectContaining({
         pointIds: ['point-2', 'point-1', 'point-3'],
-        pointSettings: [
-          { dwellSeconds: 0, patrolPointId: 'point-2' },
-          { dwellSeconds: 120, patrolPointId: 'point-1' },
-          { dwellSeconds: 90, patrolPointId: 'point-3' },
-        ],
+        pointSettings: undefined,
       }),
+      createActor(),
     );
+  });
+
+  it('restricts route history to assigned shops for inspectors and local setters', async () => {
+    repository.findById.mockResolvedValue(createRoute());
+    for (const role of ['inspector', 'local_route_setter'] as const) {
+      await expect(
+        service.findVersions('route-id', { ...createActor(), role, shopIds: ['other-shop'] }),
+      ).rejects.toMatchObject({ code: 'PATROL_ROUTE_FORBIDDEN' });
+    }
+    expect(repository.findVersions).not.toHaveBeenCalled();
+    repository.findVersions.mockResolvedValue([]);
+    await expect(
+      service.findVersions('route-id', {
+        ...createActor(),
+        role: 'inspector',
+        shopIds: ['shop-id'],
+      }),
+    ).resolves.toEqual([]);
   });
 });
 

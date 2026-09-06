@@ -86,7 +86,7 @@ export class PatrolsService {
       dto.scheduleId === undefined
         ? undefined
         : await this.patrolSchedulesService.findOne(dto.scheduleId);
-    const routeId = dto.routeId ?? schedule?.routeId;
+    const routeId = dto.routeId ?? schedule?.routeId ?? undefined;
 
     if (
       dto.routeId !== undefined &&
@@ -374,9 +374,17 @@ export class PatrolsService {
 
     const point = await this.patrolPointsService.findOne(dto.patrolPointId);
     const routePoint =
-      patrol.routeId === undefined
-        ? null
-        : await this.patrolRoutesService.assertPointInRoute(patrol.routeId, point.id);
+      patrol.routeSnapshot != null
+        ? patrol.routeSnapshot.find((item) => item.id === point.id)
+        : patrol.routeId == null
+          ? undefined
+          : await this.patrolRoutesService.assertPointInRoute(patrol.routeId, point.id);
+    if (patrol.routeSnapshot != null && routePoint === undefined) {
+      throw new DomainValidationError(
+        'PATROL_POINT_NOT_IN_ROUTE',
+        'Patrol point is not included in the patrol snapshot',
+      );
+    }
     const routeSortOrder = routePoint?.sortOrder ?? point.sortOrder;
     const pointDwellSeconds = routePoint?.dwellSeconds ?? DEFAULT_PATROL_POINT_DWELL_SECONDS;
     const pointDeactivatedAfterScan = options.clientLocalId !== undefined && !point.isActive;
@@ -629,6 +637,32 @@ export class PatrolsService {
     const expectedPoint = await this.patrolPointsService.findOne(dto.expectedPatrolPointId);
     const attemptedPoint = await this.patrolPointsService.findOne(dto.attemptedPatrolPointId);
 
+    if (patrol.routeSnapshot != null) {
+      const expected = patrol.routeSnapshot.find((point) => point.id === expectedPoint.id);
+      const attempted = patrol.routeSnapshot.find((point) => point.id === attemptedPoint.id);
+      if (expected === undefined || attempted === undefined) {
+        throw new DomainValidationError(
+          'PATROL_POINT_NOT_IN_ROUTE',
+          'Patrol point is not included in the patrol snapshot',
+        );
+      }
+      // Do not mutate the shared point entities: order belongs to this patrol only.
+      return this.recordMissedPointAttemptForPoints(
+        patrol,
+        dto,
+        { ...expectedPoint, sortOrder: expected.sortOrder },
+        { ...attemptedPoint, sortOrder: attempted.sortOrder },
+      );
+    }
+    return this.recordMissedPointAttemptForPoints(patrol, dto, expectedPoint, attemptedPoint);
+  }
+
+  private async recordMissedPointAttemptForPoints(
+    patrol: PatrolEntity,
+    dto: ReportMissedPointAttemptDto,
+    expectedPoint: { id: string; shopId: string; sortOrder: number },
+    attemptedPoint: { id: string; shopId: string; sortOrder: number },
+  ): Promise<void> {
     if (expectedPoint.shopId !== patrol.shopId || attemptedPoint.shopId !== patrol.shopId) {
       throw new DomainValidationError(
         'PATROL_POINT_WRONG_SHOP',

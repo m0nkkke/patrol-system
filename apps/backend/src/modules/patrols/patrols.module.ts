@@ -10,6 +10,7 @@ import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
 import { PatrolPointVisitEntity } from './entities/patrol-point-visit.entity';
 import { PatrolRoutePointEntity } from './entities/patrol-route-point.entity';
 import { PatrolRouteEntity } from './entities/patrol-route.entity';
+import { PatrolRouteVersionEntity } from './entities/patrol-route-version.entity';
 import { PatrolRouteIntervalEntity } from './entities/patrol-route-interval.entity';
 import { PatrolScheduleEntity } from './entities/patrol-schedule.entity';
 import { PatrolEntity } from './entities/patrol.entity';
@@ -39,6 +40,7 @@ import { PatrolsService } from './patrols.service';
       PatrolIncidentEntity,
       PatrolPointVisitEntity,
       PatrolRouteEntity,
+      PatrolRouteVersionEntity,
       PatrolRoutePointEntity,
       PatrolRouteIntervalEntity,
       PatrolScheduleEntity,

@@ -16,6 +16,7 @@ type PatrolPointsRepositoryMock = Pick<
   | 'createNfcTag'
   | 'createNfcTagReplacement'
   | 'createPatrolPoint'
+  | 'createPatrolPointWithNfc'
   | 'findActiveByShop'
   | 'findArchivedByShop'
   | 'findNfcTagById'
@@ -43,6 +44,7 @@ describe('PatrolPointsService', () => {
       createNfcTag: jest.fn(),
       createNfcTagReplacement: jest.fn(),
       createPatrolPoint: jest.fn(),
+      createPatrolPointWithNfc: jest.fn(),
       findActiveByShop: jest.fn(),
       findArchivedByShop: jest.fn(),
       findNfcTagById: jest.fn(),
@@ -62,6 +64,27 @@ describe('PatrolPointsService', () => {
       repository as unknown as PatrolPointsRepository,
       filesService as unknown as FilesService,
     );
+  });
+
+  it('normalizes UID and derives NFC author from the authenticated user', async () => {
+    await service.createPatrolPointWithNfc(
+      { shopId: 'shop-id', name: 'Point', uid: '04AABBCC' },
+      createActor(),
+    );
+    expect(repository.createPatrolPointWithNfc).toHaveBeenCalledWith(
+      expect.objectContaining({ shopId: 'shop-id', name: 'Point', sortOrder: 0 }),
+      expect.objectContaining({ uid: '04aabbcc', registeredBy: 'setter-id', isActive: true }),
+    );
+  });
+
+  it('rejects atomic registration outside assigned shops before writing NFC', () => {
+    expect(() =>
+      service.createPatrolPointWithNfc(
+        { shopId: 'other-shop', name: 'Point', uid: '04aabbcc' },
+        createActor(),
+      ),
+    ).toThrow(DomainValidationError);
+    expect(repository.createPatrolPointWithNfc).not.toHaveBeenCalled();
   });
 
   it('uploads compressed patrol point photo and links file asset', async () => {
@@ -230,7 +253,9 @@ describe('PatrolPointsService', () => {
   it('archives an unused point and returns its archived representation', async () => {
     const point = createPoint();
     const archivedPoint = createPoint({ deletedAt: new Date(), isActive: false });
-    repository.findPatrolPointById.mockResolvedValueOnce(point).mockResolvedValueOnce(archivedPoint);
+    repository.findPatrolPointById
+      .mockResolvedValueOnce(point)
+      .mockResolvedValueOnce(archivedPoint);
     repository.countActiveRoutesByPointId.mockResolvedValue(0);
 
     await expect(service.archive(point.id, createActor())).resolves.toBe(archivedPoint);
@@ -299,9 +324,7 @@ describe('PatrolPointsService', () => {
       .mockResolvedValueOnce(archivedPoint)
       .mockResolvedValueOnce(restoredPoint);
     repository.findPatrolPointByNfcTagId.mockResolvedValue(null);
-    repository.restorePatrolPoint
-      .mockRejectedValueOnce({ code: '23505' })
-      .mockResolvedValueOnce();
+    repository.restorePatrolPoint.mockRejectedValueOnce({ code: '23505' }).mockResolvedValueOnce();
 
     await expect(service.restore(archivedPoint.id, createActor())).resolves.toBe(restoredPoint);
     expect(repository.restorePatrolPoint).toHaveBeenNthCalledWith(1, archivedPoint.id, false);
