@@ -8,7 +8,7 @@ export type ManagementScorecardRaw = {
   clean_patrols: string | null;
   completed_patrols: string | null;
   on_time_patrols: string | null;
-  planned_patrols: string | null;
+  registered_patrols: string | null;
   region_id: string | null;
   shop_id: string;
   shop_name: string;
@@ -98,7 +98,7 @@ export class ManagementScorecardsRepository {
       patrol_metrics AS (
         SELECT
           patrol.shop_id,
-          COUNT(*) FILTER (WHERE patrol.schedule_id IS NOT NULL) AS planned_patrols,
+          COUNT(*) AS registered_patrols,
           COUNT(*) FILTER (WHERE patrol.status = 'completed') AS completed_patrols,
           COUNT(*) FILTER (
             WHERE patrol.status = 'completed'
@@ -134,7 +134,7 @@ export class ManagementScorecardsRepository {
           scoped_shop.id AS shop_id,
           scoped_shop.name AS shop_name,
           scoped_shop.region_id,
-          COALESCE(patrol_metrics.planned_patrols, 0) AS planned_patrols,
+          COALESCE(patrol_metrics.registered_patrols, 0) AS registered_patrols,
           COALESCE(patrol_metrics.completed_patrols, 0) AS completed_patrols,
           COALESCE(patrol_metrics.on_time_patrols, 0) AS on_time_patrols,
           COALESCE(patrol_metrics.clean_patrols, 0) AS clean_patrols,
@@ -177,17 +177,17 @@ export type ScorecardSort =
 function toSqlSort(sort: ScorecardSort): string {
   const sorts: Record<ScorecardSort, string> = {
     'attentionRate:asc':
-      'CASE WHEN planned_patrols = 0 THEN 0 ELSE attention_patrols::float / planned_patrols END ASC, shop_name ASC',
+      'CASE WHEN registered_patrols = 0 THEN 0 ELSE attention_patrols::float / registered_patrols END ASC, shop_name ASC',
     'attentionRate:desc':
-      'CASE WHEN planned_patrols = 0 THEN 0 ELSE attention_patrols::float / planned_patrols END DESC, shop_name ASC',
+      'CASE WHEN registered_patrols = 0 THEN 0 ELSE attention_patrols::float / registered_patrols END DESC, shop_name ASC',
     'cleanPatrolRate:asc':
       'CASE WHEN completed_patrols = 0 THEN 0 ELSE clean_patrols::float / completed_patrols END ASC, shop_name ASC',
     'cleanPatrolRate:desc':
       'CASE WHEN completed_patrols = 0 THEN 0 ELSE clean_patrols::float / completed_patrols END DESC, shop_name ASC',
     'completionRate:asc':
-      'CASE WHEN planned_patrols = 0 THEN 0 ELSE completed_patrols::float / planned_patrols END ASC, shop_name ASC',
+      'CASE WHEN registered_patrols = 0 THEN 0 ELSE completed_patrols::float / registered_patrols END ASC, shop_name ASC',
     'completionRate:desc':
-      'CASE WHEN planned_patrols = 0 THEN 0 ELSE completed_patrols::float / planned_patrols END DESC, shop_name ASC',
+      'CASE WHEN registered_patrols = 0 THEN 0 ELSE completed_patrols::float / registered_patrols END DESC, shop_name ASC',
     'onTimeRate:asc':
       'CASE WHEN completed_patrols = 0 THEN 0 ELSE on_time_patrols::float / completed_patrols END ASC, shop_name ASC',
     'onTimeRate:desc':
@@ -195,9 +195,9 @@ function toSqlSort(sort: ScorecardSort): string {
     'shopName:asc': 'shop_name ASC',
     'shopName:desc': 'shop_name DESC',
     'status:asc':
-      'CASE WHEN attention_patrols > 0 OR (planned_patrols > 0 AND completed_patrols < planned_patrols) THEN 1 ELSE 0 END ASC, shop_name ASC',
+      'CASE WHEN attention_patrols > 0 OR (registered_patrols > 0 AND completed_patrols < registered_patrols) THEN 1 ELSE 0 END ASC, shop_name ASC',
     'status:desc':
-      'CASE WHEN attention_patrols > 0 OR (planned_patrols > 0 AND completed_patrols < planned_patrols) THEN 1 ELSE 0 END DESC, shop_name ASC',
+      'CASE WHEN attention_patrols > 0 OR (registered_patrols > 0 AND completed_patrols < registered_patrols) THEN 1 ELSE 0 END DESC, shop_name ASC',
   };
 
   return sorts[sort] ?? sorts['shopName:asc'];

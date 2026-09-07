@@ -1,5 +1,7 @@
+import { loadShopOptions } from '../lib/shop-options';
+import { useUrlFilters } from '../lib/use-url-filters';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -30,7 +32,6 @@ import type {
   PatrolIncidentType,
   PatrolRouteOption,
   PatrolStatus,
-  Shop,
 } from '../types/api';
 
 type PatrolFilters = {
@@ -52,13 +53,18 @@ const PAGE_SIZE = 20;
 export function PatrolsPage(): React.JSX.Element {
   const params = useParams({ strict: false });
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<PatrolFilters>(DEFAULT_FILTERS);
+  const searchParams = useSearch({ strict: false });
+  const [filters, setFilters] = useUrlFilters<PatrolFilters>('patrols', { ...DEFAULT_FILTERS, employeeId: searchParams.staff ?? '' });
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(filters.search.trim());
+  const selectedEmployee = useQuery({
+    queryKey: ['staff-member', filters.employeeId], enabled: !!filters.employeeId,
+    queryFn: async () => (await api.get<{ fullName: string }>(`/control/staff/${filters.employeeId}`)).data,
+  });
 
   const shopsQuery = useQuery({
-    queryKey: ['shops', 'patrol-filter'],
-    queryFn: async () => (await api.get<PaginatedResponse<Shop>>('/shops', { params: { limit: 100, page: 1, sort: 'name:asc' } })).data,
+    queryKey: ['shops', 'options'],
+    queryFn: () => loadShopOptions(),
   });
   const shopContextQuery = useQuery({
     enabled: filters.shopId !== '',
@@ -96,7 +102,7 @@ export function PatrolsPage(): React.JSX.Element {
     <main className="workspace patrols-workspace">
       <header className="workspace-header">
         <div><p className="eyebrow">Служба контроля</p><h1>История обходов</h1></div>
-        <span className="header-count">{patrolsQuery.data?.total ?? 0} обходов</span>
+        <div className="header-actions">{filters.employeeId ? <button className="secondary-button" onClick={() => updateFilter('employeeId', '')}>{selectedEmployee.data?.fullName ?? 'Выбранный сотрудник'} · сбросить</button> : null}<span className="header-count">{patrolsQuery.data?.total ?? 0} обходов</span></div>
       </header>
 
       <section className="patrol-filters" aria-label="Фильтры истории обходов">
@@ -105,8 +111,8 @@ export function PatrolsPage(): React.JSX.Element {
         <FilterField label="Сотрудник"><select disabled={filters.shopId === ''} onChange={(event) => updateFilter('employeeId', event.target.value)} value={filters.employeeId}><option value="">Все сотрудники</option>{(shopContextQuery.data?.staff ?? []).filter((member) => member.role === 'security_guard').map((member) => <option key={member.id} value={member.id}>{member.fullName}</option>)}</select></FilterField>
         <FilterField label="Маршрут"><select disabled={filters.shopId === ''} onChange={(event) => updateFilter('routeId', event.target.value)} value={filters.routeId}><option value="">Все маршруты</option>{(routesQuery.data ?? []).map((route) => <option key={route.id} value={route.id}>{route.name}</option>)}</select></FilterField>
         <FilterField label="Статус"><select onChange={(event) => updateFilter('status', event.target.value as PatrolFilters['status'])} value={filters.status}><option value="">Все статусы</option>{PATROL_STATUSES.map((status) => <option key={status} value={status}>{statusLabel(status)}</option>)}</select></FilterField>
-        <FilterField label="С даты"><input max={filters.to || undefined} onChange={(event) => updateFilter('from', event.target.value)} type="date" value={filters.from} /></FilterField>
-        <FilterField label="По дату"><input min={filters.from || undefined} onChange={(event) => updateFilter('to', event.target.value)} type="date" value={filters.to} /></FilterField>
+        <FilterField label="С даты (UTC)"><input max={filters.to || undefined} onChange={(event) => updateFilter('from', event.target.value)} type="date" value={filters.from} /></FilterField>
+        <FilterField label="По дату (UTC)"><input min={filters.from || undefined} onChange={(event) => updateFilter('to', event.target.value)} type="date" value={filters.to} /></FilterField>
         <FilterField label="Сортировка"><select onChange={(event) => updateFilter('sort', event.target.value as PatrolFilters['sort'])} value={filters.sort}><option value="startedAt:desc">Сначала новые</option><option value="startedAt:asc">Сначала старые</option><option value="status:asc">По статусу А-Я</option><option value="status:desc">По статусу Я-А</option></select></FilterField>
         <button className="icon-button filter-reset" onClick={() => { setFilters(DEFAULT_FILTERS); setPage(1); }} title="Сбросить фильтры" type="button"><FilterX size={18} /></button>
       </section>
@@ -120,7 +126,7 @@ export function PatrolsPage(): React.JSX.Element {
             <table className="patrols-table">
               <thead><tr><th>Статус</th><th>Начало</th><th>Магазин</th><th>Ответственный</th><th>Маршрут</th><th>Время</th><th>Точки</th><th>Факты</th><th /></tr></thead>
               <tbody>{patrolsQuery.data?.items.map((patrol) => (
-                <tr className={params.patrolId === patrol.id ? 'is-selected' : undefined} key={patrol.id} onClick={() => void navigate({ to: '/patrols/$patrolId', params: { patrolId: patrol.id } })}>
+                <tr className={params.patrolId === patrol.id ? 'is-selected' : undefined} key={patrol.id} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} onClick={() => void navigate({ search: true, to: '/patrols/$patrolId', params: { patrolId: patrol.id } })}>
                   <td><StatusBadge status={patrol.status} /></td>
                   <td><time>{formatNullableDate(patrol.startedAt)}</time><small>{periodLabel(patrol.period)}</small></td>
                   <td><strong>{patrol.shop.name ?? 'Без названия'}</strong></td>
@@ -151,6 +157,9 @@ function PatrolCard({ patrol }: { patrol: ControlPatrolDetail }): React.JSX.Elem
 
     <DetailSection icon={<UserRound />} title="Контекст обхода"><DefinitionList items={[["Ответственный", patrol.employee.fullName ?? 'Не указан'], ["Период", periodLabel(patrol.period)], ["Начало", formatNullableDate(patrol.startedAt, true)], ["Плановый срок", formatNullableDate(patrol.dueAt, true)], ["Завершение", formatNullableDate(patrol.completedAt, true)]]} /></DetailSection>
 
+    <DetailSection icon={<Route />} title="Маршрут на момент старта">
+      {patrol.routeSnapshot ? <ol>{[...patrol.routeSnapshot].sort((a, b) => a.sortOrder - b.sortOrder).map((point) => <li key={point.id}>{point.name} · выдержка {point.dwellSeconds} сек.</li>)}</ol> : <p className="section-empty">Снимок маршрута для этого обхода не сохранён.</p>}
+    </DetailSection>
     <DetailSection icon={<MapPin />} title="Посещения контрольных точек" count={patrol.visits.length}>
       <div className="visit-timeline">{patrol.visits.map((visit) => <article className="visit-row" key={visit.id}><span className={`visit-marker${visit.departedAt === null ? ' visit-marker--open' : ''}`}>{visit.patrolPoint?.sortOrder ?? '—'}</span><div className="visit-content"><header><strong>{visit.patrolPoint?.name ?? 'Точка удалена'}</strong><span>{visit.departedAt === null ? 'На точке' : formatDuration(visit.dwellSeconds)}</span></header><div className="visit-scans"><ScanFact event={visit.arrivalEvent} icon={<LogIn />} label="Прибыл" /><ScanFact event={visit.departureEvent} icon={<LogOut />} label="Ушел" /></div></div></article>)}</div>
       {patrol.visits.length === 0 ? <p className="section-empty">Посещения точек не зафиксированы</p> : null}
@@ -179,16 +188,16 @@ function PatrolPlaceholder(): React.JSX.Element { return <aside className="patro
 function StateBlock({ error, label, loading = false }: { error?: unknown; label: string; loading?: boolean }): React.JSX.Element { return <div className={`state-block${error === undefined ? '' : ' state-block--error'}`}>{loading ? <LoaderCircle className="spin" size={20} /> : error === undefined ? <CircleSlash2 size={20} /> : <AlertTriangle size={20} />}<span>{error === undefined ? label : getApiErrorMessage(error)}</span></div>; }
 
 function buildRequestParams(filters: PatrolFilters, search: string): Record<string, string | undefined> { return { employeeId: filters.employeeId || undefined, from: toStartOfDay(filters.from), routeId: filters.routeId || undefined, search: search || undefined, shopId: filters.shopId || undefined, sort: filters.sort, status: filters.status || undefined, to: toEndOfDay(filters.to) }; }
-function toStartOfDay(value: string): string | undefined { return value === '' ? undefined : new Date(`${value}T00:00:00`).toISOString(); }
-function toEndOfDay(value: string): string | undefined { return value === '' ? undefined : new Date(`${value}T23:59:59.999`).toISOString(); }
+function toStartOfDay(value: string): string | undefined { return value === '' ? undefined : new Date(`${value}T00:00:00Z`).toISOString(); }
+function toEndOfDay(value: string): string | undefined { return value === '' ? undefined : new Date(`${value}T23:59:59.999Z`).toISOString(); }
 
 const PATROL_STATUSES: PatrolStatus[] = ['pending', 'in_progress', 'completed', 'overdue', 'cancelled'];
 const STATUS_LABELS: Record<PatrolStatus, string> = { cancelled: 'Отменен', completed: 'Выполнен', in_progress: 'В процессе', overdue: 'Просрочен', pending: 'Запланирован' };
 function statusLabel(status: PatrolStatus): string { return STATUS_LABELS[status]; }
 function periodLabel(period: string | null): string { return ({ evening: 'Вечер', morning: 'Утро', noon: 'Полдень' } as Record<string, string>)[period ?? ''] ?? 'Период не указан'; }
 function routeCategoryLabel(category: ControlPatrolSummary['route']['category']): string { return category === 'internal' ? 'Внутренний' : category === 'external' ? 'Внешний' : 'Категория не указана'; }
-function formatNullableDate(value: string | null, withYear = false): string { return value === null ? 'Не зафиксировано' : new Intl.DateTimeFormat('ru-RU', { day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short', year: withYear ? 'numeric' : undefined }).format(new Date(value)); }
-function formatTime(value: string): string { return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value)); }
+function formatNullableDate(value: string | null, withYear = false): string { return value === null ? 'Не зафиксировано' : new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC', day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short', year: withYear ? 'numeric' : undefined }).format(new Date(value)); }
+function formatTime(value: string): string { return new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value)); }
 function formatDuration(seconds: number | null): string { if (seconds === null) return '—'; const hours = Math.floor(seconds / 3600); const minutes = Math.floor((seconds % 3600) / 60); const rest = seconds % 60; return `${hours > 0 ? `${hours} ч ` : ''}${minutes > 0 ? `${minutes} мин ` : ''}${rest} сек`; }
 function incidentTypeLabel(type: PatrolIncidentType): string { return ({ long_interval: 'Долгий интервал', missed_point: 'Пропуск точки', patrol_overdue: 'Обход не выполнен', point_dwell_too_short: 'Недостаточное ожидание', route_suspiciously_fast: 'Подозрительно быстро', route_too_fast: 'Слишком быстро', route_too_slow: 'Слишком долго', schedule_deviation: 'Отклонение от графика', short_interval: 'Короткий интервал' })[type]; }
 function reportTypeLabel(type: string): string { return ({ closing: 'Закрытие', evacuation: 'Эвакуационный', heating: 'Отопительный', morning: 'Утренний', photo_report: 'Фотоотчет', sunday: 'Воскресный' } as Record<string, string>)[type] ?? type; }

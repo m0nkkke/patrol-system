@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PlanFactController } from './management/plan-fact.controller';
+import { PlanFactService } from './management/plan-fact.service';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
@@ -56,6 +58,7 @@ import { REPORTING_CORE_CLIENT } from './outbox/reporting-core-client.port';
 
 @Module({
   controllers: [
+    PlanFactController,
     MobileReportsController,
     ControlIncidentsController,
     ControlPatrolsController,
@@ -88,6 +91,7 @@ import { REPORTING_CORE_CLIENT } from './outbox/reporting-core-client.port';
     ]),
   ],
   providers: [
+    PlanFactService,
     ControlIncidentsRepository,
     ControlIncidentsService,
     ControlPatrolsRepository,

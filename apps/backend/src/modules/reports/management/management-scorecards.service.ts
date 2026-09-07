@@ -6,7 +6,6 @@ import { DomainValidationError } from '../../../common/errors/domain-validation.
 import {
   ManagementScorecardRaw,
   ManagementScorecardsRepository,
-  ScorecardSort,
 } from './management-scorecards.repository';
 
 type ManagementShopScorecard = {
@@ -20,13 +19,13 @@ type ManagementShopScorecard = {
     completionRate: number;
     onTimePatrols: number;
     onTimeRate: number;
-    plannedPatrols: number;
+    registeredPatrols: number;
     submittedReports: number;
   };
   regionId: string | null;
   shopId: string;
   shopName: string;
-  status: 'attention' | 'green';
+  status: 'attention' | 'green' | 'no_data';
 };
 
 type ManagementShopScorecardsResponse = {
@@ -40,7 +39,7 @@ type ManagementShopScorecardsResponse = {
     from: string | null;
     to: string | null;
   };
-  schemaVersion: '1.0';
+  schemaVersion: '2.0';
   scope: {
     regionId: string | null;
     shopId: string | null;
@@ -83,7 +82,7 @@ export class ManagementScorecardsService {
         from: query.from ?? null,
         to: query.to ?? null,
       },
-      schemaVersion: '1.0',
+      schemaVersion: '2.0',
       scope: {
         regionId: query.regionId ?? null,
         shopId: query.shopId ?? null,
@@ -108,7 +107,7 @@ export class ManagementScorecardsService {
 }
 
 function toScorecard(raw: ManagementScorecardRaw): ManagementShopScorecard {
-  const plannedPatrols = toNumber(raw.planned_patrols);
+  const registeredPatrols = toNumber(raw.registered_patrols);
   const completedPatrols = toNumber(raw.completed_patrols);
   const onTimePatrols = toNumber(raw.on_time_patrols);
   const cleanPatrols = toNumber(raw.clean_patrols);
@@ -117,7 +116,7 @@ function toScorecard(raw: ManagementScorecardRaw): ManagementShopScorecard {
   return {
     metrics: {
       attentionPatrols,
-      attentionRate: ratio(attentionPatrols, plannedPatrols),
+      attentionRate: ratio(attentionPatrols, registeredPatrols),
       averageCompletionSeconds:
         raw.average_completion_seconds === null
           ? null
@@ -125,17 +124,17 @@ function toScorecard(raw: ManagementScorecardRaw): ManagementShopScorecard {
       cleanPatrolRate: ratio(cleanPatrols, completedPatrols),
       cleanPatrols,
       completedPatrols,
-      completionRate: ratio(completedPatrols, plannedPatrols),
+      completionRate: ratio(completedPatrols, registeredPatrols),
       onTimePatrols,
       onTimeRate: ratio(onTimePatrols, completedPatrols),
-      plannedPatrols,
+      registeredPatrols,
       submittedReports: toNumber(raw.submitted_reports),
     },
     regionId: raw.region_id,
     shopId: raw.shop_id,
     shopName: raw.shop_name,
-    status:
-      attentionPatrols > 0 || (plannedPatrols > 0 && completedPatrols < plannedPatrols)
+    status: registeredPatrols === 0 ? 'no_data' :
+      attentionPatrols > 0 || (registeredPatrols > 0 && completedPatrols < registeredPatrols)
         ? 'attention'
         : 'green',
   };

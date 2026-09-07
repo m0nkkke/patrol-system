@@ -18,14 +18,14 @@ type ManagementMetricsResponse = {
     greenShopCount: number;
     onTimePatrols: number;
     onTimeRate: number;
-    plannedPatrols: number;
+    registeredPatrols: number;
     submittedReports: number;
   };
   period: {
     from: string | null;
     to: string | null;
   };
-  schemaVersion: '1.0';
+  schemaVersion: '2.0';
   scope: {
     regionId: string | null;
     shopId: string | null;
@@ -49,7 +49,7 @@ export class ManagementMetricsService {
     }
 
     const raw = await this.metricsRepository.getMetrics(query);
-    const plannedPatrols = toNumber(raw.planned_patrols);
+    const registeredPatrols = toNumber(raw.registered_patrols);
     const completedPatrols = toNumber(raw.completed_patrols);
     const onTimePatrols = toNumber(raw.on_time_patrols);
     const cleanPatrols = toNumber(raw.clean_patrols);
@@ -58,7 +58,7 @@ export class ManagementMetricsService {
     return {
       metrics: {
         attentionPatrols,
-        attentionRate: ratio(attentionPatrols, plannedPatrols),
+        attentionRate: ratio(attentionPatrols, registeredPatrols),
         attentionShopCount: toNumber(raw.attention_shop_count),
         averageCompletionSeconds:
           raw.average_completion_seconds === null
@@ -67,18 +67,18 @@ export class ManagementMetricsService {
         cleanPatrolRate: ratio(cleanPatrols, completedPatrols),
         cleanPatrols,
         completedPatrols,
-        completionRate: ratio(completedPatrols, plannedPatrols),
+        completionRate: ratio(completedPatrols, registeredPatrols),
         greenShopCount: toNumber(raw.green_shop_count),
         onTimePatrols,
         onTimeRate: ratio(onTimePatrols, completedPatrols),
-        plannedPatrols,
+        registeredPatrols,
         submittedReports: toNumber(raw.submitted_reports),
       },
       period: {
         from: query.from ?? null,
         to: query.to ?? null,
       },
-      schemaVersion: '1.0',
+      schemaVersion: '2.0',
       scope: {
         regionId: query.regionId ?? null,
         shopId: query.shopId ?? null,

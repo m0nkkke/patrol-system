@@ -122,6 +122,7 @@ export type ControlPatrolSummary = {
 };
 
 export type ControlPatrolDetail = ControlPatrolSummary & {
+  routeSnapshot?: Array<{ id: string; name: string; sortOrder: number; dwellSeconds: number }> | null;
   cancellationReason: string | null;
   completionReport: string | null;
   events: Array<{
@@ -304,13 +305,13 @@ export type ManagementMetricSet = {
   completionRate: number;
   onTimePatrols: number;
   onTimeRate: number;
-  plannedPatrols: number;
+  registeredPatrols: number;
   submittedReports: number;
 };
 
 export type ManagementResponseContext = {
   period: { from: string | null; to: string | null };
-  schemaVersion: '1.0';
+  schemaVersion: '2.0';
   scope: { regionId: string | null; shopId: string | null };
   sourceService: 'patrol';
 };
@@ -337,7 +338,7 @@ export type ManagementScorecard = {
   regionId: string | null;
   shopId: string;
   shopName: string;
-  status: 'attention' | 'green';
+  status: 'attention' | 'green' | 'no_data';
 };
 
 export type ManagementScorecards = ManagementResponseContext & {

@@ -6,11 +6,13 @@ import { createRoot } from 'react-dom/client';
 import { AuthProvider } from './auth/auth-context';
 import { router } from './router';
 import './styles.css';
+import './modern.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
+      refetchInterval: 60_000,
       retry: 1,
       staleTime: 30_000,
     },

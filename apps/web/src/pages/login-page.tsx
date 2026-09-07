@@ -11,6 +11,8 @@ export function LoginPage(): React.JSX.Element {
   const [accessKey, setAccessKey] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [universal, setUniversal] = useState(false);
+  const [actorFullName, setActorFullName] = useState('');
 
   if (!isLoading && profile !== null) return <Navigate to="/" replace />;
 
@@ -19,7 +21,7 @@ export function LoginPage(): React.JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
-      await login(accessKey.trim());
+      await login(accessKey.trim(), universal ? actorFullName.trim() : undefined);
       await navigate({ to: '/' });
     } catch (requestError) {
       setError(requestError instanceof Error && requestError.message.startsWith('Эта роль')
@@ -63,6 +65,8 @@ export function LoginPage(): React.JSX.Element {
             />
           </label>
 
+          <label className="universal-login"><input type="checkbox" checked={universal} onChange={(event) => setUniversal(event.target.checked)} />Универсальный ключ настройщика</label>
+          {universal ? <label className="field"><span>Ваше ФИО для журнала действий</span><input required minLength={2} maxLength={200} value={actorFullName} onChange={(event) => setActorFullName(event.target.value)} autoComplete="name" /></label> : null}
           {error !== null ? <div className="form-error" role="alert">{error}</div> : null}
 
           <button className="primary-button" disabled={submitting || accessKey.trim().length < 8} type="submit">

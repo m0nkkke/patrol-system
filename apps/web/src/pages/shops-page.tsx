@@ -7,19 +7,15 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 
 import { api, getApiErrorMessage } from '../lib/api';
-import type { ControlShopOverview, PaginatedResponse, Shop, UserRole } from '../types/api';
+import { loadShopOptions } from '../lib/shop-options';
+import type { ControlShopOverview, UserRole } from '../types/api';
 
 export function ShopsPage({ selectedShopId }: { selectedShopId?: string }): React.JSX.Element {
   const [search, setSearch] = useState('');
   const navigate = useNavigate();
   const shopsQuery = useQuery({
     queryKey: ['shops', search],
-    queryFn: async () => {
-      const response = await api.get<PaginatedResponse<Shop>>('/shops', {
-        params: { limit: 100, page: 1, search: search.trim() || undefined, sort: 'name:asc' },
-      });
-      return response.data;
-    },
+    queryFn: () => loadShopOptions(search.trim()),
   });
   const shops = useMemo(() => shopsQuery.data?.items ?? [], [shopsQuery.data?.items]);
 
@@ -119,7 +115,7 @@ function ShopOverview({ shopId }: { shopId: string }): React.JSX.Element {
             <thead><tr><th>Начало</th><th>Сотрудник</th><th>Маршрут</th><th>Точки</th><th>Статус</th></tr></thead>
             <tbody>{overview.recentPatrols.map((patrol) => (
               <tr className="clickable-row" key={patrol.id} onClick={() => void navigate({ to: '/patrols/$patrolId', params: { patrolId: patrol.id } })}>
-                <td>{formatDate(patrol.startedAt)}</td>
+                <td>{formatDate(patrol.startedAt, false, overview.shop.timezone)}</td>
                 <td>{patrol.employee.fullName ?? 'Не указан'}</td>
                 <td>{patrol.route.name ?? 'Без маршрута'}</td>
                 <td>{patrol.scannedPoints}/{patrol.totalPoints}</td>
@@ -138,7 +134,7 @@ function ShopOverview({ shopId }: { shopId: string }): React.JSX.Element {
               <button className={`incident-row incident-row--${incident.severity}`} key={incident.id} onClick={() => void navigate({ to: '/incidents/$incidentId', params: { incidentId: incident.id } })} type="button">
                 <span className="incident-row__icon"><AlertTriangle size={17} aria-hidden="true" /></span>
                 <span><strong>{incidentTypeLabel(incident.type)}</strong><small>{incident.message}</small></span>
-                <time>{formatDate(incident.createdAt, true)}</time>
+                <time>{formatDate(incident.createdAt, true, overview.shop.timezone)}</time>
               </button>
             ))}
             {overview.recentIncidents.length === 0 ? <EmptyInline label="Инцидентов нет" /> : null}
@@ -219,15 +215,15 @@ function reportTypeLabel(type: string): string {
   return ({ closing: 'Закрытие', evacuation: 'Эвакуационный', heating: 'Отопительный', morning: 'Утренний', photo_report: 'Фотоотчет', sunday: 'Воскресный' } as Record<string, string>)[type] ?? type;
 }
 function incidentTypeLabel(type: string): string {
-  return ({ patrol_overdue: 'Обход просрочен', route_suspiciously_fast: 'Подозрительно быстро', route_too_fast: 'Слишком быстро', route_too_slow: 'Слишком долго', schedule_deviation: 'Отклонение от графика' } as Record<string, string>)[type] ?? type;
+  return ({ point_dwell_too_short: 'Недостаточная выдержка', missed_point: 'Пропуск точки', patrol_overdue: 'Обход просрочен', route_suspiciously_fast: 'Подозрительно быстро', route_too_fast: 'Слишком быстро', route_too_slow: 'Слишком долго', schedule_deviation: 'Отклонение от графика' } as Record<string, string>)[type] ?? type;
 }
 function roleLabel(role: UserRole): string {
   return ({ admin: 'Администратор', inspector: 'Проверяющий', local_route_setter: 'Локальный настройщик', route_setter: 'Настройщик', security_guard: 'Служба контроля' } as Record<UserRole, string>)[role];
 }
 function formatPercent(value: number): string { return new Intl.NumberFormat('ru-RU', { style: 'percent', maximumFractionDigits: 0 }).format(value); }
-function formatDate(value: string | null, compact = false): string {
+function formatDate(value: string | null, compact = false, timeZone = 'UTC'): string {
   if (value === null) return '—';
   return new Intl.DateTimeFormat('ru-RU', compact
-    ? { day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short' }
-    : { day: '2-digit', hour: '2-digit', minute: '2-digit', month: '2-digit', year: '2-digit' }).format(new Date(value));
+    ? { timeZone, day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short' }
+    : { timeZone, day: '2-digit', hour: '2-digit', minute: '2-digit', month: '2-digit', year: '2-digit' }).format(new Date(value));
 }

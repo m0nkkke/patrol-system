@@ -1,6 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-import { clearTokens, getDeviceId, readTokens, saveTokens } from './session';
+import { clearTokens, getDeviceId, readTokens, saveTokens, sessionGeneration } from './session';
 import type { AuthTokens } from '../types/api';
 
 const configuredApiUrl: unknown = import.meta.env.VITE_API_URL;
@@ -11,36 +11,47 @@ const baseURL = typeof configuredApiUrl === 'string'
 export const api = axios.create({ baseURL, timeout: 15_000 });
 const refreshApi = axios.create({ baseURL, timeout: 15_000 });
 let refreshRequest: Promise<AuthTokens> | null = null;
+let refreshGeneration = -1;
 
-type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
+type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean; _session?: number };
 
 api.interceptors.request.use((config) => {
+  (config as RetriableRequest)._session ??= sessionGeneration();
   const tokens = readTokens();
   if (tokens !== null) config.headers.Authorization = `Bearer ${tokens.accessToken}`;
   return config;
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if ((response.config as RetriableRequest)._session !== sessionGeneration()) throw new axios.CanceledError('Сессия изменилась');
+    return response;
+  },
   async (error: AxiosError<unknown>) => {
     const request = error.config as RetriableRequest | undefined;
+    if (request?._session !== sessionGeneration()) return Promise.reject(new axios.CanceledError('Сессия изменилась'));
     const tokens = readTokens();
     if (error.response?.status !== 401 || request === undefined || request._retry || tokens === null) {
       return Promise.reject(toError(error));
     }
 
     request._retry = true;
+    const generation = sessionGeneration();
+    if (refreshGeneration !== generation) { refreshRequest = null; refreshGeneration = generation; }
     refreshRequest ??= refreshApi
       .post<AuthTokens>('/auth/refresh', {
         deviceId: getDeviceId(),
         refreshToken: tokens.refreshToken,
       })
       .then((response) => {
+        if (readTokens()?.refreshToken !== tokens.refreshToken) {
+          throw new Error('Сессия изменилась');
+        }
         saveTokens(response.data);
         return response.data;
       })
       .finally(() => {
-        refreshRequest = null;
+        if (refreshGeneration === generation) refreshRequest = null;
       });
 
     try {
@@ -48,8 +59,10 @@ api.interceptors.response.use(
       request.headers.Authorization = `Bearer ${refreshed.accessToken}`;
       return api(request);
     } catch (refreshError) {
-      clearTokens();
-      window.dispatchEvent(new Event('patrol:session-expired'));
+      if (readTokens()?.refreshToken === tokens.refreshToken) {
+        clearTokens();
+        window.dispatchEvent(new Event('patrol:session-expired'));
+      }
       return Promise.reject(toError(refreshError));
     }
   },

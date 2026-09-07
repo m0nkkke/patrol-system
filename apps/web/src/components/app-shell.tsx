@@ -1,5 +1,5 @@
-import { AlertTriangle, BarChart3, Building2, FileText, History, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
-import { Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { AlertTriangle, BarChart3, Building2, FileText, History, LogOut, Menu, ShieldCheck, Users, X } from 'lucide-react';
+import { Link, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import { useAuth } from '../auth/auth-context';
@@ -8,6 +8,7 @@ export function AppShell(): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const { logout, profile } = useAuth();
   const navigate = useNavigate();
+  const path = useLocation({ select: (location) => location.pathname });
 
   const handleLogout = async (): Promise<void> => {
     await logout();
@@ -29,7 +30,8 @@ export function AppShell(): React.JSX.Element {
         </div>
 
         <nav className="primary-nav" aria-label="Основная навигация">
-          <Link to="/" activeOptions={{ exact: false }} activeProps={{ className: 'nav-link nav-link--active' }} className="nav-link" onClick={() => setMenuOpen(false)}>
+          {profile?.role === 'admin' || profile?.role === 'inspector' ? <>
+          <Link to="/" activeOptions={{ exact: true }} activeProps={{ className: 'nav-link nav-link--active' }} className={`nav-link${path.startsWith('/shops/') ? ' nav-link--active' : ''}`} onClick={() => setMenuOpen(false)}>
             <Building2 size={18} aria-hidden="true" />
             Магазины
           </Link>
@@ -49,13 +51,17 @@ export function AppShell(): React.JSX.Element {
             <BarChart3 size={18} aria-hidden="true" />
             Руководство
           </Link> : null}
+          <Link to="/users" activeProps={{ className: 'nav-link nav-link--active' }} className="nav-link" onClick={() => setMenuOpen(false)}><Users size={18} />Сотрудники</Link>
+          </> : null}
+          <Link to="/setup" activeProps={{ className: 'nav-link nav-link--active' }} className="nav-link" onClick={() => setMenuOpen(false)}><History size={18} />Маршруты и графики</Link>
+          {profile?.role === 'admin' ? <Link to="/administration" activeProps={{ className: 'nav-link nav-link--active' }} className="nav-link" onClick={() => setMenuOpen(false)}><ShieldCheck size={18} />Архив и аудит</Link> : null}
         </nav>
 
         <div className="sidebar-user">
           <span className="avatar" aria-hidden="true">{initials(profile?.fullName)}</span>
           <span className="sidebar-user__text">
             <strong>{profile?.fullName}</strong>
-            <small>{profile?.role === 'admin' ? 'Администратор' : 'Проверяющий'}</small>
+            <small>{profile?.role === 'admin' ? 'Администратор' : profile?.role === 'inspector' ? 'Проверяющий' : profile?.role === 'local_route_setter' ? 'Локальный настройщик' : 'Настройщик'}</small>
           </span>
           <button className="icon-button icon-button--inverse" type="button" onClick={() => void handleLogout()} title="Выйти">
             <LogOut size={18} aria-hidden="true" />

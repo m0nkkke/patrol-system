@@ -227,12 +227,24 @@ Severity в версии 0.3.0 вычисляется из типа инциде
 
 ## Management Metrics
 
+С 07.09.2026 management endpoints возвращают `schemaVersion: "2.0"`.
+`registeredPatrols` заменяет ошибочно названное `plannedPatrols` и считает **все зарегистрированные обходы**, включая внеплановые.
+`completionRate = completedPatrols / registeredPatrols`; `attentionRate` использует тот же знаменатель.
+`onTimeRate` и `cleanPatrolRate` используют число завершённых обходов; при нулевом знаменателе API возвращает 0, а UI показывает отсутствие выборки.
+CSV/XLSX используют те же поля и формулы. Границы временных bucket-ов — UTC, независимо от timezone соединения PostgreSQL.
+
+Это статистика зарегистрированных фактов, а не полный план расписания: неначатые occurrence-ы не входят в выборку.
+Для полного план-факт анализа ещё нужен исторический реестр occurrence-ов с версиями расписаний; вычислять прошлый план из сегодняшних настроек нельзя.
+`no_data` означает отсутствие зарегистрированных обходов магазина за период. Такой магазин не входит в `greenShopCount`.
+Зелёный статус требует хотя бы одного завершённого обхода, отсутствия незавершённых обходов и инцидентов в выборке.
+
+
 Управленческая витрина строится из первичных фактов, но не раскрывает детали. Базовый JSON:
 
 ```json
 {
   "sourceService": "patrol",
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "period": {
     "from": "2026-08-01T00:00:00.000Z",
     "to": "2026-08-18T23:59:59.999Z"
@@ -242,7 +254,7 @@ Severity в версии 0.3.0 вычисляется из типа инциде
     "shopId": null
   },
   "metrics": {
-    "plannedPatrols": 1200,
+    "registeredPatrols": 1200,
     "completedPatrols": 1164,
     "completionRate": 0.97,
     "onTimeRate": 0.94,
@@ -273,7 +285,7 @@ Endpoint:
 ```json
 {
   "sourceService": "patrol",
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "bucket": "day",
   "period": {
     "from": "2026-08-01T00:00:00.000Z",
@@ -287,7 +299,7 @@ Endpoint:
     {
       "bucketStart": "2026-08-01T00:00:00.000Z",
       "metrics": {
-        "plannedPatrols": 70,
+        "registeredPatrols": 70,
         "completedPatrols": 68,
         "completionRate": 0.9714,
         "onTimeRate": 0.9412,
@@ -320,7 +332,7 @@ Endpoint:
 ```json
 {
   "sourceService": "patrol",
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "groupBy": "routeCategory",
   "period": {
     "from": "2026-08-01T00:00:00.000Z",
@@ -334,7 +346,7 @@ Endpoint:
     {
       "groupKey": "internal",
       "metrics": {
-        "plannedPatrols": 800,
+        "registeredPatrols": 800,
         "completedPatrols": 784,
         "completionRate": 0.98,
         "onTimeRate": 0.95,
@@ -346,7 +358,7 @@ Endpoint:
     {
       "groupKey": "external",
       "metrics": {
-        "plannedPatrols": 400,
+        "registeredPatrols": 400,
         "completedPatrols": 380,
         "completionRate": 0.95,
         "onTimeRate": 0.91,
@@ -375,7 +387,7 @@ Scorecard магазина — агрегированная строка для 
 ```json
 {
   "sourceService": "patrol",
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "period": {
     "from": "2026-08-01T00:00:00.000Z",
     "to": "2026-08-18T23:59:59.999Z"
@@ -391,7 +403,7 @@ Scorecard магазина — агрегированная строка для 
       "regionId": "00000000-0000-4000-8000-000000000003",
       "status": "green",
       "metrics": {
-        "plannedPatrols": 42,
+        "registeredPatrols": 42,
         "completedPatrols": 42,
         "completionRate": 1,
         "onTimeRate": 0.95,
@@ -501,6 +513,10 @@ Auth-сценарии пишутся точечно: `auth.login.success`, `auth
 Обращение является бизнес-анонимным: карточка и список для `admin`/`inspector` не содержат автора. Технический audit сохраняет факт отправки защищенного запроса, но маскирует текст обращения.
 
 ## Control Staff
+
+`POST /api/v1/control/staff` принимает `{ fullName, shopIds }` и создаёт только `security_guard`.
+Роли: `inspector` и `admin`. Обязателен хотя бы один магазин; у Проверяющего все назначения должны входить в его область доступа.
+Сервис фиксирует роль самостоятельно, независимо от клиентского тела. Ответ создания: `{ id, fullName, accessKey }`; обычный список и карточка сотрудников не раскрывают ключи.
 
 Для рабочего места Проверяющего доступны:
 

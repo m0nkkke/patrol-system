@@ -10,7 +10,7 @@ type ManagementMetricsRaw = {
   completed_patrols: string | null;
   green_shop_count: string | null;
   on_time_patrols: string | null;
-  planned_patrols: string | null;
+  registered_patrols: string | null;
   submitted_reports: string | null;
 };
 
@@ -83,7 +83,7 @@ export class ManagementMetricsRepository {
       ),
       patrol_metrics AS (
         SELECT
-          COUNT(*) FILTER (WHERE patrol.schedule_id IS NOT NULL) AS planned_patrols,
+          COUNT(*) AS registered_patrols,
           COUNT(*) FILTER (WHERE patrol.status = 'completed') AS completed_patrols,
           COUNT(*) FILTER (
             WHERE patrol.status = 'completed'
@@ -108,14 +108,14 @@ export class ManagementMetricsRepository {
       ),
       shop_metrics AS (
         SELECT
-          COUNT(*) FILTER (WHERE attention.shop_id IS NULL) AS green_shop_count,
+          COUNT(*) FILTER (WHERE attention.shop_id IS NULL AND EXISTS (SELECT 1 FROM patrol_scope observed WHERE observed.shop_id = scoped_shop.id AND observed.status = 'completed')) AS green_shop_count,
           COUNT(*) FILTER (WHERE attention.shop_id IS NOT NULL) AS attention_shop_count
         FROM scoped_shops scoped_shop
         LEFT JOIN (
           SELECT DISTINCT patrol.shop_id
           FROM patrol_scope patrol
           LEFT JOIN incident_patrols ON incident_patrols.patrol_id = patrol.id
-          WHERE patrol.status IN ('overdue', 'cancelled')
+          WHERE patrol.status <> 'completed'
             OR incident_patrols.patrol_id IS NOT NULL
         ) attention ON attention.shop_id = scoped_shop.id
       ),
@@ -137,7 +137,7 @@ export class ManagementMetricsRepository {
       completed_patrols: '0',
       green_shop_count: '0',
       on_time_patrols: '0',
-      planned_patrols: '0',
+      registered_patrols: '0',
       submitted_reports: '0',
     };
   }

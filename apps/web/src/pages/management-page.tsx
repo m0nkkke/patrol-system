@@ -1,3 +1,5 @@
+import { loadShopOptions } from '../lib/shop-options';
+import { PlanFactPanel } from '../components/plan-fact-panel';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -23,8 +25,6 @@ import type {
   ManagementMetrics,
   ManagementScorecards,
   ManagementTrends,
-  PaginatedResponse,
-  Shop,
 } from '../types/api';
 
 type TrendBucket = 'day' | 'week' | 'month';
@@ -54,10 +54,8 @@ export function ManagementPage(): React.JSX.Element {
   }), [from, shopId, to]);
 
   const shopsQuery = useQuery({
-    queryKey: ['shops', 'management-filter'],
-    queryFn: async () => (await api.get<PaginatedResponse<Shop>>('/shops', {
-      params: { limit: 100, page: 1, sort: 'name:asc' },
-    })).data,
+    queryKey: ['shops', 'options'],
+    queryFn: () => loadShopOptions(),
   });
   const metricsQuery = useQuery({
     queryKey: ['management-metrics', commonParams],
@@ -136,21 +134,22 @@ export function ManagementPage(): React.JSX.Element {
 
     <section className="management-filters" aria-label="Период управленческой отчетности">
       <FilterField label="Магазин"><select onChange={(event) => { setShopId(event.target.value); setScorecardPage(1); }} value={shopId}><option value="">Все магазины</option>{(shopsQuery.data?.items ?? []).map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}</select></FilterField>
-      <FilterField label="С даты"><input max={to} onChange={(event) => { setFrom(event.target.value); setScorecardPage(1); }} type="date" value={from} /></FilterField>
-      <FilterField label="По дату"><input min={from} onChange={(event) => { setTo(event.target.value); setScorecardPage(1); }} type="date" value={to} /></FilterField>
-      <span className="management-period-caption">Показатели рассчитаны по первичным фактам системы</span>
+      <FilterField label="С даты (UTC)"><input max={to} onChange={(event) => { setFrom(event.target.value); setScorecardPage(1); }} type="date" value={from} /></FilterField>
+      <FilterField label="По дату (UTC)"><input min={from} onChange={(event) => { setTo(event.target.value); setScorecardPage(1); }} type="date" value={to} /></FilterField>
+      <span className="management-period-caption">По зарегистрированным обходам. Неначатые окна расписания не входят в расчёт.</span>
     </section>
 
     {exportError === null ? null : <div className="export-error"><AlertTriangle size={15} />{exportError}</div>}
 
     <div className="management-content">
+      <PlanFactPanel params={commonParams} />
       {metricsQuery.isLoading ? <StateBlock label="Расчет показателей" loading /> : null}
       {metricsQuery.isError ? <StateBlock error={metricsQuery.error} label="Не удалось загрузить показатели" /> : null}
       {metrics === undefined ? null : <section className="management-kpis" aria-label="Ключевые показатели">
-        <Kpi icon={<Route />} label="Плановых обходов" value={String(metrics.plannedPatrols)} />
-        <Kpi icon={<CheckCircle2 />} label="Выполнено" tone="positive" value={formatPercent(metrics.completionRate)} />
-        <Kpi icon={<Clock3 />} label="Выполнено вовремя" tone="positive" value={formatPercent(metrics.onTimeRate)} />
-        <Kpi icon={<Gauge />} label="Без замечаний" tone="positive" value={formatPercent(metrics.cleanPatrolRate)} />
+        <Kpi icon={<Route />} label="Зарегистрировано обходов" value={String(metrics.registeredPatrols)} />
+        <Kpi icon={<CheckCircle2 />} label="Выполнено" tone="positive" value={metrics.registeredPatrols ? formatPercent(metrics.completionRate) : '—'} />
+        <Kpi icon={<Clock3 />} label="Выполнено вовремя" tone="positive" value={metrics.completedPatrols ? formatPercent(metrics.onTimeRate) : '—'} />
+        <Kpi icon={<Gauge />} label="Без замечаний" tone="positive" value={metrics.completedPatrols ? formatPercent(metrics.cleanPatrolRate) : '—'} />
         <Kpi icon={<TrendingUp />} label="Средняя длительность" value={formatDuration(metrics.averageCompletionSeconds)} />
         <Kpi icon={<Store />} label="Магазинов в зеленой зоне" tone="positive" value={String(metrics.greenShopCount)} />
       </section>}
@@ -182,7 +181,7 @@ export function ManagementPage(): React.JSX.Element {
         </SectionHeader>
         {scorecardsQuery.isLoading ? <StateBlock label="Загрузка магазинов" loading /> : null}
         {scorecardsQuery.isError ? <StateBlock error={scorecardsQuery.error} label="Не удалось загрузить магазины" /> : null}
-        {scorecardsQuery.data !== undefined ? <div className="management-table-wrap"><table className="management-table"><thead><tr><th>Магазин</th><th>Состояние</th><th>План</th><th>Выполнение</th><th>Вовремя</th><th>Без замечаний</th><th>Среднее время</th><th>Отчеты</th><th /></tr></thead><tbody>{scorecardsQuery.data.items.map((item) => <tr key={item.shopId} onClick={() => void navigate({ to: '/shops/$shopId', params: { shopId: item.shopId } })}><td><strong>{item.shopName}</strong></td><td><span className={`score-status score-status--${item.status}`}>{item.status === 'green' ? 'Стабильно' : 'Требует внимания'}</span></td><td>{item.metrics.plannedPatrols}</td><td><RateCell rate={item.metrics.completionRate} /></td><td><RateCell rate={item.metrics.onTimeRate} /></td><td><RateCell rate={item.metrics.cleanPatrolRate} /></td><td>{formatDuration(item.metrics.averageCompletionSeconds)}</td><td>{item.metrics.submittedReports}</td><td><ChevronRight size={16} /></td></tr>)}</tbody></table>{scorecardsQuery.data.items.length === 0 ? <div className="empty-inline">За выбранный период данных нет</div> : null}</div> : null}
+        {scorecardsQuery.data !== undefined ? <div className="management-table-wrap"><table className="management-table"><thead><tr><th>Магазин</th><th>Состояние</th><th>Обходы</th><th>Выполнение</th><th>Вовремя</th><th>Без замечаний</th><th>Среднее время</th><th>Отчеты</th><th /></tr></thead><tbody>{scorecardsQuery.data.items.map((item) => <tr key={item.shopId} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} onClick={() => void navigate({ to: '/shops/$shopId', params: { shopId: item.shopId } })}><td><strong>{item.shopName}</strong></td><td><span className={`score-status score-status--${item.status}`}>{item.status === 'green' ? 'Без отклонений' : item.status === 'no_data' ? 'Нет данных' : 'Требует внимания'}</span></td><td>{item.metrics.registeredPatrols}</td><td><RateCell rate={item.metrics.completionRate} /></td><td><RateCell rate={item.metrics.onTimeRate} /></td><td><RateCell rate={item.metrics.cleanPatrolRate} /></td><td>{formatDuration(item.metrics.averageCompletionSeconds)}</td><td>{item.metrics.submittedReports}</td><td><ChevronRight size={16} /></td></tr>)}</tbody></table>{scorecardsQuery.data.items.length === 0 ? <div className="empty-inline">За выбранный период данных нет</div> : null}</div> : null}
         {totalPages > 1 ? <footer className="pagination"><button className="icon-button" disabled={scorecardPage === 1} onClick={() => setScorecardPage((value) => value - 1)} title="Предыдущая страница"><ChevronLeft size={18} /></button><span>Страница {scorecardPage} из {totalPages}</span><button className="icon-button" disabled={scorecardPage >= totalPages} onClick={() => setScorecardPage((value) => value + 1)} title="Следующая страница"><ChevronRight size={18} /></button></footer> : null}
       </section>
     </div>
@@ -191,11 +190,11 @@ export function ManagementPage(): React.JSX.Element {
 
 function TrendView({ data }: { data: ManagementTrends }): React.JSX.Element {
   if (data.items.length === 0) return <div className="empty-inline">За выбранный период данных нет</div>;
-  return <div className="trend-view"><div className="chart-legend"><span><i className="legend-dot legend-dot--completion" />Выполнение</span><span><i className="legend-dot legend-dot--ontime" />Вовремя</span><span><i className="legend-dot legend-dot--clean" />Без замечаний</span></div><div className="trend-list">{data.items.map((item) => <div className="trend-row" key={item.bucketStart}><time>{formatBucket(item.bucketStart, data.bucket)}</time><MetricBar label="Выполнение" rate={item.metrics.completionRate} tone="completion" /><MetricBar label="Вовремя" rate={item.metrics.onTimeRate} tone="ontime" /><MetricBar label="Без замечаний" rate={item.metrics.cleanPatrolRate} tone="clean" /><span className="trend-volume">{item.metrics.completedPatrols}/{item.metrics.plannedPatrols}</span></div>)}</div></div>;
+  return <div className="trend-view"><div className="chart-legend"><span><i className="legend-dot legend-dot--completion" />Выполнение</span><span><i className="legend-dot legend-dot--ontime" />Вовремя</span><span><i className="legend-dot legend-dot--clean" />Без замечаний</span></div><div className="trend-list">{data.items.map((item) => <div className="trend-row" key={item.bucketStart}><time>{formatBucket(item.bucketStart, data.bucket)}</time><MetricBar label="Выполнение" rate={item.metrics.completionRate} tone="completion" /><MetricBar label="Вовремя" rate={item.metrics.onTimeRate} tone="ontime" /><MetricBar label="Без замечаний" rate={item.metrics.cleanPatrolRate} tone="clean" /><span className="trend-volume">{item.metrics.completedPatrols}/{item.metrics.registeredPatrols}</span></div>)}</div></div>;
 }
 
 function BreakdownView({ data }: { data: ManagementBreakdown }): React.JSX.Element {
-  return <div className="breakdown-grid">{data.items.map((item) => <article className="breakdown-item" key={item.groupKey}><header><strong>{breakdownLabel(item.groupKey)}</strong><span>{item.metrics.completedPatrols} из {item.metrics.plannedPatrols}</span></header><MetricBar label="Выполнение" rate={item.metrics.completionRate} tone="completion" /><dl><div><dt>Вовремя</dt><dd>{formatPercent(item.metrics.onTimeRate)}</dd></div><div><dt>Без замечаний</dt><dd>{formatPercent(item.metrics.cleanPatrolRate)}</dd></div><div><dt>Среднее время</dt><dd>{formatDuration(item.metrics.averageCompletionSeconds)}</dd></div><div><dt>Отчеты</dt><dd>{item.metrics.submittedReports}</dd></div></dl></article>)}</div>;
+  return <div className="breakdown-grid">{data.items.map((item) => <article className="breakdown-item" key={item.groupKey}><header><strong>{breakdownLabel(item.groupKey)}</strong><span>{item.metrics.completedPatrols} из {item.metrics.registeredPatrols}</span></header><MetricBar label="Выполнение" rate={item.metrics.completionRate} tone="completion" /><dl><div><dt>Вовремя</dt><dd>{formatPercent(item.metrics.onTimeRate)}</dd></div><div><dt>Без замечаний</dt><dd>{formatPercent(item.metrics.cleanPatrolRate)}</dd></div><div><dt>Среднее время</dt><dd>{formatDuration(item.metrics.averageCompletionSeconds)}</dd></div><div><dt>Отчеты</dt><dd>{item.metrics.submittedReports}</dd></div></dl></article>)}</div>;
 }
 
 function MetricBar({ label, rate, tone }: { label: string; rate: number; tone: 'clean' | 'completion' | 'ontime' }): React.JSX.Element {
@@ -212,8 +211,8 @@ function StateBlock({ error, label, loading = false }: { error?: unknown; label:
 
 function defaultDateRange(): { from: string; to: string } { const to = new Date(); const from = new Date(to); from.setDate(from.getDate() - 13); return { from: formatInputDate(from), to: formatInputDate(to) }; }
 function formatInputDate(date: Date): string { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); return `${year}-${month}-${day}`; }
-function toStartOfDay(value: string): string { return new Date(`${value}T00:00:00`).toISOString(); }
-function toEndOfDay(value: string): string { return new Date(`${value}T23:59:59.999`).toISOString(); }
+function toStartOfDay(value: string): string { return new Date(`${value}T00:00:00Z`).toISOString(); }
+function toEndOfDay(value: string): string { return new Date(`${value}T23:59:59.999Z`).toISOString(); }
 function formatPercent(value: number): string { return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1, style: 'percent' }).format(value); }
 function formatDuration(seconds: number | null): string { if (seconds === null) return 'Нет данных'; const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes === 0 ? `${rest} сек` : `${minutes} мин ${rest > 0 ? `${rest} сек` : ''}`.trim(); }
 function formatBucket(value: string, bucket: TrendBucket): string { return new Intl.DateTimeFormat('ru-RU', bucket === 'month' ? { month: 'long', year: 'numeric' } : { day: '2-digit', month: 'short' }).format(new Date(value)); }

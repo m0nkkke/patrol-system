@@ -1,0 +1,124 @@
+/* Shared visual language for the operations workspace. */
+:root { --ink: #192b3c; --muted: #617386; --line: #dfe6ed; --surface-soft: #f5f7fa; --green: #087f78; --green-soft: #e4f4f1; --sidebar: #102b3c; --sidebar-muted: #abc0ce; background: #f3f6fa; color: var(--ink); font-size: 14px; }
+body { background: #f3f6fa; line-height: 1.5; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 3px solid #13a89c; outline-offset: 3px; }
+.app-frame { grid-template-columns: 244px minmax(0, 1fr); }
+.sidebar { padding: 28px 16px 20px; background: linear-gradient(165deg, #15364a, #102635); }
+.brand-block { padding-bottom: 36px; }
+.brand-mark { width: 42px; height: 42px; border-radius: 12px; background: #1c5260; color: #83e5d1; }
+.brand-block strong { font-size: 21px; letter-spacing: -.6px; }
+.brand-block small { font-size: 12px; }
+.nav-link { height: 46px; margin-bottom: 4px; border-radius: 10px; color: #b9cbd7; font-weight: 500; }
+.nav-link:hover { background: #234657; }
+.nav-link--active { background: #215367; box-shadow: inset 3px 0 #62d7c4; color: white; }
+.sidebar-user { padding-top: 20px; border-color: #35505e; }
+.sidebar-user__text strong { font-size: 13px; }
+.workspace { background: #f3f6fa; }
+.workspace-header { min-height: 106px; padding: 24px 32px; background: #fff; }
+.workspace-header h1 { font-size: 28px; font-weight: 650; letter-spacing: -.8px; }
+.eyebrow { font-size: 11px; letter-spacing: 1.2px; }
+.header-count { border: 1px solid var(--line); border-radius: 20px; padding: 6px 12px; background: #f8fafc; }
+.shop-workspace { grid-template-columns: 300px minmax(0, 1fr); }
+.shop-detail-panel, .management-content { padding: 28px 32px; }
+.shop-row { min-height: 106px; padding: 18px; }
+.shop-row__body strong { font-size: 14px; }
+.shop-row__body small, .status-text { font-size: 12px; }
+.shop-row--active, .shop-row--active:hover { background: #eaf5f5; }
+.overview-header h2 { font-size: 24px; letter-spacing: -.5px; }
+.overview-header p, .overview-meta span { font-size: 12px; }
+.metrics-grid, .management-kpis { border: 0; border-radius: 0; gap: 14px; background: transparent; overflow: visible; }
+.management-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.metric, .management-kpi { min-height: 112px; padding: 20px; border: 1px solid var(--line) !important; border-radius: 14px; background: white; box-shadow: 0 3px 12px #172d4605; }
+.metric strong, .management-kpi strong { font-size: 27px; font-weight: 650; letter-spacing: -.7px; white-space: normal; overflow-wrap: anywhere; }
+.metric small, .management-kpi small { font-size: 12px; line-height: 1.5; }
+.metric > span, .management-kpi > span { border-radius: 10px; flex-shrink: 0; }
+.overview-section { margin-top: 28px; }
+.overview-section > header, .management-section__header { min-height: 48px; height: auto; }
+.overview-section h3, .management-section__header h2 { font-size: 16px; }
+.data-table-wrap, .management-table-wrap, .trend-view, .breakdown-grid, .incident-list, .report-list, .staff-list { border-radius: 0 0 12px 12px; }
+.data-table, .incidents-table, .patrols-table, .reports-table, .management-table { font-size: 13px; }
+.data-table th, .incidents-table th, .patrols-table th, .reports-table th, .management-table th { height: 44px; font-size: 12px; background: #f7f9fc; }
+.data-table td, .management-table td { height: 58px; }
+.incidents-table td strong, .patrols-table td strong, .reports-table td strong, .report-type-cell strong { font-size: 13px; }
+.incidents-table td small, .patrols-table td small, .reports-table td small, .incidents-table td time { font-size: 12px; }
+.incident-filters, .patrol-filters, .report-filters, .management-filters { grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); padding: 20px 24px; gap: 14px; }
+.filter-field--search, .filter-field--wide { grid-column: auto; }
+.filter-field > span:first-child { font-size: 12px; }
+.filter-field input, .filter-field select, .compact-select select { height: 40px; font-size: 13px; border-radius: 8px; border-color: #d7e0e8; }
+.filter-control { height: 40px; border-radius: 8px; }
+.filter-control input { height: 36px; }
+.secondary-button, .back-button { min-height: 38px; font-size: 12px; border-radius: 8px; padding: 8px 12px; }
+.primary-button { min-height: 44px; border-radius: 8px; background: #087f78; font-size: 14px; }
+.primary-button:hover:not(:disabled) { background: #076a64; }
+.incidents-layout, .patrols-layout, .reports-layout { grid-template-columns: minmax(0, 1fr) 300px; }
+.incidents-layout--detail, .patrols-layout--detail, .reports-layout--detail { grid-template-columns: minmax(0, 1fr) minmax(320px, 40%); }
+.incidents-table { min-width: 740px; }
+.investigation-panel, .patrol-detail-panel, .report-detail-panel { padding: 20px; background: #edf2f7; }
+.investigation-card, .control-report-card, .patrol-card { border-radius: 14px; }
+.definition-list dt, .definition-list dd, .report-fields dt, .report-fields dd { font-size: 12px; }
+.investigation-section h3, .report-detail-section > header h3 { font-size: 14px; }
+.incident-message, .report-comment { font-size: 13px; }
+.route-badge, .status-badge, .severity-badge, .score-status { border-radius: 6px; font-size: 11px; padding: 4px 8px; }
+.incident-row strong, .report-row strong, .staff-row strong { font-size: 13px; }
+.incident-row small, .report-row small, .staff-row small, .incident-row time { font-size: 11px; }
+.staff-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pagination { min-height: 64px; }
+.pagination span, .state-block, .empty-inline, .section-empty { font-size: 13px; }
+.breakdown-item { padding: 22px; }
+.breakdown-item header strong { font-size: 15px; }
+.breakdown-item dt, .breakdown-item header span, .chart-legend, .trend-row time, .trend-volume { font-size: 12px; }
+.breakdown-item dd { font-size: 16px; }
+.trend-row { min-height: 52px; grid-template-columns: 115px repeat(3, minmax(70px, 1fr)) 70px; }
+.segmented-control { border-radius: 8px; }
+.segmented-control button { min-height: 36px; font-size: 12px; }
+.score-status--no_data { color: var(--muted); background: #edf1f5; }
+.login-brand { background: radial-gradient(ellipse at top right, #225c6b, #102b3c 70%); }
+.login-form { border-radius: 20px; padding: 36px; width: min(440px, 100%); }
+.login-form h2 { font-size: 24px; }
+.login-form p, .field > span { font-size: 13px; }
+.universal-login { display: flex; align-items: center; gap: 8px; margin: 20px 0; font-size: 12px; color: var(--muted); }
+.admin-content { padding: 28px 32px; display: grid; gap: 20px; min-width: 0; }
+.setup-route { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.audit-metadata { max-height: 360px; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.route-point-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 370px); gap: 24px; align-items: start; }
+.admin-card { min-width: 0; padding: 24px; border: 1px solid var(--line); background: white; border-radius: 14px; }
+.admin-card h2 { font-size: 19px; margin-bottom: 16px; }
+.admin-form { display: grid; gap: 16px; }
+.admin-form select, .admin-form input:not([type=checkbox]) { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+.checkbox-list { display: grid; gap: 10px; max-height: 240px; overflow-y: auto; }
+.checkbox-list label { display: flex; gap: 8px; align-items: center; }
+.admin-note { color: var(--muted); font-size: 13px; }
+.access-key { padding: 16px; border-radius: 10px; background: var(--green-soft); overflow-wrap: anywhere; }
+.access-key code { display: block; margin: 8px 0; font-size: 22px; }
+.text-link { border: 0; padding: 0; background: none; color: var(--green); font: inherit; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 1200px) {
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-columns { grid-template-columns: 1fr; }
+  .shop-workspace { grid-template-columns: 260px minmax(0, 1fr); }
+  .incidents-layout, .patrols-layout, .reports-layout { grid-template-columns: minmax(0, 1fr); }
+  .investigation-placeholder, .patrol-placeholder, .report-placeholder { display: none; }
+  .admin-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .app-frame { grid-template-columns: minmax(0, 1fr); }
+  .shop-workspace { grid-template-columns: 240px minmax(0, 1fr); }
+  .management-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .workspace-header { padding: 20px 16px; gap: 12px; flex-wrap: wrap; }
+  .workspace-header h1 { font-size: 25px; }
+  .shop-workspace { grid-template-columns: minmax(0, 1fr); }
+  .shop-list-panel { min-height: 0; max-height: 320px; overflow-y: auto; }
+  .shop-detail-panel, .management-content, .admin-content { padding: 20px 16px; }
+  .incident-filters, .patrol-filters, .report-filters, .management-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px; }
+  .metrics-grid, .management-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .metric, .management-kpi { padding: 14px; flex-direction: column; align-items: flex-start; gap: 12px; }
+  .metric strong, .management-kpi strong { font-size: 24px; }
+  .staff-list { grid-template-columns: minmax(0, 1fr); }
+  .admin-card { padding: 18px; }
+  .overview-header { flex-direction: column; gap: 12px; }
+  .trend-list { min-width: 580px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

@@ -1,3 +1,5 @@
+import { loadShopOptions } from '../lib/shop-options';
+import { useUrlFilters } from '../lib/use-url-filters';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import {
@@ -20,7 +22,7 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, getApiErrorMessage } from '../lib/api';
 import type {
@@ -29,7 +31,6 @@ import type {
   PaginatedResponse,
   PatrolReportStatus,
   PatrolReportType,
-  Shop,
 } from '../types/api';
 
 type ReportFilters = {
@@ -52,15 +53,15 @@ const PAGE_SIZE = 20;
 export function ReportsPage(): React.JSX.Element {
   const params = useParams({ strict: false });
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useUrlFilters<ReportFilters>('reports', DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState<'csv' | 'xlsx' | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(filters.search.trim());
 
   const shopsQuery = useQuery({
-    queryKey: ['shops', 'report-filter'],
-    queryFn: async () => (await api.get<PaginatedResponse<Shop>>('/shops', { params: { limit: 100, page: 1, sort: 'name:asc' } })).data,
+    queryKey: ['shops', 'options'],
+    queryFn: () => loadShopOptions(),
   });
   const shopContextQuery = useQuery({
     enabled: filters.shopId !== '',
@@ -114,8 +115,8 @@ export function ReportsPage(): React.JSX.Element {
       <FilterField label="Тип"><select onChange={(event) => updateFilter('reportType', event.target.value as ReportFilters['reportType'])} value={filters.reportType}><option value="">Все типы</option>{REPORT_TYPES.map((type) => <option key={type} value={type}>{reportTypeLabel(type)}</option>)}</select></FilterField>
       <FilterField label="Статус"><select onChange={(event) => updateFilter('status', event.target.value as ReportFilters['status'])} value={filters.status}><option value="">Все статусы</option><option value="submitted">Отправлен</option><option value="draft">Черновик</option><option value="cancelled">Отменен</option></select></FilterField>
       <FilterField label="Период"><select onChange={(event) => updateFilter('period', event.target.value as ReportFilters['period'])} value={filters.period}><option value="">Все периоды</option><option value="morning">Утро</option><option value="noon">Полдень</option><option value="evening">Вечер</option></select></FilterField>
-      <FilterField label="С даты"><input max={filters.to || undefined} onChange={(event) => updateFilter('from', event.target.value)} type="date" value={filters.from} /></FilterField>
-      <FilterField label="По дату"><input min={filters.from || undefined} onChange={(event) => updateFilter('to', event.target.value)} type="date" value={filters.to} /></FilterField>
+      <FilterField label="С даты (UTC)"><input max={filters.to || undefined} onChange={(event) => updateFilter('from', event.target.value)} type="date" value={filters.from} /></FilterField>
+      <FilterField label="По дату (UTC)"><input min={filters.from || undefined} onChange={(event) => updateFilter('to', event.target.value)} type="date" value={filters.to} /></FilterField>
       <FilterField label="Сортировка"><select onChange={(event) => updateFilter('sort', event.target.value as ReportFilters['sort'])} value={filters.sort}><option value="createdAt:desc">Сначала новые</option><option value="createdAt:asc">Сначала старые</option><option value="submittedAt:desc">Сначала отправленные</option><option value="submittedAt:asc">Отправленные по возрастанию</option></select></FilterField>
       <button className="icon-button filter-reset" onClick={() => { setFilters(DEFAULT_FILTERS); setPage(1); }} title="Сбросить фильтры"><FilterX size={18} /></button>
     </section>
@@ -126,7 +127,7 @@ export function ReportsPage(): React.JSX.Element {
         {reportsQuery.isLoading ? <StateBlock label="Загрузка отчетов" loading /> : null}
         {reportsQuery.isError ? <StateBlock error={reportsQuery.error} label="Не удалось загрузить отчеты" /> : null}
         {!reportsQuery.isLoading && reportsQuery.data?.items.length === 0 ? <StateBlock label="Отчеты не найдены" /> : null}
-        <div className="reports-table-wrap"><table className="reports-table"><thead><tr><th>Тип</th><th>Статус</th><th>Магазин</th><th>Сотрудник</th><th>Период</th><th>Создан</th><th>Фото</th><th /></tr></thead><tbody>{reportsQuery.data?.items.map((report) => <tr className={params.reportId === report.id ? 'is-selected' : undefined} key={report.id} onClick={() => void navigate({ to: '/reports/$reportId', params: { reportId: report.id } })}><td><span className="report-type-cell">{report.reportType === 'photo_report' ? <Camera size={15} /> : <FileText size={15} />}<strong>{reportTypeLabel(report.reportType)}</strong></span></td><td><ReportStatusBadge status={report.status} /></td><td>{report.shop.name ?? 'Без названия'}</td><td>{report.employee.fullName ?? 'Не указан'}</td><td>{periodLabel(report.period)}</td><td><time>{formatDate(report.createdAt)}</time></td><td>{report.files.length}</td><td><ChevronRight size={17} /></td></tr>)}</tbody></table></div>
+        <div className="reports-table-wrap"><table className="reports-table"><thead><tr><th>Тип</th><th>Статус</th><th>Магазин</th><th>Сотрудник</th><th>Период</th><th>Создан</th><th>Фото</th><th /></tr></thead><tbody>{reportsQuery.data?.items.map((report) => <tr className={params.reportId === report.id ? 'is-selected' : undefined} key={report.id} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} onClick={() => void navigate({ search: true, to: '/reports/$reportId', params: { reportId: report.id } })}><td><span className="report-type-cell">{report.reportType === 'photo_report' ? <Camera size={15} /> : <FileText size={15} />}<strong>{reportTypeLabel(report.reportType)}</strong></span></td><td><ReportStatusBadge status={report.status} /></td><td>{report.shop.name ?? 'Без названия'}</td><td>{report.employee.fullName ?? 'Не указан'}</td><td>{periodLabel(report.period)}</td><td><time>{formatDate(report.createdAt)}</time></td><td>{report.files.length}</td><td><ChevronRight size={17} /></td></tr>)}</tbody></table></div>
         {(reportsQuery.data?.total ?? 0) > PAGE_SIZE ? <footer className="pagination"><button className="icon-button" disabled={page === 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft size={18} /></button><span>Страница {page} из {totalPages}</span><button className="icon-button" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}><ChevronRight size={18} /></button></footer> : null}
       </section>
       {params.reportId === undefined ? <ReportPlaceholder /> : <aside className="report-detail-panel"><button className="back-button" onClick={() => void navigate({ to: '/reports' })}><ArrowLeft size={17} />К списку</button>{detailQuery.isLoading ? <StateBlock label="Загрузка отчета" loading /> : null}{detailQuery.isError ? <StateBlock error={detailQuery.error} label="Не удалось загрузить отчет" /> : null}{detailQuery.data === undefined ? null : <ReportCard report={detailQuery.data} />}</aside>}
@@ -168,8 +169,18 @@ function AuthenticatedImage({ alt, fileId }: { alt: string; fileId: string }): R
 }
 
 function ImagePreview({ file, onClose }: { file: ControlReport['files'][number]; onClose: () => void }): React.JSX.Element {
-  useEffect(() => { const close = (event: KeyboardEvent): void => { if (event.key === 'Escape') onClose(); }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close); }, [onClose]);
-  return <div className="image-preview" role="dialog" aria-modal="true" aria-label="Просмотр фотографии"><button className="icon-button" onClick={onClose} title="Закрыть"><X size={20} /></button><AuthenticatedImage alt={file.originalName ?? 'Фотография отчета'} fileId={file.id} /><footer><strong>{file.originalName ?? 'Фотография отчета'}</strong><span>{file.width ?? '—'} × {file.height ?? '—'} · {formatFileSize(file.sizeBytes)}</span></footer></div>;
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    closeButton.current?.focus();
+    const close = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'Tab') { event.preventDefault(); closeButton.current?.focus(); }
+    };
+    window.addEventListener('keydown', close);
+    return () => { window.removeEventListener('keydown', close); if (previous instanceof HTMLElement) previous.focus(); };
+  }, [onClose]);
+  return <div className="image-preview" role="dialog" aria-modal="true" aria-label="Просмотр фотографии"><button ref={closeButton} className="icon-button" onClick={onClose} title="Закрыть"><X size={20} /></button><AuthenticatedImage alt={file.originalName ?? 'Фотография отчета'} fileId={file.id} /><footer><strong>{file.originalName ?? 'Фотография отчета'}</strong><span>{file.width ?? '—'} × {file.height ?? '—'} · {formatFileSize(file.sizeBytes)}</span></footer></div>;
 }
 
 function FilterField({ children, label, wide = false }: { children: React.ReactNode; label: string; wide?: boolean }): React.JSX.Element { return <label className={`filter-field${wide ? ' filter-field--wide' : ''}`}><span>{label}</span>{children}</label>; }
@@ -180,16 +191,17 @@ function ReportPlaceholder(): React.JSX.Element { return <aside className="repor
 function StateBlock({ error, label, loading = false }: { error?: unknown; label: string; loading?: boolean }): React.JSX.Element { return <div className={`state-block${error === undefined ? '' : ' state-block--error'}`}>{loading ? <LoaderCircle className="spin" size={20} /> : error === undefined ? <CircleSlash2 size={20} /> : <AlertTriangle size={20} />}<span>{error === undefined ? label : getApiErrorMessage(error)}</span></div>; }
 
 const REPORT_TYPES: PatrolReportType[] = ['photo_report', 'morning', 'closing', 'sunday', 'heating', 'evacuation'];
-function buildRequestParams(filters: ReportFilters, search: string): Record<string, string | undefined> { return { employeeId: filters.employeeId || undefined, from: filters.from === '' ? undefined : new Date(`${filters.from}T00:00:00`).toISOString(), period: filters.period || undefined, reportType: filters.reportType || undefined, search: search || undefined, shopId: filters.shopId || undefined, sort: filters.sort, status: filters.status || undefined, to: filters.to === '' ? undefined : new Date(`${filters.to}T23:59:59.999`).toISOString() }; }
+function buildRequestParams(filters: ReportFilters, search: string): Record<string, string | undefined> { return { employeeId: filters.employeeId || undefined, from: filters.from === '' ? undefined : new Date(`${filters.from}T00:00:00Z`).toISOString(), period: filters.period || undefined, reportType: filters.reportType || undefined, search: search || undefined, shopId: filters.shopId || undefined, sort: filters.sort, status: filters.status || undefined, to: filters.to === '' ? undefined : new Date(`${filters.to}T23:59:59.999Z`).toISOString() }; }
 function reportTypeLabel(type: PatrolReportType): string { return ({ closing: 'Закрытие', evacuation: 'Эвакуационный', heating: 'Отопительный', morning: 'Утренний', photo_report: 'Фотоотчет', sunday: 'Воскресный' })[type]; }
 function periodLabel(period: ControlReport['period']): string { return ({ evening: 'Вечер', morning: 'Утро', noon: 'Полдень' } as Record<string, string>)[period ?? ''] ?? 'Не указан'; }
-function formatDate(value: string, withYear = false): string { return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short', year: withYear ? 'numeric' : undefined }).format(new Date(value)); }
+function formatDate(value: string, withYear = false): string { return new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC', day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short', year: withYear ? 'numeric' : undefined }).format(new Date(value)); }
 function fieldLabel(key: string): string { const spaced = key.replace(/([a-zа-я])([A-ZА-Я])/g, '$1 $2').replace(/_/g, ' '); return spaced.charAt(0).toUpperCase() + spaced.slice(1); }
 function formatFieldValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'Да' : 'Нет';
   if (value === null || value === undefined || value === '') return 'Не указано';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') return String(value);
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return value.map(formatFieldValue).join('; ');
+  if (typeof value === 'object') return Object.entries(value).map(([key, item]) => `${fieldLabel(key)}: ${formatFieldValue(item)}`).join('; ');
   return 'Неподдерживаемое значение';
 }
 function formatFileSize(bytes: number): string { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} КБ` : `${(bytes / 1024 / 1024).toFixed(1)} МБ`; }

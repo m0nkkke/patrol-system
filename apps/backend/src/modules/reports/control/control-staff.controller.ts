@@ -1,7 +1,8 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   ControlStaffResponseDto,
+  CreateControlGuardDto,
   FindControlStaffDto,
   PaginatedControlStaffResponseDto,
 } from '@patrol/shared';
@@ -19,6 +20,13 @@ import { ControlStaffService } from './control-staff.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ControlStaffController {
   constructor(private readonly service: ControlStaffService) {}
+
+  @Post()
+  @Roles('admin', 'inspector')
+  @ApiCreatedResponse({ description: 'Security guard created in assigned shops; response contains the initial access key' })
+  createGuard(@Body() dto: CreateControlGuardDto, @CurrentUser() actor: AuthenticatedUser): ReturnType<ControlStaffService['createGuard']> {
+    return this.service.createGuard(dto, actor);
+  }
 
   @Get()
   @Roles('admin', 'inspector')

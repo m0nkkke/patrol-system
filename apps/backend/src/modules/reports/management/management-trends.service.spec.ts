@@ -24,7 +24,7 @@ describe('ManagementTrendsService', () => {
         clean_patrols: '8',
         completed_patrols: '9',
         on_time_patrols: '7',
-        planned_patrols: '10',
+        registered_patrols: '10',
         submitted_reports: '4',
       },
     ]);
@@ -59,7 +59,7 @@ describe('ManagementTrendsService', () => {
             completionRate: 0.9,
             onTimePatrols: 7,
             onTimeRate: 0.7778,
-            plannedPatrols: 10,
+            registeredPatrols: 10,
             submittedReports: 4,
           },
         },
@@ -68,7 +68,7 @@ describe('ManagementTrendsService', () => {
         from: '2026-08-01T00:00:00.000Z',
         to: '2026-08-18T23:59:59.999Z',
       },
-      schemaVersion: '1.0',
+      schemaVersion: '2.0',
       scope: {
         regionId: 'region-id',
         shopId: null,

@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { api } from '../lib/api';
-import { clearTokens, getDeviceId, readTokens, saveTokens } from '../lib/session';
+import { clearTokens, getDeviceId, readTokens, saveTokens, sessionGeneration } from '../lib/session';
 import type { AuthProfile, AuthTokens } from '../types/api';
 
 type AuthState = {
   isLoading: boolean;
-  login: (accessKey: string) => Promise<void>;
+  login: (accessKey: string, actorFullName?: string) => Promise<void>;
   logout: () => Promise<void>;
   profile: AuthProfile | null;
 };
@@ -14,6 +15,11 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
+  const queryClient = useQueryClient();
+  const resetCache = useCallback(() => {
+    void queryClient.cancelQueries();
+    queryClient.clear();
+  }, [queryClient]);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [isLoading, setIsLoading] = useState(() => readTokens() !== null);
 
@@ -25,49 +31,57 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   }, []);
 
   useEffect(() => {
-    const expire = (): void => setProfile(null);
+    let active = true;
+    const generation = sessionGeneration();
+    const expire = (): void => { resetCache(); setProfile(null); setIsLoading(false); };
     window.addEventListener('patrol:session-expired', expire);
     if (readTokens() !== null) {
       void api.get<AuthProfile>('/auth/me')
-        .then((response) => setProfile(assertWebProfile(response.data)))
-        .catch(() => clearTokens())
-        .finally(() => setIsLoading(false));
+        .then((response) => { if (active && generation === sessionGeneration()) setProfile(assertWebProfile(response.data)); })
+        .catch(() => { if (active && generation === sessionGeneration()) clearTokens(); })
+        .finally(() => { if (active) setIsLoading(false); });
     }
-    return () => window.removeEventListener('patrol:session-expired', expire);
-  }, [loadProfile]);
+    return () => { active = false; window.removeEventListener('patrol:session-expired', expire); };
+  }, [loadProfile, resetCache]);
 
-  const login = useCallback(async (accessKey: string): Promise<void> => {
-    const response = await api.post<AuthTokens>('/auth/login', {
+  const login = useCallback(async (accessKey: string, actorFullName?: string): Promise<void> => {
+    clearTokens();
+    resetCache();
+    const generation = sessionGeneration();
+    const response = await api.post<AuthTokens>(actorFullName ? '/auth/universal-route-setter/login' : '/auth/login', {
       accessKey,
+      ...(actorFullName ? { actorFullName } : {}),
       deviceId: getDeviceId(),
     });
     saveTokens(response.data);
     try {
       await loadProfile();
     } catch (error) {
-      clearTokens();
+      if (generation === sessionGeneration()) clearTokens();
       throw error;
     }
-  }, [loadProfile]);
+  }, [loadProfile, resetCache]);
 
   const logout = useCallback(async (): Promise<void> => {
     const tokens = readTokens();
+    clearTokens();
+    resetCache();
+    setProfile(null);
     try {
       if (tokens !== null) {
-        await api.post('/auth/logout', { deviceId: getDeviceId(), refreshToken: tokens.refreshToken });
+        await api.post('/auth/logout', { deviceId: getDeviceId(), refreshToken: tokens.refreshToken }, { headers: { Authorization: `Bearer ${tokens.accessToken}` } });
       }
-    } finally {
-      clearTokens();
-      setProfile(null);
+    } catch {
+      // Local access is already removed, including when revocation cannot reach the server.
     }
-  }, []);
+  }, [resetCache]);
 
   const value = useMemo(() => ({ isLoading, login, logout, profile }), [isLoading, login, logout, profile]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 function assertWebProfile(profile: AuthProfile): AuthProfile {
-  if (profile.role !== 'inspector' && profile.role !== 'admin') {
+  if (!['admin', 'inspector', 'route_setter', 'local_route_setter'].includes(profile.role)) {
     throw new Error('Эта роль не имеет доступа к web-панели');
   }
   return profile;

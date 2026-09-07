@@ -54,9 +54,10 @@ export class ShopsController {
   }
 
   @Get(':id')
+  @Roles('admin', 'route_setter', 'local_route_setter', 'inspector', 'security_guard')
   @ApiOkResponse({ description: 'Shop details' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ShopEntity> {
-    return this.shopsService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: AuthenticatedUser): Promise<ShopEntity> {
+    return this.shopsService.findOneForActor(id, actor);
   }
 
   @Patch(':id')

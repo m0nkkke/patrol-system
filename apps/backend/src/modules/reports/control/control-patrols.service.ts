@@ -9,6 +9,7 @@ import {
   PatrolRouteCategory,
   PatrolScanAction,
   PatrolStatus,
+  PatrolSnapshotPoint,
 } from '@patrol/shared';
 
 import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
@@ -51,6 +52,7 @@ type ControlPatrolSummary = {
 };
 
 type ControlPatrolDetail = ControlPatrolSummary & {
+  routeSnapshot: PatrolSnapshotPoint[] | null;
   cancellationReason: string | null;
   completionReport: string | null;
   events: Array<{
@@ -159,11 +161,22 @@ export class ControlPatrolsService {
       reportCount: reports.length,
     });
 
+    const snapshot = new Map((patrol.routeSnapshot ?? []).map((point) => [point.id, point]));
+    const historicalPoint = (id: string, fallback: { id: string; name: string; sortOrder: number } | null): { id: string; name: string; sortOrder: number } | null => {
+      const point = snapshot.get(id);
+      return point === undefined ? fallback : { id: point.id, name: point.name, sortOrder: point.sortOrder };
+    };
+    visits.sort((a, b) => (snapshot.get(a.patrolPointId)?.sortOrder ?? a.patrolPoint?.sortOrder ?? 0) - (snapshot.get(b.patrolPointId)?.sortOrder ?? b.patrolPoint?.sortOrder ?? 0));
+
     return {
       ...summary,
+      routeSnapshot: patrol.routeSnapshot ?? null,
       cancellationReason: patrol.cancellationReason ?? null,
       completionReport: patrol.completionReport ?? null,
-      events: events.map(toEvent),
+      events: events.map((event) => {
+        const result = toEvent(event);
+        return { ...result, patrolPoint: historicalPoint(event.patrolPointId, result.patrolPoint) };
+      }),
       incidents: incidents.map((incident) => ({
         actualSeconds: incident.actualSeconds ?? null,
         createdAt: incident.createdAt.toISOString(),
@@ -201,14 +214,14 @@ export class ControlPatrolsService {
         dwellSeconds: visit.dwellSeconds ?? null,
         id: visit.id,
         lockedUntil: visit.lockedUntil.toISOString(),
-        patrolPoint:
+        patrolPoint: historicalPoint(visit.patrolPointId,
           visit.patrolPoint === undefined
             ? null
             : {
                 id: visit.patrolPoint.id,
                 name: visit.patrolPoint.name,
                 sortOrder: visit.patrolPoint.sortOrder,
-              },
+              }),
         status: visit.status,
       })),
     };

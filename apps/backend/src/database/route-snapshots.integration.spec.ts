@@ -19,6 +19,11 @@ import { PatrolRoutesRepository } from '../modules/patrols/routes/patrol-routes.
 import { PatrolsRepository } from '../modules/patrols/patrols.repository';
 import { ShopEntity } from '../modules/shops/entities/shop.entity';
 import { UserEntity } from '../modules/users/entities/user.entity';
+import { ManagementMetricsRepository } from '../modules/reports/management/management-metrics.repository';
+import { ManagementTrendsRepository } from '../modules/reports/management/management-trends.repository';
+import { ManagementBreakdownRepository } from '../modules/reports/management/management-breakdown.repository';
+import { ManagementScorecardsRepository } from '../modules/reports/management/management-scorecards.repository';
+import { ManagementScorecardsService } from '../modules/reports/management/management-scorecards.service';
 
 // Opt-in: use a dedicated empty PostgreSQL database. Tests never clear existing data.
 const databaseUrl = process.env.PATROL_TEST_DATABASE_URL;
@@ -91,6 +96,31 @@ describeDatabase('Route snapshots and atomic writes (PostgreSQL)', () => {
       { uid: randomUUID().replace(/-/g, ''), isActive: true, registeredBy: actor.id },
     );
   }
+
+  it('counts unscheduled patrols consistently and does not mark an empty shop green', async () => {
+    const shop = await db.getRepository(ShopEntity).save(db.getRepository(ShopEntity).create({ name: 'Management regression' }));
+    const metrics = new ManagementMetricsRepository(db);
+    const scores = new ManagementScorecardsService(new ManagementScorecardsRepository(db));
+    const admin = { ...actor, role: 'admin' as const };
+    expect((await metrics.getMetrics({ shopId: shop.id })).green_shop_count).toBe('0');
+    expect((await scores.getShopScorecards({ shopId: shop.id }, admin)).items[0]?.status).toBe('no_data');
+    const route = await db.getRepository(PatrolRouteEntity).save(db.getRepository(PatrolRouteEntity).create({ shopId: shop.id, name: 'Management route', category: 'internal' }));
+    await db.getRepository(PatrolEntity).save(db.getRepository(PatrolEntity).create({
+      shopId: shop.id, employeeId: actor.id, status: 'completed', totalPoints: 0, scannedPoints: 0,
+      routeId: route.id, createdAt: new Date('2026-09-01T22:29:00Z'),
+      startedAt: new Date('2026-09-01T22:30:00Z'), completedAt: new Date('2026-09-01T22:40:00Z'),
+    }));
+    const result = await metrics.getMetrics({ shopId: shop.id });
+    expect(result.registered_patrols).toBe('1');
+    expect(result.completed_patrols).toBe('1');
+    expect(result.green_shop_count).toBe('1');
+    expect((await scores.getShopScorecards({ shopId: shop.id }, admin)).items[0]?.metrics.completionRate).toBe(1);
+    const trends = await new ManagementTrendsRepository(db).findTrends({ shopId: shop.id }, 'day');
+    expect(new Date(trends[0]!.bucket_start).toISOString()).toBe('2026-09-01T00:00:00.000Z');
+    expect(trends[0]?.registered_patrols).toBe('1');
+    const breakdown = await new ManagementBreakdownRepository(db).findBreakdown({ shopId: shop.id }, 'routeCategory');
+    expect(breakdown[0]).toMatchObject({ group_key: 'internal', registered_patrols: '1', completed_patrols: '1' });
+  });
 
   it('rolls back NFC creation when point insertion fails, and rejects duplicate UIDs', async () => {
     const uid = randomUUID().replace(/-/g, '');

@@ -11,7 +11,7 @@ export type ManagementBreakdownRaw = {
   completed_patrols: string | null;
   group_key: string;
   on_time_patrols: string | null;
-  planned_patrols: string | null;
+  registered_patrols: string | null;
   submitted_reports: string | null;
 };
 
@@ -101,7 +101,7 @@ export class ManagementBreakdownRepository {
       patrol_metrics AS (
         SELECT
           patrol.group_key,
-          COUNT(*) FILTER (WHERE patrol.schedule_id IS NOT NULL) AS planned_patrols,
+          COUNT(*) AS registered_patrols,
           COUNT(*) FILTER (WHERE patrol.status = 'completed') AS completed_patrols,
           COUNT(*) FILTER (
             WHERE patrol.status = 'completed'
@@ -136,7 +136,7 @@ export class ManagementBreakdownRepository {
       )
       SELECT
         COALESCE(patrol_metrics.group_key, report_metrics.group_key) AS group_key,
-        COALESCE(patrol_metrics.planned_patrols, 0) AS planned_patrols,
+        COALESCE(patrol_metrics.registered_patrols, 0) AS registered_patrols,
         COALESCE(patrol_metrics.completed_patrols, 0) AS completed_patrols,
         COALESCE(patrol_metrics.on_time_patrols, 0) AS on_time_patrols,
         COALESCE(patrol_metrics.clean_patrols, 0) AS clean_patrols,

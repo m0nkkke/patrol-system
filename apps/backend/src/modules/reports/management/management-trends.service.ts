@@ -21,7 +21,7 @@ type ManagementTrendPoint = {
     completionRate: number;
     onTimePatrols: number;
     onTimeRate: number;
-    plannedPatrols: number;
+    registeredPatrols: number;
     submittedReports: number;
   };
 };
@@ -33,7 +33,7 @@ type ManagementTrendsResponse = {
     from: string | null;
     to: string | null;
   };
-  schemaVersion: '1.0';
+  schemaVersion: '2.0';
   scope: {
     regionId: string | null;
     shopId: string | null;
@@ -66,7 +66,7 @@ export class ManagementTrendsService {
         from: query.from ?? null,
         to: query.to ?? null,
       },
-      schemaVersion: '1.0',
+      schemaVersion: '2.0',
       scope: {
         regionId: query.regionId ?? null,
         shopId: query.shopId ?? null,
@@ -77,7 +77,7 @@ export class ManagementTrendsService {
 }
 
 function toTrendPoint(raw: ManagementTrendRaw): ManagementTrendPoint {
-  const plannedPatrols = toNumber(raw.planned_patrols);
+  const registeredPatrols = toNumber(raw.registered_patrols);
   const completedPatrols = toNumber(raw.completed_patrols);
   const onTimePatrols = toNumber(raw.on_time_patrols);
   const cleanPatrols = toNumber(raw.clean_patrols);
@@ -87,7 +87,7 @@ function toTrendPoint(raw: ManagementTrendRaw): ManagementTrendPoint {
     bucketStart: toDate(raw.bucket_start).toISOString(),
     metrics: {
       attentionPatrols,
-      attentionRate: ratio(attentionPatrols, plannedPatrols),
+      attentionRate: ratio(attentionPatrols, registeredPatrols),
       averageCompletionSeconds:
         raw.average_completion_seconds === null
           ? null
@@ -95,10 +95,10 @@ function toTrendPoint(raw: ManagementTrendRaw): ManagementTrendPoint {
       cleanPatrolRate: ratio(cleanPatrols, completedPatrols),
       cleanPatrols,
       completedPatrols,
-      completionRate: ratio(completedPatrols, plannedPatrols),
+      completionRate: ratio(completedPatrols, registeredPatrols),
       onTimePatrols,
       onTimeRate: ratio(onTimePatrols, completedPatrols),
-      plannedPatrols,
+      registeredPatrols,
       submittedReports: toNumber(raw.submitted_reports),
     },
   };

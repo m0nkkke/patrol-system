@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { QueryFailedError } from 'typeorm';
 
 import { DomainError } from '../errors/domain.error';
 import { DomainConflictError } from '../errors/domain-conflict.error';
@@ -33,6 +34,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 
   private toErrorResponse(exception: unknown): ErrorResponse {
+    if (exception instanceof QueryFailedError &&
+      exception.message.includes('PATROL_SCHEDULE_WINDOW_OPEN')) {
+      return createErrorResponse(HttpStatus.CONFLICT, 'PATROL_SCHEDULE_WINDOW_OPEN',
+        'Нельзя изменить расписание или часовой пояс, пока открыто окно обхода. Повторите после его окончания.');
+    }
     if (exception instanceof EntityNotFoundError) {
       return createErrorResponse(HttpStatus.NOT_FOUND, exception.code, exception.message);
     }

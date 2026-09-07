@@ -53,6 +53,9 @@ export class PatrolEntity {
   @Column({ name: 'schedule_id', nullable: true, type: 'uuid' })
   scheduleId?: string;
 
+  @Column({ name: 'planned_occurrence_id', nullable: true, type: 'uuid' })
+  plannedOccurrenceId?: string | null;
+
   @ManyToOne(() => PatrolScheduleEntity, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'schedule_id' })
   schedule?: PatrolScheduleEntity;

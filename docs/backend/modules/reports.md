@@ -234,7 +234,7 @@ Endpoint для руководства:
 
 Ответ не содержит ФИО, фото, комментарии или сырые инциденты. Состав метрик:
 
-- `plannedPatrols`;
+- `registeredPatrols` — все зарегистрированные обходы, включая внеплановые;
 - `completedPatrols`;
 - `completionRate`;
 - `onTimePatrols`;
@@ -269,8 +269,8 @@ Management export использует те же фильтры, что и JSON 
 Shop scorecards дают построчную управленческую витрину по магазинам. Ответ содержит:
 
 - `shopId`, `shopName`, `regionId`;
-- `status`: `green` или `attention`;
-- `plannedPatrols`, `completedPatrols`, `completionRate`;
+- `status`: `green`, `attention` или `no_data`;
+- `registeredPatrols`, `completedPatrols`, `completionRate`;
 - `onTimePatrols`, `onTimeRate`;
 - `cleanPatrols`, `cleanPatrolRate`;
 - `attentionPatrols`, `attentionRate`;

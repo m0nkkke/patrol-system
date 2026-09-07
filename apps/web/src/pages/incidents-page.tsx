@@ -1,3 +1,5 @@
+import { loadShopOptions } from '../lib/shop-options';
+import { useUrlFilters } from '../lib/use-url-filters';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import {
@@ -25,7 +27,6 @@ import type {
   IncidentSeverity,
   PaginatedResponse,
   PatrolIncidentType,
-  Shop,
 } from '../types/api';
 
 type IncidentFilters = {
@@ -53,17 +54,15 @@ const PAGE_SIZE = 20;
 export function IncidentsPage(): React.JSX.Element {
   const params = useParams({ strict: false });
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<IncidentFilters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useUrlFilters<IncidentFilters>('incidents', DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState<'csv' | 'xlsx' | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(filters.search.trim());
 
   const shopsQuery = useQuery({
-    queryKey: ['shops', 'incident-filter'],
-    queryFn: async () => (await api.get<PaginatedResponse<Shop>>('/shops', {
-      params: { limit: 100, page: 1, sort: 'name:asc' },
-    })).data,
+    queryKey: ['shops', 'options'],
+    queryFn: () => loadShopOptions(),
   });
 
   const requestParams = useMemo(() => buildRequestParams(filters, deferredSearch), [filters, deferredSearch]);
@@ -87,7 +86,7 @@ export function IncidentsPage(): React.JSX.Element {
   };
 
   const openIncident = async (incidentId: string): Promise<void> => {
-    await navigate({ to: '/incidents/$incidentId', params: { incidentId } });
+    await navigate({ search: true, to: '/incidents/$incidentId', params: { incidentId } });
   };
 
   const closeIncident = async (): Promise<void> => {
@@ -193,7 +192,7 @@ export function IncidentsPage(): React.JSX.Element {
             <table className="incidents-table">
               <thead><tr><th>Уровень</th><th>Событие</th><th>Магазин</th><th>Ответственный</th><th>Время</th><th /></tr></thead>
               <tbody>{incidentsQuery.data?.items.map((incident) => (
-                <tr className={params.incidentId === incident.id ? 'is-selected' : undefined} key={incident.id} onClick={() => void openIncident(incident.id)}>
+                <tr className={params.incidentId === incident.id ? 'is-selected' : undefined} key={incident.id} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} onClick={() => void openIncident(incident.id)}>
                   <td><SeverityBadge severity={incident.severity} /></td>
                   <td><strong>{incidentTypeLabel(incident.type)}</strong><small>{incident.message}</small></td>
                   <td>{incident.shop.name ?? 'Без названия'}<small>{incident.patrol.routeName ?? 'Маршрут не указан'}</small></td>
@@ -323,12 +322,12 @@ function StateBlock({ error, label, loading = false }: { error?: unknown; label:
 
 function buildRequestParams(filters: IncidentFilters, search: string): Record<string, string | undefined> {
   return {
-    from: filters.from === '' ? undefined : new Date(`${filters.from}T00:00:00`).toISOString(),
+    from: filters.from === '' ? undefined : new Date(`${filters.from}T00:00:00Z`).toISOString(),
     search: search || undefined,
     severity: filters.severity || undefined,
     shopId: filters.shopId || undefined,
     sort: filters.sort,
-    to: filters.to === '' ? undefined : new Date(`${filters.to}T23:59:59.999`).toISOString(),
+    to: filters.to === '' ? undefined : new Date(`${filters.to}T23:59:59.999Z`).toISOString(),
     type: filters.type || undefined,
   };
 }
@@ -357,7 +356,7 @@ function periodLabel(period: string | null): string { return ({ evening: 'Веч
 function patrolStatusLabel(status: ControlIncident['patrol']['status']): string { return ({ cancelled: 'Отменен', completed: 'Выполнен', in_progress: 'В процессе', overdue: 'Просрочен', pending: 'Запланирован' })[status]; }
 function yesNo(value: boolean): string { return value ? 'Да' : 'Нет'; }
 function formatNullableDate(value: string | null): string { return value === null ? 'Не зафиксировано' : formatDateTime(value, true); }
-function formatDateTime(value: string, withYear = false): string { return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short', year: withYear ? 'numeric' : undefined }).format(new Date(value)); }
+function formatDateTime(value: string, withYear = false): string { return new Intl.DateTimeFormat('ru-RU', { timeZone: 'UTC', day: '2-digit', hour: '2-digit', minute: '2-digit', month: 'short', year: withYear ? 'numeric' : undefined }).format(new Date(value)); }
 function formatDuration(seconds: number): string {
   const sign = seconds < 0 ? '-' : '';
   const absolute = Math.abs(seconds);

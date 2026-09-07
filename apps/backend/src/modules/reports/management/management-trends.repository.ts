@@ -11,7 +11,7 @@ export type ManagementTrendRaw = {
   clean_patrols: string | null;
   completed_patrols: string | null;
   on_time_patrols: string | null;
-  planned_patrols: string | null;
+  registered_patrols: string | null;
   submitted_reports: string | null;
 };
 
@@ -87,8 +87,8 @@ export class ManagementTrendsRepository {
       ),
       patrol_metrics AS (
         SELECT
-          date_trunc('${bucketSql}', patrol.created_at) AS bucket_start,
-          COUNT(*) FILTER (WHERE patrol.schedule_id IS NOT NULL) AS planned_patrols,
+          date_trunc('${bucketSql}', patrol.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS bucket_start,
+          COUNT(*) AS registered_patrols,
           COUNT(*) FILTER (WHERE patrol.status = 'completed') AS completed_patrols,
           COUNT(*) FILTER (
             WHERE patrol.status = 'completed'
@@ -110,18 +110,18 @@ export class ManagementTrendsRepository {
           ) AS average_completion_seconds
         FROM patrol_scope patrol
         LEFT JOIN incident_patrols ON incident_patrols.patrol_id = patrol.id
-        GROUP BY date_trunc('${bucketSql}', patrol.created_at)
+        GROUP BY date_trunc('${bucketSql}', patrol.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
       ),
       report_metrics AS (
         SELECT
-          date_trunc('${bucketSql}', report.created_at) AS bucket_start,
+          date_trunc('${bucketSql}', report.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' AS bucket_start,
           COUNT(*) FILTER (WHERE report.status = 'submitted') AS submitted_reports
         FROM report_scope report
-        GROUP BY date_trunc('${bucketSql}', report.created_at)
+        GROUP BY date_trunc('${bucketSql}', report.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
       )
       SELECT
         COALESCE(patrol_metrics.bucket_start, report_metrics.bucket_start) AS bucket_start,
-        COALESCE(patrol_metrics.planned_patrols, 0) AS planned_patrols,
+        COALESCE(patrol_metrics.registered_patrols, 0) AS registered_patrols,
         COALESCE(patrol_metrics.completed_patrols, 0) AS completed_patrols,
         COALESCE(patrol_metrics.on_time_patrols, 0) AS on_time_patrols,
         COALESCE(patrol_metrics.clean_patrols, 0) AS clean_patrols,

@@ -1,5 +1,6 @@
 import {
   ControlStaffResponseDto,
+  CreateControlGuardDto,
   FindControlStaffDto,
   PaginatedControlStaffResponseDto,
 } from '@patrol/shared';
@@ -9,11 +10,21 @@ import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
 import { DomainValidationError } from '../../../common/errors/domain-validation.error';
 import { EntityNotFoundError } from '../../../common/errors/not-found.error';
 import { UserEntity } from '../../users/entities/user.entity';
+import { UsersService } from '../../users/users.service';
 import { ControlStaffRepository } from './control-staff.repository';
 
 @Injectable()
 export class ControlStaffService {
-  constructor(private readonly repository: ControlStaffRepository) {}
+  constructor(private readonly repository: ControlStaffRepository, private readonly users: UsersService) {}
+
+  async createGuard(dto: CreateControlGuardDto, actor: AuthenticatedUser): Promise<{ id: string; fullName: string; accessKey?: string }> {
+    assertControlRole(actor);
+    if (dto.shopIds.length === 0 || (actor.role === 'inspector' && dto.shopIds.some((id) => !getActorShopIds(actor).includes(id)))) {
+      throw new DomainValidationError('CONTROL_STAFF_FORBIDDEN', 'Assign guards only to your assigned shops');
+    }
+    const user = await this.users.create({ fullName: dto.fullName, shopIds: dto.shopIds, role: 'security_guard' });
+    return { id: user.id, fullName: user.fullName, accessKey: user.accessKey };
+  }
 
   async findMany(
     query: FindControlStaffDto,

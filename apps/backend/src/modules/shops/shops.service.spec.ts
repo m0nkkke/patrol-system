@@ -97,6 +97,17 @@ describe('ShopsService', () => {
     );
   });
 
+  it('limits local setters to assigned shops, including an empty scope', async () => {
+    shopsRepository.findMany.mockResolvedValue([[], 0]);
+    const actor: AuthenticatedUser = { id: 'local', fullName: 'Local', username: 'local', role: 'local_route_setter', shopIds: ['second'], shopId: 'first' };
+    await service.findAll({ page: 1, limit: 20 }, actor);
+    expect(shopsRepository.findMany).toHaveBeenLastCalledWith({ page: 1, limit: 20 }, ['second', 'first']);
+    await service.findAll({ page: 1, limit: 20 }, { ...actor, shopIds: [], shopId: undefined });
+    expect(shopsRepository.findMany).toHaveBeenLastCalledWith({ page: 1, limit: 20 }, []);
+    await expect(service.findOneForActor('outside', actor)).rejects.toBeInstanceOf(DomainValidationError);
+    expect(shopsRepository.findById).not.toHaveBeenCalled();
+  });
+
   it('rejects NFC binding before route setup is started', async () => {
     shopsRepository.findById.mockResolvedValue(createShop());
 

@@ -8,8 +8,11 @@ import { ManagementRoutePage } from './pages/management-route-page';
 import { PatrolsPage } from './pages/patrols-page';
 import { ReportsPage } from './pages/reports-page';
 import { ShopsPage } from './pages/shops-page';
+import { UsersPage } from './pages/users-page';
+import { SetupPage } from './pages/setup-page';
+import { AdministrationPage } from './pages/administration-page';
 
-const rootRoute = createRootRoute({ component: () => <Outlet /> });
+const rootRoute = createRootRoute({ component: () => <Outlet />, validateSearch: (search: Record<string, unknown>): { staff?: string; filters?: string } => ({ staff: typeof search.staff === 'string' ? search.staff : undefined, filters: typeof search.filters === 'string' ? search.filters : undefined }) });
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -23,20 +26,22 @@ const protectedRoute = createRoute({
   component: ProtectedLayout,
 });
 
+const controlRoute = createRoute({ getParentRoute: () => protectedRoute, id: '_control', component: ControlLayout });
+
 const shopsIndexRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => controlRoute,
   path: '/',
   component: ShopsPage,
 });
 
 const shopRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => controlRoute,
   path: '/shops/$shopId',
   component: ShopRoute,
 });
 
 const incidentsRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => controlRoute,
   path: '/incidents',
   component: IncidentsPage,
 });
@@ -48,7 +53,7 @@ const incidentRoute = createRoute({
 });
 
 const patrolsRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => controlRoute,
   path: '/patrols',
   component: PatrolsPage,
 });
@@ -60,13 +65,13 @@ const patrolRoute = createRoute({
 });
 
 const reportsRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => controlRoute,
   path: '/reports',
   component: ReportsPage,
 });
 
 const managementRoute = createRoute({
-  getParentRoute: () => protectedRoute,
+  getParentRoute: () => controlRoute,
   path: '/management',
   component: ManagementRoutePage,
 });
@@ -77,16 +82,22 @@ const reportRoute = createRoute({
   component: () => null,
 });
 
+const administrationRoute = createRoute({ getParentRoute: () => controlRoute, path: '/administration', component: AdministrationPage });
+const setupRoute = createRoute({ getParentRoute: () => protectedRoute, path: '/setup', component: SetupPage });
+const usersRoute = createRoute({ getParentRoute: () => controlRoute, path: '/users', component: UsersPage });
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([
+  protectedRoute.addChildren([setupRoute, controlRoute.addChildren([
     shopsIndexRoute,
     shopRoute,
     patrolsRoute.addChildren([patrolRoute]),
     incidentsRoute.addChildren([incidentRoute]),
     reportsRoute.addChildren([reportRoute]),
     managementRoute,
-  ]),
+    administrationRoute,
+    usersRoute,
+  ])]),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });
@@ -107,4 +118,10 @@ function ProtectedLayout(): React.JSX.Element {
 function ShopRoute(): React.JSX.Element {
   const { shopId } = shopRoute.useParams();
   return <ShopsPage selectedShopId={shopId} />;
+}
+
+function ControlLayout(): React.JSX.Element {
+  const { profile } = useAuth();
+  if (profile?.role !== 'admin' && profile?.role !== 'inspector') return <Navigate to="/setup" replace />;
+  return <Outlet />;
 }

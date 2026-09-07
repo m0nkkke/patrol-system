@@ -1,5 +1,7 @@
 import { DomainValidationError } from '../../../common/errors/domain-validation.error';
 import { PatrolEntity } from '../../patrols/entities/patrol.entity';
+import { PatrolPointVisitEntity } from '../../patrols/entities/patrol-point-visit.entity';
+import { PatrolPointEntity } from '../../patrol-points/entities/patrol-point.entity';
 import { PatrolRouteEntity } from '../../patrols/entities/patrol-route.entity';
 import { PatrolScheduleEntity } from '../../patrols/entities/patrol-schedule.entity';
 import { ShopEntity } from '../../shops/entities/shop.entity';
@@ -86,6 +88,30 @@ describe('ControlPatrolsService', () => {
       route: { category: 'internal', name: 'Route 1' },
       visits: [],
     });
+  });
+
+  it('keeps snapshot order and names after live points change', async () => {
+    const patrol = createPatrol();
+    patrol.routeSnapshot = [
+      { id: 'second', shopId: patrol.shopId, isActive: true, name: 'Historical first', sortOrder: 1, dwellSeconds: 120 },
+      { id: 'first', shopId: patrol.shopId, isActive: true, name: 'Historical second', sortOrder: 2, dwellSeconds: 0 },
+    ];
+    repository.findById.mockResolvedValue(patrol);
+    repository.findEvents.mockResolvedValue([]);
+    repository.findIncidents.mockResolvedValue([]);
+    repository.findReports.mockResolvedValue([]);
+    repository.findTimingProfile.mockResolvedValue(null);
+    repository.findVisits.mockResolvedValue(['first', 'second'].map((id, index) => Object.assign(new PatrolPointVisitEntity(), {
+      patrolPointId: id,
+      patrolPoint: Object.assign(new PatrolPointEntity(), { id, name: 'Renamed', sortOrder: index + 10 }),
+      arrivedAt: new Date(), lockedUntil: new Date(),
+    })));
+    const result = await service.findOne(patrol.id, { id: 'admin', fullName: 'Admin', username: 'admin', role: 'admin' });
+    expect(result.visits.map((v) => v.patrolPoint)).toEqual([
+      { id: 'second', name: 'Historical first', sortOrder: 1 },
+      { id: 'first', name: 'Historical second', sortOrder: 2 },
+    ]);
+    expect(result.routeSnapshot?.map((p) => p.dwellSeconds)).toEqual([120, 0]);
   });
 
   it('returns a null duration when PostgreSQL loads a pending patrol with startedAt null', async () => {

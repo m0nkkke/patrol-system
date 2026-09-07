@@ -37,3 +37,4 @@ export * from './enums/patrol-status';
 export * from './enums/route-status';
 export * from './enums/user-role';
 export * from './dto/create-patrol-point-with-nfc.dto';
+export * from './dto/plan-fact.dto';

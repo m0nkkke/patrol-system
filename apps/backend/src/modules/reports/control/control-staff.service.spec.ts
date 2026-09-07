@@ -1,6 +1,7 @@
 import { AuthenticatedUser } from '../../../common/auth/authenticated-user';
 import { ShopEntity } from '../../shops/entities/shop.entity';
 import { UserEntity } from '../../users/entities/user.entity';
+import { UsersService } from '../../users/users.service';
 import { ControlStaffRepository } from './control-staff.repository';
 import { ControlStaffService } from './control-staff.service';
 
@@ -15,7 +16,24 @@ describe('ControlStaffService', () => {
       findById: jest.fn(),
       findMany: jest.fn(),
     };
-    service = new ControlStaffService(repository as unknown as ControlStaffRepository);
+    service = new ControlStaffService(repository as unknown as ControlStaffRepository, { create: jest.fn() } as unknown as UsersService);
+  });
+
+  it('rejects guard creation outside inspector assignments', async () => {
+    await expect(service.createGuard({ fullName: 'Guard', shopIds: ['outside'] }, createActor('inspector'))).rejects.toThrow();
+  });
+
+  it('creates only a guard in assigned shops and exposes only the initial credential', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'guard', fullName: 'Guard', accessKey: 'NEW-KEY', passwordHash: 'hidden' });
+    const serviceWithUsers = new ControlStaffService(repository as unknown as ControlStaffRepository, { create } as unknown as UsersService);
+    const result = await serviceWithUsers.createGuard({ fullName: 'Guard', shopIds: ['assigned'] }, createActor('inspector', { shopIds: ['assigned'] }));
+    expect(create).toHaveBeenCalledWith({ fullName: 'Guard', shopIds: ['assigned'], role: 'security_guard' });
+    expect(result).toEqual({ id: 'guard', fullName: 'Guard', accessKey: 'NEW-KEY' });
+  });
+
+  it('rejects guard creation by other roles and without assignments', async () => {
+    await expect(service.createGuard({ fullName: 'Guard', shopIds: [] }, createActor('admin'))).rejects.toThrow();
+    await expect(service.createGuard({ fullName: 'Guard', shopIds: ['shop'] }, createActor('security_guard'))).rejects.toThrow();
   });
 
   it('returns active and inactive staff through a safe read model', async () => {

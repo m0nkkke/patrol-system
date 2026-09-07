@@ -3,6 +3,8 @@ import type { AuthTokens } from '../types/api';
 const ACCESS_TOKEN_KEY = 'patrol.web.access-token';
 const REFRESH_TOKEN_KEY = 'patrol.web.refresh-token';
 const DEVICE_ID_KEY = 'patrol.web.device-id';
+let generation = 0;
+export function sessionGeneration(): number { return generation; }
 
 // PRODUCTION BLOCKER: browser-readable tokens are allowed only for the development MVP.
 // Before production, replace this module with backend-managed HttpOnly Secure cookies,
@@ -19,6 +21,7 @@ export function saveTokens(tokens: AuthTokens): void {
 }
 
 export function clearTokens(): void {
+  generation++;
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
 }

@@ -54,9 +54,12 @@ export class ShopsService {
   }
 
   async findAll(query: ListShopsQueryDto, actor: AuthenticatedUser): Promise<PaginatedShops> {
+    if (!['admin', 'route_setter', 'local_route_setter', 'inspector'].includes(actor.role)) {
+      throw new DomainValidationError('SHOP_FORBIDDEN', 'User cannot list shops');
+    }
     const allowedShopIds =
-      actor.role === 'inspector'
-        ? actor.shopIds ?? (actor.shopId === undefined ? [] : [actor.shopId])
+      actor.role === 'inspector' || actor.role === 'local_route_setter'
+        ? [...new Set([...(actor.shopIds ?? []), ...(actor.shopId ? [actor.shopId] : [])])]
         : undefined;
     const [items, total] = await this.shopsRepository.findMany(query, allowedShopIds);
 
@@ -76,6 +79,13 @@ export class ShopsService {
     }
 
     return shop;
+  }
+
+  async findOneForActor(id: string, actor: AuthenticatedUser): Promise<ShopEntity> {
+    if (actor.role !== 'admin' && actor.role !== 'route_setter' && ![...(actor.shopIds ?? []), actor.shopId].includes(id)) {
+      throw new DomainValidationError('SHOP_FORBIDDEN', 'User cannot access a shop outside assignments');
+    }
+    return this.findOne(id);
   }
 
   async update(id: string, dto: UpdateShopDto): Promise<ShopEntity> {

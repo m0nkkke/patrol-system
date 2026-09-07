@@ -21,7 +21,7 @@ type ManagementBreakdownItem = {
     completionRate: number;
     onTimePatrols: number;
     onTimeRate: number;
-    plannedPatrols: number;
+    registeredPatrols: number;
     submittedReports: number;
   };
 };
@@ -33,7 +33,7 @@ type ManagementBreakdownResponse = {
     from: string | null;
     to: string | null;
   };
-  schemaVersion: '1.0';
+  schemaVersion: '2.0';
   scope: {
     regionId: string | null;
     shopId: string | null;
@@ -69,7 +69,7 @@ export class ManagementBreakdownService {
         from: query.from ?? null,
         to: query.to ?? null,
       },
-      schemaVersion: '1.0',
+      schemaVersion: '2.0',
       scope: {
         regionId: query.regionId ?? null,
         shopId: query.shopId ?? null,
@@ -93,13 +93,13 @@ function createEmptyRaw(groupKey: string): ManagementBreakdownRaw {
     completed_patrols: '0',
     group_key: groupKey,
     on_time_patrols: '0',
-    planned_patrols: '0',
+    registered_patrols: '0',
     submitted_reports: '0',
   };
 }
 
 function toBreakdownItem(raw: ManagementBreakdownRaw): ManagementBreakdownItem {
-  const plannedPatrols = toNumber(raw.planned_patrols);
+  const registeredPatrols = toNumber(raw.registered_patrols);
   const completedPatrols = toNumber(raw.completed_patrols);
   const onTimePatrols = toNumber(raw.on_time_patrols);
   const cleanPatrols = toNumber(raw.clean_patrols);
@@ -109,7 +109,7 @@ function toBreakdownItem(raw: ManagementBreakdownRaw): ManagementBreakdownItem {
     groupKey: raw.group_key,
     metrics: {
       attentionPatrols,
-      attentionRate: ratio(attentionPatrols, plannedPatrols),
+      attentionRate: ratio(attentionPatrols, registeredPatrols),
       averageCompletionSeconds:
         raw.average_completion_seconds === null
           ? null
@@ -117,10 +117,10 @@ function toBreakdownItem(raw: ManagementBreakdownRaw): ManagementBreakdownItem {
       cleanPatrolRate: ratio(cleanPatrols, completedPatrols),
       cleanPatrols,
       completedPatrols,
-      completionRate: ratio(completedPatrols, plannedPatrols),
+      completionRate: ratio(completedPatrols, registeredPatrols),
       onTimePatrols,
       onTimeRate: ratio(onTimePatrols, completedPatrols),
-      plannedPatrols,
+      registeredPatrols,
       submittedReports: toNumber(raw.submitted_reports),
     },
   };
