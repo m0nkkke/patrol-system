@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 
 import { api, getApiErrorMessage } from '../lib/api';
+import { incidentDescription } from '../lib/incident-description';
 import { loadShopOptions } from '../lib/shop-options';
 import type { ControlShopOverview, UserRole } from '../types/api';
 
@@ -133,7 +134,7 @@ function ShopOverview({ shopId }: { shopId: string }): React.JSX.Element {
             {overview.recentIncidents.map((incident) => (
               <button className={`incident-row incident-row--${incident.severity}`} key={incident.id} onClick={() => void navigate({ to: '/incidents/$incidentId', params: { incidentId: incident.id } })} type="button">
                 <span className="incident-row__icon"><AlertTriangle size={17} aria-hidden="true" /></span>
-                <span><strong>{incidentTypeLabel(incident.type)}</strong><small>{incident.message}</small></span>
+                <span><strong>{incidentTypeLabel(incident.type)}</strong><small>{incidentDescription(incident)}</small></span>
                 <time>{formatDate(incident.createdAt, true, overview.shop.timezone)}</time>
               </button>
             ))}

@@ -22,9 +22,11 @@ type ShopsRepositoryMock = Pick<
   | 'findByExternalId'
   | 'findById'
   | 'findMany'
+  | 'findRouteState'
   | 'softDelete'
   | 'update'
   | 'updateRouteSetup'
+  | 'updateRouteStatus'
 >;
 
 describe('ShopsService', () => {
@@ -45,9 +47,11 @@ describe('ShopsService', () => {
       findByExternalId: jest.fn(),
       findById: jest.fn(),
       findMany: jest.fn(),
+      findRouteState: jest.fn(),
       softDelete: jest.fn(),
       update: jest.fn(),
       updateRouteSetup: jest.fn(),
+      updateRouteStatus: jest.fn(),
     };
     service = new ShopsService(
       patrolPointsService as unknown as PatrolPointsService,
@@ -58,12 +62,18 @@ describe('ShopsService', () => {
   it('starts route setup and creates route point placeholders', async () => {
     shopsRepository.findById
       .mockResolvedValueOnce(createShop())
+      .mockResolvedValueOnce(createShop({ routeExpectedPoints: 3, routeStatus: RouteStatus.SETUP_IN_PROGRESS }))
       .mockResolvedValueOnce(
         createShop({
           routeExpectedPoints: 3,
           routeStatus: RouteStatus.SETUP_IN_PROGRESS,
         }),
       );
+    shopsRepository.findRouteState.mockResolvedValue({
+      hasActiveSchedule: false,
+      hasActiveRoute: false,
+      hasUsableRoute: false,
+    });
     patrolPointsService.countRegisteredRoutePoints.mockResolvedValue(0);
     patrolPointsService.findRouteSetupPointsByShop.mockResolvedValue([
       createPoint(1),
@@ -164,6 +174,53 @@ describe('ShopsService', () => {
     await service.delete('shop-id');
 
     expect(shopsRepository.softDelete).toHaveBeenCalledWith('shop-id');
+  });
+
+  it('marks a shop ready when it has a usable active route', async () => {
+    shopsRepository.findById.mockResolvedValue(createShop());
+    shopsRepository.findRouteState.mockResolvedValue({
+      hasActiveSchedule: true,
+      hasActiveRoute: true,
+      hasUsableRoute: true,
+    });
+
+    await expect(service.recalculateRouteStatus('shop-id')).resolves.toBe(RouteStatus.READY);
+
+    expect(shopsRepository.updateRouteStatus).toHaveBeenCalledWith(
+      'shop-id',
+      RouteStatus.READY,
+    );
+  });
+
+  it('keeps a shop in setup while a usable route has no active schedule', async () => {
+    shopsRepository.findById.mockResolvedValue(createShop());
+    shopsRepository.findRouteState.mockResolvedValue({
+      hasActiveSchedule: false,
+      hasActiveRoute: true,
+      hasUsableRoute: true,
+    });
+
+    await expect(service.recalculateRouteStatus('shop-id')).resolves.toBe(
+      RouteStatus.SETUP_IN_PROGRESS,
+    );
+
+    expect(shopsRepository.updateRouteStatus).toHaveBeenCalledWith(
+      'shop-id',
+      RouteStatus.SETUP_IN_PROGRESS,
+    );
+  });
+
+  it('marks an incomplete active route as setup in progress', async () => {
+    shopsRepository.findById.mockResolvedValue(createShop());
+    shopsRepository.findRouteState.mockResolvedValue({
+      hasActiveSchedule: true,
+      hasActiveRoute: true,
+      hasUsableRoute: false,
+    });
+
+    await expect(service.recalculateRouteStatus('shop-id')).resolves.toBe(
+      RouteStatus.SETUP_IN_PROGRESS,
+    );
   });
 });
 

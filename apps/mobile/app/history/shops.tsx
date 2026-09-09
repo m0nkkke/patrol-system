@@ -7,17 +7,19 @@ import type { Shop } from '@/api/types';
 import { useInfiniteShops } from '@/features/route-setup/queries';
 import { ShopCard } from '@/features/shops/ShopCard';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   Button,
+  DataStatusBar,
+  EmptyState,
   FilterSortBar,
   Header,
   ListFooter,
   Screen,
   SheetButton,
   type SheetButtonOption,
-  TextField,
+  SearchField,
 } from '@/ui';
 
 const SORT_OPTIONS: SheetButtonOption<string>[] = [
@@ -34,6 +36,8 @@ export default function HistoryShopPickerScreen(): React.ReactElement {
 
   const {
     items,
+    data,
+    dataUpdatedAt,
     isPending,
     isError,
     error,
@@ -43,6 +47,8 @@ export default function HistoryShopPickerScreen(): React.ReactElement {
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteShops({ search: debouncedSearch, sort });
+  const hasInitialError = isError && data === undefined;
+  const hasRefreshError = isError && data !== undefined;
 
   const openHistory = useCallback(
     (shop: Shop) => router.push({ pathname: '/history/[shopId]', params: { shopId: shop.id } }),
@@ -57,12 +63,10 @@ export default function HistoryShopPickerScreen(): React.ReactElement {
           subtitle="История обходов по магазину"
           onBack={() => router.back()}
         />
-        <TextField
+        <SearchField
           value={search}
           onChangeText={setSearch}
           placeholder="Поиск по названию или ID"
-          icon="search"
-          tone="control"
         />
         <FilterSortBar>
           <SheetButton
@@ -80,7 +84,7 @@ export default function HistoryShopPickerScreen(): React.ReactElement {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : isError ? (
+      ) : hasInitialError ? (
         <View style={styles.center}>
           <AppText muted style={styles.errorText}>
             {describeError(error)}
@@ -109,26 +113,42 @@ export default function HistoryShopPickerScreen(): React.ReactElement {
             }
           }}
           ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
-          ListEmptyComponent={<AppText muted>Магазины не найдены.</AppText>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="storefront-outline"
+              title="Магазины не найдены"
+              description="Измените поисковый запрос."
+            />
+          }
           renderItem={({ item }) => (
             <ShopCard shop={item} onPress={openHistory} showStatus={false} showActive />
           )}
         />
       )}
+      {!isPending && !hasInitialError ? (
+        <View style={styles.footer}>
+          <DataStatusBar
+            hasRefreshError={hasRefreshError}
+            isRefreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            updatedAt={dataUpdatedAt}
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   center: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
   },
   errorText: {
     marginBottom: spacing.lg,
@@ -138,8 +158,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.listTop,
+    paddingBottom: screenInsets.listBottom,
+  },
+  footer: {
+    backgroundColor: colors.background,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingBottom: screenInsets.footerBottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.footerTop,
   },
 });

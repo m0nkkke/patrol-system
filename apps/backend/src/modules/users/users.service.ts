@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AssignUserShopsDto, CreateUserDto, ListUsersQueryDto, UpdateUserDto } from '@patrol/shared';
 import { randomUUID } from 'crypto';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { formatAccessKey, generateAccessKey, hashAccessKey } from '../../common/auth/access-key';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { DomainValidationError } from '../../common/errors/domain-validation.error';
@@ -136,8 +137,26 @@ export class UsersService {
     return toPublicUser(await this.requireEntity(id));
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, actor: AuthenticatedUser): Promise<void> {
+    if (id === actor.id) {
+      throw new DomainValidationError(
+        'USER_SELF_DELETE_FORBIDDEN',
+        'Administrator cannot delete their own account',
+      );
+    }
+
     const user = await this.requireEntity(id);
+
+    if (
+      user.role === 'admin' &&
+      user.isActive &&
+      (await this.usersRepository.countActiveAdmins()) <= 1
+    ) {
+      throw new DomainValidationError(
+        'USER_LAST_ACTIVE_ADMIN',
+        'The last active administrator cannot be deleted',
+      );
+    }
 
     await this.usersRepository.update(id, {
       sessionVersion: user.sessionVersion + 1,

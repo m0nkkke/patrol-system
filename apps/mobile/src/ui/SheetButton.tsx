@@ -2,18 +2,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
   FlatList,
-  Modal,
   type StyleProp,
   StyleSheet,
   TouchableOpacity,
   View,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, layout, radius, spacing } from '@/theme';
 
 import { AppText } from './AppText';
+import { BottomSheetModal } from './BottomSheetModal';
 
 export type SheetButtonOption<T extends string> = {
   value: T;
@@ -22,22 +21,26 @@ export type SheetButtonOption<T extends string> = {
 
 type SheetButtonProps<T extends string> = {
   label: string;
+  detail?: string;
   icon: keyof typeof Ionicons.glyphMap;
   title?: string;
   options: SheetButtonOption<T>[];
   value: T;
   onChange: (value: T) => void;
   style?: StyleProp<ViewStyle>;
+  variant?: 'control' | 'inline';
 };
 
 export function SheetButton<T extends string>({
   label,
+  detail,
   icon,
   title,
   options,
   value,
   onChange,
   style,
+  variant = 'control',
 }: SheetButtonProps<T>): React.ReactElement {
   const [open, setOpen] = useState(false);
 
@@ -49,21 +52,25 @@ export function SheetButton<T extends string>({
   return (
     <>
       <TouchableOpacity
-        style={[styles.field, style]}
+        style={[styles.field, variant === 'inline' && styles.fieldInline, style]}
         onPress={() => setOpen(true)}
         activeOpacity={0.7}
       >
         <Ionicons name={icon} size={18} color={colors.controlText} style={styles.icon} />
-        <AppText variant="label" color={colors.controlText} style={styles.label} numberOfLines={1}>
-          {label}
-        </AppText>
+        <View style={[styles.copy, variant === 'inline' && styles.copyInline]}>
+          <AppText variant="label" color={colors.controlText} style={styles.label} numberOfLines={1}>
+            {label}
+          </AppText>
+          {detail ? (
+            <AppText variant="caption" muted numberOfLines={1} style={styles.detail}>
+              {detail}
+            </AppText>
+          ) : null}
+        </View>
         <Ionicons name="chevron-down" size={18} color={colors.controlText} />
       </TouchableOpacity>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <View style={styles.backdrop}>
-          <TouchableOpacity style={styles.backdropFill} onPress={() => setOpen(false)} />
-          <SafeAreaView style={styles.sheet} edges={['bottom']}>
+      <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
             <View style={styles.sheetHeader}>
               <AppText variant="label">{title ?? label}</AppText>
               <TouchableOpacity onPress={() => setOpen(false)} hitSlop={12}>
@@ -93,9 +100,7 @@ export function SheetButton<T extends string>({
                 );
               }}
             />
-          </SafeAreaView>
-        </View>
-      </Modal>
+      </BottomSheetModal>
     </>
   );
 }
@@ -111,27 +116,29 @@ const styles = StyleSheet.create({
     minHeight: layout.controlHeight,
     paddingHorizontal: spacing.lg,
   },
+  fieldInline: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    justifyContent: 'flex-end',
+    minHeight: 44,
+    paddingHorizontal: 0,
+  },
   icon: {
     marginRight: spacing.sm,
   },
   label: {
-    flex: 1,
+    fontSize: 14,
   },
-  backdrop: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  copy: {
     flex: 1,
-    justifyContent: 'flex-end',
+    minWidth: 0,
   },
-  backdropFill: {
-    flex: 1,
+  copyInline: {
+    alignItems: 'flex-start',
+    flex: 0,
   },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    maxHeight: '70%',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
+  detail: {
+    marginTop: 2,
   },
   sheetHeader: {
     alignItems: 'center',

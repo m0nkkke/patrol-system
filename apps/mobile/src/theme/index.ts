@@ -64,4 +64,21 @@ export const layout = {
   controlHeight: 52,
 } as const;
 
+export const appIcons = {
+  patrol: 'clipboard-outline',
+  externalRoute: 'compass-outline',
+} as const;
+
+export const screenInsets = {
+  horizontal: spacing.lg,
+  top: spacing.xl,
+  bottom: spacing.xxl,
+  listTop: spacing.lg,
+  listBottom: spacing.lg,
+  footerTop: spacing.sm,
+  footerBottom: spacing.sm,
+  actionFooterTop: spacing.md,
+  actionFooterBottom: spacing.lg,
+} as const;
+
 export type TypographyVariant = keyof typeof typography;

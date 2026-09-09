@@ -61,7 +61,7 @@ export class PatrolSchedulesService {
       );
     }
 
-    return this.schedulesRepository.create({
+    const schedule = await this.schedulesRepository.create({
       earlyStartMinutes: dto.earlyStartMinutes ?? 0,
       endTime: normalizeTime(dto.endTime),
       isActive: dto.isActive ?? true,
@@ -72,6 +72,9 @@ export class PatrolSchedulesService {
       startTime: normalizeTime(dto.startTime),
       weekdays: [...dto.weekdays].sort((left, right) => left - right),
     });
+    await this.shopsService.recalculateRouteStatus(dto.shopId);
+
+    return schedule;
   }
 
   async findByShop(shopId: string, actor: AuthenticatedUser): Promise<PatrolScheduleEntity[]> {
@@ -284,6 +287,7 @@ export class PatrolSchedulesService {
           ? undefined
           : [...dto.weekdays].sort((left, right) => left - right),
     });
+    await this.shopsService.recalculateRouteStatus(schedule.shopId);
 
     return this.findOne(id);
   }

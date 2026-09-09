@@ -3,14 +3,12 @@
     "name": "Patrol System",
     "slug": "patrol-system",
     "scheme": "patrolsystem",
-    "version": "0.1.0",
+    "version": "0.3.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "assetBundlePatterns": ["**/*"],
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "0.3.0",
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
@@ -24,6 +22,7 @@
     "android": {
       "package": "com.patrolsystem.mobile",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": ["NFC", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
       "googleServicesFile": "./google-services.json"
     },
@@ -41,12 +40,6 @@
         }
       ],
       [
-        "react-native-nfc-manager",
-        {
-          "nfcPermission": "Приложение использует NFC для считывания меток контрольных точек."
-        }
-      ],
-      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Геолокация прикрепляется к событиям обхода для контроля маршрута."
@@ -57,10 +50,19 @@
         {
           "color": "#1f6feb"
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Приложение использует выбранные фотографии для отчетов и контрольных точек.",
+          "cameraPermission": "Приложение использует камеру для отчетов и фотографий контрольных точек.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-sqlite",
+      "expo-status-bar"
     ],
     "extra": {
-      "apiBaseUrl": "https://api.your-domain.ru/api/v1",
       "router": {},
       "eas": {
         "projectId": "92154afb-f1b2-456a-a768-f74ed3900f23"

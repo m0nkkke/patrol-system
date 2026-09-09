@@ -1,21 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { FlatList, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { colors, layout, radius, spacing, typography } from '@/theme';
 
 import { AppText } from './AppText';
+import { BottomSheetModal } from './BottomSheetModal';
+import { CompactTextIcon } from './CompactTextIcon';
 import { FieldLabel } from './FieldLabel';
-import { TextField } from './TextField';
+import { SearchField } from './SearchField';
 
 export type SelectOption = {
   value: string;
   label: string;
+  detail?: string;
+  detailIconText?: string;
   hint?: string;
 };
 
 type SelectProps = {
+  disabled?: boolean;
   label?: string;
   required?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
@@ -28,6 +32,7 @@ type SelectProps = {
 };
 
 export function Select({
+  disabled = false,
   label,
   required,
   icon,
@@ -65,7 +70,14 @@ export function Select({
     <View style={styles.container}>
       {label ? <FieldLabel label={label} required={required} /> : null}
 
-      <TouchableOpacity style={styles.field} onPress={() => setOpen(true)} activeOpacity={0.7}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
+        style={[styles.field, disabled && styles.disabled]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.7}
+        disabled={disabled}
+      >
         {icon ? (
           <Ionicons name={icon} size={20} color={colors.textMuted} style={styles.icon} />
         ) : null}
@@ -75,10 +87,7 @@ export function Select({
         <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
       </TouchableOpacity>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <View style={styles.backdrop}>
-          <TouchableOpacity style={styles.backdropFill} onPress={() => setOpen(false)} />
-          <SafeAreaView style={styles.sheet} edges={['bottom']}>
+      <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
             <View style={styles.sheetHeader}>
               <AppText variant="label">{title ?? label ?? 'Выберите'}</AppText>
               <TouchableOpacity onPress={() => setOpen(false)} hitSlop={12}>
@@ -88,12 +97,10 @@ export function Select({
 
             {searchable ? (
               <View style={styles.search}>
-                <TextField
+                <SearchField
                   value={search}
                   onChangeText={setSearch}
                   placeholder="Поиск"
-                  icon="search"
-                  tone="control"
                 />
               </View>
             ) : null}
@@ -113,6 +120,20 @@ export function Select({
                   >
                     <View style={styles.optionText}>
                       <AppText variant="body">{item.label}</AppText>
+                      {item.detail ? (
+                        <View style={styles.optionDetail}>
+                          {item.detailIconText ? (
+                            <CompactTextIcon label={item.detailIconText} />
+                          ) : null}
+                          <AppText
+                            variant="caption"
+                            muted
+                            style={item.detailIconText ? styles.optionDetailText : undefined}
+                          >
+                            {item.detail}
+                          </AppText>
+                        </View>
+                      ) : null}
                       {item.hint ? (
                         <AppText variant="caption" muted style={styles.optionHint}>
                           {item.hint}
@@ -126,9 +147,7 @@ export function Select({
                 );
               }}
             />
-          </SafeAreaView>
-        </View>
-      </Modal>
+      </BottomSheetModal>
     </View>
   );
 }
@@ -154,22 +173,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.body.fontSize,
   },
-  backdrop: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdropFill: {
-    flex: 1,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    maxHeight: '70%',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-  },
   sheetHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -191,6 +194,17 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flex: 1,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  optionDetail: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+  },
+  optionDetailText: {
+    marginLeft: spacing.xs,
   },
   optionHint: {
     marginTop: spacing.xs,

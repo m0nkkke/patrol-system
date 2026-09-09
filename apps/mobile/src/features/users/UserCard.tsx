@@ -6,7 +6,8 @@ import type { AdminUser } from '@/api/types';
 import { colors, radius, spacing } from '@/theme';
 import { AppText } from '@/ui';
 
-import { RoleBadge } from './RoleBadge';
+import { roleLabel } from './role';
+import { primaryShopLabel, userInitials } from './user-card-data';
 
 type UserCardProps = {
   user: AdminUser;
@@ -19,23 +20,50 @@ function UserCardComponent({ user, onPress }: UserCardProps): React.ReactElement
 
   return (
     <TouchableOpacity
-      style={[styles.card, inactive && styles.cardInactive]}
+      style={styles.card}
       onPress={() => onPress(user)}
       activeOpacity={0.7}
     >
+      <View
+        style={[
+          styles.avatar,
+          {
+            backgroundColor: inactive ? colors.dangerSurface : colors.iconBlueBackground,
+          },
+        ]}
+      >
+        <AppText
+          variant="label"
+          color={inactive ? colors.danger : colors.iconBlue}
+          numberOfLines={1}
+        >
+          {userInitials(user.fullName)}
+        </AppText>
+      </View>
+
       <View style={styles.info}>
-        <AppText variant="label" color={inactive ? colors.textMuted : colors.text}>
+        <AppText
+          variant="label"
+          color={inactive ? colors.textMuted : colors.text}
+          numberOfLines={2}
+        >
           {user.fullName}
         </AppText>
-        <View style={styles.roleRow}>
-          <RoleBadge role={user.role} />
+        <AppText variant="caption" muted numberOfLines={1} style={styles.role}>
+          {roleLabel(user.role)}
+        </AppText>
+        <View style={styles.shopRow}>
+          <Ionicons name="storefront-outline" size={15} color={colors.textMuted} />
+          <AppText variant="caption" muted numberOfLines={1} style={styles.shopName}>
+            {primaryShopLabel(user)}
+          </AppText>
         </View>
       </View>
 
       <View style={styles.right}>
         <View style={styles.statusRow}>
           <View style={[styles.dot, { backgroundColor: statusColor }]} />
-          <AppText variant="caption" color={statusColor} style={styles.statusText}>
+          <AppText variant="caption" color={statusColor} numberOfLines={1} style={styles.statusText}>
             {user.isActive ? 'Активен' : 'Неактивен'}
           </AppText>
         </View>
@@ -52,21 +80,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     flexDirection: 'row',
     marginBottom: spacing.md,
-    padding: spacing.lg,
+    minHeight: 108,
+    padding: spacing.md,
   },
-  cardInactive: {
-    backgroundColor: colors.surfaceMuted,
+  avatar: {
+    alignItems: 'center',
+    borderRadius: radius.sm,
+    height: 48,
+    justifyContent: 'center',
+    marginRight: spacing.md,
+    width: 48,
   },
   info: {
     flex: 1,
     marginRight: spacing.md,
+    minWidth: 0,
   },
-  roleRow: {
+  role: {
     marginTop: spacing.xs,
+  },
+  shopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+  },
+  shopName: {
+    flex: 1,
+    marginLeft: spacing.sm,
   },
   right: {
     alignItems: 'center',

@@ -507,7 +507,7 @@ export class PatrolsService {
           existingVisit === null ? undefined : secondsBetween(existingVisit.arrivedAt, scannedAt),
         expectedSeconds: pointDwellSeconds,
         fromPatrolPointId: point.id,
-        message: `Point departure scan was rejected before lock expired`,
+        message: 'Сканирование выхода с точки выполнено до окончания обязательного времени пребывания.',
         patrolEventId: event.id,
         patrolId: patrol.id,
         shopId: patrol.shopId,
@@ -973,14 +973,14 @@ function buildRouteTimingIncidentMessage(
   expectedSeconds: number,
 ): string {
   if (type === PatrolIncidentType.ROUTE_SUSPICIOUSLY_FAST) {
-    return `Route completed suspiciously fast: ${actualSeconds} sec. with norm ${expectedSeconds} sec.`;
+    return `Маршрут пройден подозрительно быстро: ${actualSeconds} сек. при нормативе ${expectedSeconds} сек.`;
   }
 
   if (type === PatrolIncidentType.ROUTE_TOO_FAST) {
-    return `Route completed too fast: ${actualSeconds} sec. with norm ${expectedSeconds} sec.`;
+    return `Маршрут пройден слишком быстро: ${actualSeconds} сек. при нормативе ${expectedSeconds} сек.`;
   }
 
-  return `Route completed too slowly: ${actualSeconds} sec. with norm ${expectedSeconds} sec.`;
+  return `Маршрут пройден слишком медленно: ${actualSeconds} сек. при нормативе ${expectedSeconds} сек.`;
 }
 
 function toExpectedPointDto(point: ExpectedPatrolPointRecord): NfcWaitStateDto['expectedPoint'] {

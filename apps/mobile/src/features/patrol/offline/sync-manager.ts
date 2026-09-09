@@ -9,10 +9,11 @@ const SYNC_INTERVAL_MS = 30_000;
 let started = false;
 
 async function trySync(): Promise<void> {
-  if (!useAuthStore.getState().accessToken) {
+  const { accessToken, user } = useAuthStore.getState();
+  if (!accessToken || !user) {
     return;
   }
-  await syncPendingEvents();
+  await syncPendingEvents(user.id);
 }
 
 export function requestSync(): void {

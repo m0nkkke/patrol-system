@@ -30,7 +30,7 @@ export class CreateShopDto {
   @MaxLength(50)
   externalId?: string;
 
-  @ApiPropertyOptional({ example: 'Красноярск, ул. Мира, 1' })
+  @ApiPropertyOptional({ example: 'Улан-Удэ, ул. Ленина, 1' })
   @IsOptional()
   @IsString()
   address?: string;
@@ -66,7 +66,7 @@ export class UpdateShopDto {
   @MaxLength(50)
   externalId?: string;
 
-  @ApiPropertyOptional({ example: 'Красноярск, ул. Мира, 1' })
+  @ApiPropertyOptional({ example: 'Улан-Удэ, ул. Ленина, 1' })
   @IsOptional()
   @IsString()
   address?: string;

@@ -1,18 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
-  Modal,
+  ScrollView,
   type StyleProp,
   StyleSheet,
   TouchableOpacity,
   View,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, layout, radius, spacing } from '@/theme';
 
 import { AppText } from './AppText';
+import { BottomSheetModal } from './BottomSheetModal';
 
 export type FilterSheetGroup = {
   title: string;
@@ -27,6 +27,7 @@ type FilterSheetProps = {
   title?: string;
   icon?: keyof typeof Ionicons.glyphMap;
   activeCount?: number;
+  showActiveCount?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -36,6 +37,7 @@ export function FilterSheet({
   title = 'Фильтры',
   icon = 'options-outline',
   activeCount = 0,
+  showActiveCount = false,
   style,
 }: FilterSheetProps): React.ReactElement {
   const [open, setOpen] = useState(false);
@@ -51,9 +53,9 @@ export function FilterSheet({
         <AppText variant="label" color={colors.controlText} style={styles.label} numberOfLines={1}>
           {label}
         </AppText>
-        {activeCount > 0 ? (
+        {showActiveCount || activeCount > 0 ? (
           <View style={styles.count}>
-            <AppText variant="caption" color={colors.textInverse}>
+            <AppText variant="caption" color={colors.controlText}>
               {activeCount}
             </AppText>
           </View>
@@ -61,10 +63,8 @@ export function FilterSheet({
         <Ionicons name="chevron-down" size={18} color={colors.controlText} />
       </TouchableOpacity>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <View style={styles.backdrop}>
-          <TouchableOpacity style={styles.backdropFill} onPress={() => setOpen(false)} />
-          <SafeAreaView style={styles.sheet} edges={['bottom']}>
+      <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
+        <View style={styles.sheetContent}>
             <View style={styles.sheetHeader}>
               <AppText variant="label">{title}</AppText>
               <TouchableOpacity onPress={() => setOpen(false)} hitSlop={12}>
@@ -72,36 +72,42 @@ export function FilterSheet({
               </TouchableOpacity>
             </View>
 
-            {groups.map((group) => (
-              <View key={group.title} style={styles.group}>
-                <AppText variant="caption" muted style={styles.groupTitle}>
-                  {group.title.toUpperCase()}
-                </AppText>
-                <View style={styles.chips}>
-                  {group.options.map((option) => {
-                    const selected = option.value === group.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[styles.chip, selected && styles.chipSelected]}
-                        onPress={() => group.onChange(option.value)}
-                        activeOpacity={0.7}
-                      >
-                        <AppText
-                          variant="caption"
-                          color={selected ? colors.primary : colors.controlText}
+            <ScrollView
+              style={styles.groups}
+              contentContainerStyle={styles.groupsContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              {groups.map((group) => (
+                <View key={group.title} style={styles.group}>
+                  <AppText variant="caption" muted style={styles.groupTitle}>
+                    {group.title.toUpperCase()}
+                  </AppText>
+                  <View style={styles.chips}>
+                    {group.options.map((option) => {
+                      const selected = option.value === group.value;
+                      return (
+                        <TouchableOpacity
+                          key={option.value}
+                          style={[styles.chip, selected && styles.chipSelected]}
+                          onPress={() => group.onChange(option.value)}
+                          activeOpacity={0.7}
                         >
-                          {option.label}
-                        </AppText>
-                      </TouchableOpacity>
-                    );
-                  })}
+                          <AppText
+                            variant="caption"
+                            color={selected ? colors.primary : colors.controlText}
+                          >
+                            {option.label}
+                          </AppText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            ))}
-          </SafeAreaView>
+              ))}
+            </ScrollView>
         </View>
-      </Modal>
+      </BottomSheetModal>
     </>
   );
 }
@@ -122,10 +128,11 @@ const styles = StyleSheet.create({
   },
   label: {
     flex: 1,
+    fontSize: 14,
   },
   count: {
     alignItems: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.chipBackground,
     borderRadius: radius.full,
     height: 20,
     justifyContent: 'center',
@@ -133,30 +140,24 @@ const styles = StyleSheet.create({
     minWidth: 20,
     paddingHorizontal: spacing.xs,
   },
-  backdrop: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdropFill: {
-    flex: 1,
-  },
-  sheet: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    maxHeight: '70%',
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-  },
   sheetHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
+  sheetContent: {
+    flexShrink: 1,
+  },
   group: {
     marginBottom: spacing.lg,
+  },
+  groups: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  groupsContent: {
+    paddingBottom: spacing.lg,
   },
   groupTitle: {
     fontWeight: '600',

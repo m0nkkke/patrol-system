@@ -8,10 +8,12 @@ import type { AdminUser } from '@/api/types';
 import { useInfiniteUsers } from '@/features/users/queries';
 import { UserCard } from '@/features/users/UserCard';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   Button,
+  DataStatusBar,
+  EmptyState,
   FilterSheet,
   type FilterSheetGroup,
   FilterSortBar,
@@ -20,7 +22,7 @@ import {
   Screen,
   SheetButton,
   type SheetButtonOption,
-  TextField,
+  SearchField,
 } from '@/ui';
 
 type RoleFilter = UserRole | 'all';
@@ -28,8 +30,10 @@ type StatusFilter = 'all' | 'active' | 'inactive';
 
 const ROLE_OPTIONS: { value: RoleFilter; label: string }[] = [
   { value: 'all', label: 'Все роли' },
-  { value: 'employee', label: 'Обходчики' },
-  { value: 'manager', label: 'Менеджеры' },
+  { value: 'security_guard', label: 'Сотрудники контроля' },
+  { value: 'route_setter', label: 'Универсальные настройщики' },
+  { value: 'local_route_setter', label: 'Локальные настройщики' },
+  { value: 'inspector', label: 'Проверяющие' },
   { value: 'admin', label: 'Админы' },
 ];
 
@@ -55,6 +59,8 @@ export default function UsersListScreen(): React.ReactElement {
 
   const {
     items,
+    data,
+    dataUpdatedAt,
     isPending,
     isError,
     error,
@@ -69,6 +75,11 @@ export default function UsersListScreen(): React.ReactElement {
     isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
     sort,
   });
+
+  const total = data?.pages[0]?.total ?? items.length;
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === sort)?.label ?? '';
+  const hasInitialError = isError && data === undefined;
+  const hasRefreshError = isError && data !== undefined;
 
   const filterGroups: FilterSheetGroup[] = [
     {
@@ -95,18 +106,31 @@ export default function UsersListScreen(): React.ReactElement {
   return (
     <Screen padded={false}>
       <View style={styles.header}>
-        <Header title="Пользователи" onBack={() => router.back()} />
-        <TextField
+        <Header
+          title="Пользователи"
+          subtitle={`Всего пользователей: ${total}`}
+          onBack={() => router.back()}
+          titleAction={{
+            accessibilityLabel: 'Добавить пользователя',
+            icon: 'person-add-outline',
+            onPress: () => router.navigate('/users/new'),
+          }}
+        />
+        <SearchField
           value={search}
           onChangeText={setSearch}
-          placeholder="Поиск по ФИО"
-          icon="search"
-          tone="control"
+          placeholder="Поиск по ФИО или логину"
         />
         <FilterSortBar>
-          <FilterSheet groups={filterGroups} activeCount={activeCount} />
+          <FilterSheet
+            groups={filterGroups}
+            label="Фильтр"
+            activeCount={activeCount}
+            showActiveCount
+          />
           <SheetButton
-            label="Сортировать"
+            label="Сортировка"
+            detail={sortLabel}
             icon="swap-vertical-outline"
             title="Сортировка"
             options={SORT_OPTIONS}
@@ -120,7 +144,7 @@ export default function UsersListScreen(): React.ReactElement {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : isError ? (
+      ) : hasInitialError ? (
         <View style={styles.center}>
           <AppText muted style={styles.errorText}>
             {describeError(error)}
@@ -149,17 +173,26 @@ export default function UsersListScreen(): React.ReactElement {
             }
           }}
           ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
-          ListEmptyComponent={<AppText muted>Пользователи не найдены.</AppText>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="people-outline"
+              title="Пользователи не найдены"
+              description="Измените поисковый запрос или выбранные фильтры."
+            />
+          }
           renderItem={({ item }) => <UserCard user={item} onPress={openUser} />}
         />
       )}
 
       <View style={styles.footer}>
-        <Button
-          label="Добавить пользователя"
-          icon="person-add-outline"
-          onPress={() => router.push('/users/new')}
-        />
+        {!isPending && !hasInitialError ? (
+          <DataStatusBar
+            hasRefreshError={hasRefreshError}
+            updatedAt={dataUpdatedAt}
+            isRefreshing={isRefetching}
+            onRefresh={() => void refetch()}
+          />
+        ) : null}
       </View>
     </Screen>
   );
@@ -167,14 +200,14 @@ export default function UsersListScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   center: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
   },
   errorText: {
     marginBottom: spacing.lg,
@@ -184,16 +217,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.listTop,
+    paddingBottom: screenInsets.listBottom,
   },
   footer: {
     backgroundColor: colors.background,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingBottom: screenInsets.footerBottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.footerTop,
   },
 });

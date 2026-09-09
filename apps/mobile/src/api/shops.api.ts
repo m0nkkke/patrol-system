@@ -26,6 +26,11 @@ export async function getShop(shopId: string): Promise<Shop> {
   return response.data;
 }
 
+export async function getAssignedMobileShops(): Promise<Shop[]> {
+  const response = await apiClient.get<Shop[]>('/mobile/shops');
+  return response.data;
+}
+
 export async function createShop(payload: CreateShopDto): Promise<Shop> {
   const response = await apiClient.post<Shop>('/shops', payload);
   return response.data;
@@ -34,4 +39,8 @@ export async function createShop(payload: CreateShopDto): Promise<Shop> {
 export async function updateShop(shopId: string, payload: UpdateShopDto): Promise<Shop> {
   const response = await apiClient.patch<Shop>(`/shops/${shopId}`, payload);
   return response.data;
+}
+
+export async function deleteShop(shopId: string): Promise<void> {
+  await apiClient.delete(`/shops/${shopId}`);
 }

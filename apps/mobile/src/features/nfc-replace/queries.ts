@@ -19,6 +19,10 @@ export function useReplaceNfcTag(shopId: string) {
   return useMutation({
     mutationFn: ({ pointId, payload }: { pointId: string; payload: ReplaceNfcTagDto }) =>
       replaceNfcTag(pointId, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: shopPointsKey(shopId) }),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: shopPointsKey(shopId) });
+      void queryClient.invalidateQueries({ queryKey: ['patrol-point', variables.pointId] });
+      void queryClient.invalidateQueries({ queryKey: ['shop-patrol-points', shopId] });
+    },
   });
 }

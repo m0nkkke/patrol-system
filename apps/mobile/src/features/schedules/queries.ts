@@ -31,7 +31,10 @@ export function useCreateSchedule(shopId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreatePatrolScheduleDto) => createSchedule(payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) });
+      invalidateShopStatus(queryClient, shopId);
+    },
   });
 }
 
@@ -42,7 +45,8 @@ export function useUpdateSchedule(shopId: string) {
       updateSchedule(id, payload),
     onSuccess: (updated, variables) => {
       queryClient.setQueryData(['schedule', variables.id], updated);
-      queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) });
+      void queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) });
+      invalidateShopStatus(queryClient, shopId);
     },
   });
 }
@@ -53,7 +57,18 @@ export function useDeactivateSchedule(shopId: string) {
     mutationFn: (scheduleId: string) => deactivateSchedule(scheduleId),
     onSuccess: (updated, scheduleId) => {
       queryClient.setQueryData(['schedule', scheduleId], updated);
-      queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) });
+      void queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) });
+      invalidateShopStatus(queryClient, shopId);
     },
   });
+}
+
+function invalidateShopStatus(
+  queryClient: ReturnType<typeof useQueryClient>,
+  shopId: string,
+): void {
+  void queryClient.invalidateQueries({ queryKey: ['shop', shopId] });
+  void queryClient.invalidateQueries({ queryKey: ['shops'] });
+  void queryClient.invalidateQueries({ queryKey: ['shops-infinite'] });
+  void queryClient.invalidateQueries({ queryKey: ['mobile-assigned-shops'] });
 }

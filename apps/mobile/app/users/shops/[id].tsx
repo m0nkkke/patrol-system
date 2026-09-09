@@ -1,141 +1,76 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import { ShopMultiSelectList } from '@/features/shops/ShopMultiSelectList';
+import type { Shop } from '@/api/types';
+import {
+  ShopSelectionModal,
+  type ShopSelectionResult,
+} from '@/features/shops/ShopSelectionModal';
 import { useAssignUserShops, useUser } from '@/features/users/queries';
-import { colors, spacing } from '@/theme';
-import { AppText, Button, FormHeader, Header, Screen } from '@/ui';
+import { AsyncStateScreen } from '@/ui';
 
 export default function EditUserShopsScreen(): React.ReactElement {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: user, isPending, isError, error, refetch } = useUser(id);
   const assign = useAssignUserShops(id);
-
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedShops, setSelectedShops] = useState<Shop[]>([]);
+  const [primaryShopId, setPrimaryShopId] = useState<string | undefined>();
   const [seeded, setSeeded] = useState(false);
 
   useEffect(() => {
     if (!user || seeded) {
       return;
     }
-    const ids = user.shopIds ?? (user.shops ?? []).map((shop) => shop.id);
-    const primary = user.shopId;
-    const ordered = primary ? [primary, ...ids.filter((shopId) => shopId !== primary)] : ids;
-    setSelectedIds(ordered);
+
+    setSelectedShops(user.shops ?? []);
+    setPrimaryShopId(user.shopId ?? user.shops?.[0]?.id);
     setSeeded(true);
-  }, [user, seeded]);
+  }, [seeded, user]);
 
   if (isPending) {
-    return (
-      <Screen centered>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </Screen>
-    );
+    return <AsyncStateScreen loading onBack={() => router.back()} />;
   }
 
   if (isError || !user) {
     return (
-      <Screen centered>
-        <AppText muted style={styles.centerText}>
-          {describeError(error)}
-        </AppText>
-        <Button label="Повторить" variant="secondary" onPress={() => void refetch()} />
-      </Screen>
+      <AsyncStateScreen
+        message={describeError(error)}
+        onBack={() => router.back()}
+        onRetry={() => void refetch()}
+      />
     );
   }
 
-  function toggleShop(shopId: string): void {
-    setSelectedIds((prev) =>
-      prev.includes(shopId) ? prev.filter((value) => value !== shopId) : [...prev, shopId],
-    );
-  }
-
-  function setPrimaryShop(shopId: string): void {
-    setSelectedIds((prev) =>
-      prev.includes(shopId) ? [shopId, ...prev.filter((value) => value !== shopId)] : prev,
-    );
-  }
-
-  function handleSave(): void {
-    if (selectedIds.length === 0 || assign.isPending) {
+  function handleApply(result: ShopSelectionResult): void {
+    if (assign.isPending) {
       return;
     }
+
+    setSelectedShops(result.shops);
+    setPrimaryShopId(result.primaryShopId);
     assign.mutate(
-      { shopIds: selectedIds, primaryShopId: selectedIds[0] },
+      {
+        shopIds: result.shops.map((shop) => shop.id),
+        primaryShopId: result.primaryShopId,
+      },
       { onSuccess: () => router.back() },
     );
   }
 
   return (
-    <Screen padded={false}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <View style={styles.topArea}>
-          <Header onBack={() => router.back()} />
-          <FormHeader
-            icon="storefront"
-            title="Магазины пользователя"
-            subtitle={user.fullName}
-          />
-        </View>
-
-        <View style={styles.shopArea}>
-          <ShopMultiSelectList
-            selectedIds={selectedIds}
-            onToggle={toggleShop}
-            onSetPrimary={setPrimaryShop}
-          />
-        </View>
-
-        <View style={styles.footer}>
-          {assign.isError ? (
-            <AppText variant="caption" color={colors.danger} style={styles.footerError}>
-              {describeError(assign.error)}
-            </AppText>
-          ) : null}
-          <Button
-            label="Сохранить"
-            icon="checkmark-circle-outline"
-            onPress={handleSave}
-            loading={assign.isPending}
-            disabled={selectedIds.length === 0}
-          />
-        </View>
-      </KeyboardAvoidingView>
-    </Screen>
+    <ShopSelectionModal
+      visible
+      presentation="screen"
+      applyLabel="Сохранить"
+      applying={assign.isPending}
+      errorMessage={assign.isError ? describeError(assign.error) : undefined}
+      selectedShops={selectedShops}
+      primaryShopId={primaryShopId}
+      required
+      onApply={handleApply}
+      onClose={() => router.back()}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  centerText: {
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  topArea: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  shopArea: {
-    flex: 1,
-    paddingHorizontal: spacing.xl,
-  },
-  footer: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  footerError: {
-    marginBottom: spacing.sm,
-  },
-});

@@ -1,10 +1,24 @@
-import type { LoginDto, RefreshTokenDto } from '@patrol/shared';
+import type { LoginDto, RefreshTokenDto, UniversalRouteSetterLoginDto } from '@patrol/shared';
 
 import { apiClient } from './client';
-import type { LoginResponse, MobileMeResponse } from './types';
+import type {
+  LoginResponse,
+  MobileMeResponse,
+  UniversalRouteSetterLoginResponse,
+} from './types';
 
 export async function login(payload: LoginDto): Promise<LoginResponse> {
   const response = await apiClient.post<LoginResponse>('/auth/login', payload);
+  return response.data;
+}
+
+export async function loginUniversalRouteSetter(
+  payload: UniversalRouteSetterLoginDto,
+): Promise<UniversalRouteSetterLoginResponse> {
+  const response = await apiClient.post<UniversalRouteSetterLoginResponse>(
+    '/auth/universal-route-setter/login',
+    payload,
+  );
   return response.data;
 }
 

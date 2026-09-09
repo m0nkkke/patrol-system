@@ -19,7 +19,7 @@ type PatrolSchedulesRepositoryMock = Pick<
   | 'update'
 >;
 
-type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
+type ShopsServiceMock = Pick<ShopsService, 'findOne' | 'recalculateRouteStatus'>;
 type PatrolsRepositoryMock = Pick<PatrolsRepository, 'findExistingScheduledPatrol'>;
 type PatrolRoutesServiceMock = Pick<PatrolRoutesService, 'assertRouteUsable'>;
 
@@ -42,7 +42,7 @@ describe('PatrolSchedulesService', () => {
     patrolsRepository = {
       findExistingScheduledPatrol: jest.fn().mockResolvedValue(null),
     };
-    shopsService = { findOne: jest.fn() };
+    shopsService = { findOne: jest.fn(), recalculateRouteStatus: jest.fn() };
     patrolRoutesService = {
       assertRouteUsable: jest.fn(),
     };

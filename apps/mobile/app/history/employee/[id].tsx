@@ -4,24 +4,19 @@ import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'r
 
 import { describeError } from '@/api/error-messages';
 import type { Patrol } from '@/api/types';
-import {
-  PATROL_SORT_OPTIONS,
-  PATROL_STATUS_OPTIONS,
-  type PatrolStatusFilter,
-} from '@/features/history/patrol-filters';
+import type { PatrolStatusFilter } from '@/features/history/patrol-filters';
+import { PatrolHistoryControls } from '@/features/history/PatrolHistoryControls';
 import { PatrolCard } from '@/features/history/PatrolCard';
 import { useInfiniteEmployeePatrols } from '@/features/history/queries';
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   Button,
-  FilterSheet,
-  type FilterSheetGroup,
-  FilterSortBar,
+  DataStatusBar,
+  EmptyState,
   Header,
   ListFooter,
   Screen,
-  SheetButton,
 } from '@/ui';
 
 export default function EmployeeHistoryScreen(): React.ReactElement {
@@ -32,6 +27,8 @@ export default function EmployeeHistoryScreen(): React.ReactElement {
 
   const {
     items,
+    data,
+    dataUpdatedAt,
     isPending,
     isError,
     error,
@@ -41,15 +38,8 @@ export default function EmployeeHistoryScreen(): React.ReactElement {
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteEmployeePatrols(id, { status: status === 'all' ? undefined : status, sort });
-
-  const filterGroups: FilterSheetGroup[] = [
-    {
-      title: 'Статус',
-      options: PATROL_STATUS_OPTIONS,
-      value: status,
-      onChange: (value) => setStatus(value as PatrolStatusFilter),
-    },
-  ];
+  const hasInitialError = isError && data === undefined;
+  const hasRefreshError = isError && data !== undefined;
 
   const openPatrol = useCallback(
     (patrol: Patrol) => router.push({ pathname: '/history/patrol/[id]', params: { id: patrol.id } }),
@@ -59,25 +49,21 @@ export default function EmployeeHistoryScreen(): React.ReactElement {
   return (
     <Screen padded={false}>
       <View style={styles.header}>
-        <Header title="История обходов" subtitle={name} onBack={() => router.back()} />
-        <FilterSortBar>
-          <FilterSheet groups={filterGroups} activeCount={status === 'all' ? 0 : 1} />
-          <SheetButton
-            label="Сортировать"
-            icon="swap-vertical-outline"
-            title="Сортировка"
-            options={PATROL_SORT_OPTIONS}
-            value={sort}
-            onChange={setSort}
-          />
-        </FilterSortBar>
+        <Header compact title="История обходов" subtitle={name} onBack={() => router.back()} />
+        <PatrolHistoryControls
+          compact
+          status={status}
+          sort={sort}
+          onStatusChange={setStatus}
+          onSortChange={setSort}
+        />
       </View>
 
       {isPending ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : isError ? (
+      ) : hasInitialError ? (
         <View style={styles.center}>
           <AppText muted style={styles.errorText}>
             {describeError(error)}
@@ -105,24 +91,40 @@ export default function EmployeeHistoryScreen(): React.ReactElement {
             }
           }}
           ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
-          ListEmptyComponent={<AppText muted>Обходов пока нет.</AppText>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="document-text-outline"
+              title="Обходов пока нет"
+              description="Завершённые и отменённые обходы сотрудника появятся здесь."
+            />
+          }
           renderItem={({ item }) => <PatrolCard patrol={item} onPress={openPatrol} />}
         />
       )}
+      {!isPending && !hasInitialError ? (
+        <View style={styles.footer}>
+          <DataStatusBar
+            hasRefreshError={hasRefreshError}
+            isRefreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            updatedAt={dataUpdatedAt}
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   center: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
   },
   errorText: {
     marginBottom: spacing.lg,
@@ -132,8 +134,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.listTop,
+    paddingBottom: screenInsets.listBottom,
+  },
+  footer: {
+    backgroundColor: colors.background,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingBottom: screenInsets.footerBottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.footerTop,
   },
 });

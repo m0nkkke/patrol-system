@@ -3,11 +3,14 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 
 import { colors, layout, radius, spacing, typography } from '@/theme';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerOutline' | 'ghost';
 
 function contentColorFor(variant: ButtonVariant): string {
   if (variant === 'secondary') {
     return colors.primary;
+  }
+  if (variant === 'dangerOutline') {
+    return colors.danger;
   }
   if (variant === 'ghost') {
     return colors.text;
@@ -37,6 +40,9 @@ export function Button({
 
   return (
     <TouchableOpacity
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      accessibilityState={{ busy: loading, disabled: isDisabled }}
       style={[styles.base, styles[variant], isDisabled && styles.disabled]}
       onPress={onPress}
       disabled={isDisabled}
@@ -79,6 +85,11 @@ const styles = StyleSheet.create({
   },
   danger: {
     backgroundColor: colors.danger,
+  },
+  dangerOutline: {
+    backgroundColor: colors.surface,
+    borderColor: colors.danger,
+    borderWidth: 1,
   },
   ghost: {
     backgroundColor: 'transparent',

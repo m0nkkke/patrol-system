@@ -441,7 +441,7 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
     repositories.incidents,
     cancelled,
     PatrolIncidentType.MISSED_POINT,
-    'Patrol was cancelled before all route points were visited',
+    'Обход отменён до прохождения всех точек маршрута',
     undefined,
     undefined,
     {
@@ -468,7 +468,7 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
     repositories.incidents,
     overdue,
     PatrolIncidentType.PATROL_OVERDUE,
-    'Patrol was not completed by its due time',
+    'Обход не завершён до окончания установленного времени',
   );
 
   const scheduleDeviationPatrol = history[1];
@@ -477,7 +477,7 @@ async function seedScenarios(repositories: Repositories): Promise<Record<string,
       repositories.incidents,
       scheduleDeviationPatrol,
       PatrolIncidentType.SCHEDULE_DEVIATION,
-      'Patrol started outside its configured schedule window',
+      'Обход начат вне установленного временного окна',
       0,
       42 * 60,
     );

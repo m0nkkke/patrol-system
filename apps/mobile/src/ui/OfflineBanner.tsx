@@ -16,10 +16,13 @@ export function OfflineBanner(): React.ReactElement | null {
   }
 
   return (
-    <View style={[styles.banner, { paddingTop: insets.top + spacing.xs }]}>
-      <Ionicons name="cloud-offline-outline" size={14} color={colors.textInverse} />
-      <AppText variant="caption" color={colors.textInverse} style={styles.text}>
-        Нет соединения — данные синхронизируются позже
+    <View
+      pointerEvents="none"
+      style={[styles.banner, { top: insets.top + 2 }]}
+    >
+      <Ionicons name="cloud-offline-outline" size={12} color={colors.textInverse} />
+      <AppText color={colors.textInverse} style={styles.text}>
+        Нет соединения с интернетом
       </AppText>
     </View>
   );
@@ -29,12 +32,20 @@ const styles = StyleSheet.create({
   banner: {
     alignItems: 'center',
     backgroundColor: colors.warning,
+    borderRadius: 6,
+    elevation: 4,
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingBottom: spacing.xs,
-    paddingHorizontal: spacing.lg,
+    left: spacing.lg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    position: 'absolute',
+    right: spacing.lg,
+    zIndex: 1000,
   },
   text: {
+    fontSize: 11,
+    lineHeight: 14,
     marginLeft: spacing.xs,
   },
 });

@@ -24,6 +24,7 @@ import {
 import { useDeferredValue, useMemo, useState } from 'react';
 
 import { api, getApiErrorMessage } from '../lib/api';
+import { incidentDescription } from '../lib/incident-description';
 import type {
   ControlPatrolDetail,
   ControlPatrolSummary,
@@ -165,7 +166,7 @@ function PatrolCard({ patrol }: { patrol: ControlPatrolDetail }): React.JSX.Elem
       {patrol.visits.length === 0 ? <p className="section-empty">Посещения точек не зафиксированы</p> : null}
     </DetailSection>
 
-    <DetailSection icon={<ShieldAlert />} title="Связанные инциденты" count={patrol.incidents.length}><div className="related-list">{patrol.incidents.map((incident) => <button key={incident.id} onClick={() => void navigate({ to: '/incidents/$incidentId', params: { incidentId: incident.id } })} type="button"><AlertTriangle size={15} /><span><strong>{incidentTypeLabel(incident.type)}</strong><small>{incident.message}</small></span><ChevronRight size={16} /></button>)}</div>{patrol.incidents.length === 0 ? <p className="section-empty">Нарушений не зафиксировано</p> : null}</DetailSection>
+    <DetailSection icon={<ShieldAlert />} title="Связанные инциденты" count={patrol.incidents.length}><div className="related-list">{patrol.incidents.map((incident) => <button key={incident.id} onClick={() => void navigate({ to: '/incidents/$incidentId', params: { incidentId: incident.id } })} type="button"><AlertTriangle size={15} /><span><strong>{incidentTypeLabel(incident.type)}</strong><small>{incidentDescription(incident)}</small></span><ChevronRight size={16} /></button>)}</div>{patrol.incidents.length === 0 ? <p className="section-empty">Нарушений не зафиксировано</p> : null}</DetailSection>
 
     <DetailSection icon={<FileText />} title="Связанные отчеты" count={patrol.reports.length}><div className="related-list">{patrol.reports.map((report) => <button key={report.id} onClick={() => void navigate({ to: '/reports/$reportId', params: { reportId: report.id } })} type="button"><FileText size={15} /><span><strong>{reportTypeLabel(report.reportType)}</strong><small>{report.fileCount} файлов · {reportStatusLabel(report.status)}</small></span><ChevronRight size={16} /></button>)}</div>{patrol.reports.length === 0 ? <p className="section-empty">Связанных отчетов нет</p> : null}</DetailSection>
 

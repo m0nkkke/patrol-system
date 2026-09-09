@@ -2,22 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, View } from 'react-native';
 
 import type { AvailablePatrolSchedule } from '@/api/types';
-import { formatScheduleTime } from '@/features/schedules/format';
-import { colors, radius, spacing } from '@/theme';
+import { colors, spacing } from '@/theme';
 import { AppText } from '@/ui';
+
+import { formatPlannedWindow, sortPlannedSchedules } from './planned-schedule';
 
 type PlannedScheduleListProps = {
   schedules: AvailablePatrolSchedule[];
-};
-
-const WEEKDAY_LABELS: Record<number, string> = {
-  1: 'понедельник',
-  2: 'вторник',
-  3: 'среда',
-  4: 'четверг',
-  5: 'пятница',
-  6: 'суббота',
-  7: 'воскресенье',
 };
 
 export function PlannedScheduleList({
@@ -27,14 +18,17 @@ export function PlannedScheduleList({
     return null;
   }
 
-  const orderedSchedules = [...schedules].sort(compareByNextStart);
+  const orderedSchedules = sortPlannedSchedules(schedules);
 
   return (
     <View style={styles.container}>
-      {orderedSchedules.slice(0, 3).map((schedule) => (
-        <View key={schedule.id} style={styles.item}>
+      {orderedSchedules.slice(0, 3).map((schedule, index) => (
+        <View
+          key={schedule.id}
+          style={[styles.item, index > 0 ? styles.itemBorder : undefined]}
+        >
           <View style={styles.icon}>
-            <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+            <Ionicons name="calendar-outline" size={17} color={colors.primary} />
           </View>
           <View style={styles.content}>
             <AppText variant="caption" style={styles.name}>
@@ -50,55 +44,26 @@ export function PlannedScheduleList({
   );
 }
 
-function compareByNextStart(
-  left: AvailablePatrolSchedule,
-  right: AvailablePatrolSchedule,
-): number {
-  const leftTime = left.nextStartAt ? new Date(left.nextStartAt).getTime() : Number.MAX_SAFE_INTEGER;
-  const rightTime = right.nextStartAt
-    ? new Date(right.nextStartAt).getTime()
-    : Number.MAX_SAFE_INTEGER;
-  const nextStart = leftTime - rightTime;
-  if (nextStart !== 0) {
-    return nextStart;
-  }
-
-  const startTime = left.startTime.localeCompare(right.startTime);
-  if (startTime !== 0) {
-    return startTime;
-  }
-
-  return left.name.localeCompare(right.name);
-}
-
-function formatPlannedWindow(schedule: AvailablePatrolSchedule): string {
-  const weekday = schedule.nextWeekday ? WEEKDAY_LABELS[schedule.nextWeekday] : undefined;
-  const time = `${formatScheduleTime(schedule.startTime)} - ${formatScheduleTime(schedule.endTime)}`;
-
-  return weekday ? `${weekday}, ${time}` : time;
-}
-
 const styles = StyleSheet.create({
   container: {
-    gap: spacing.sm,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   item: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.md,
     flexDirection: 'row',
-    paddingHorizontal: spacing.md,
+    minHeight: 54,
     paddingVertical: spacing.sm,
+  },
+  itemBorder: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
   },
   icon: {
     alignItems: 'center',
-    backgroundColor: colors.iconBlueBackground,
-    borderRadius: radius.sm,
-    height: 30,
+    height: 32,
     justifyContent: 'center',
     marginRight: spacing.sm,
-    width: 30,
+    width: 32,
   },
   content: {
     flex: 1,

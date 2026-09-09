@@ -85,6 +85,10 @@ export class UsersRepository {
     return this.repo.findOne({ relations: { shop: true, shops: true }, where: { accessKeyHash } });
   }
 
+  countActiveAdmins(): Promise<number> {
+    return this.repo.count({ where: { isActive: true, role: 'admin' } });
+  }
+
   async updateLastLogin(id: string, date: Date): Promise<void> {
     await this.repo.update(id, { lastLoginAt: date });
   }

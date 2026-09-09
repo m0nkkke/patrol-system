@@ -6,7 +6,7 @@ import { colors, radius, spacing } from '@/theme';
 import { AppText } from './AppText';
 
 type FormHeaderProps = {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle?: string;
 };
@@ -14,9 +14,11 @@ type FormHeaderProps = {
 export function FormHeader({ icon, title, subtitle }: FormHeaderProps): React.ReactElement {
   return (
     <View style={styles.container}>
-      <View style={styles.icon}>
-        <Ionicons name={icon} size={24} color={colors.primary} />
-      </View>
+      {icon ? (
+        <View style={styles.icon}>
+          <Ionicons name={icon} size={24} color={colors.primary} />
+        </View>
+      ) : null}
       <View style={styles.text}>
         <AppText variant="heading">{title}</AppText>
         {subtitle ? (
