@@ -7,10 +7,12 @@ import type { Shop } from '@/api/types';
 import { useInfiniteShops } from '@/features/route-setup/queries';
 import { ShopCard } from '@/features/shops/ShopCard';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   Button,
+  DataStatusBar,
+  EmptyState,
   FilterSheet,
   type FilterSheetGroup,
   FilterSortBar,
@@ -19,7 +21,7 @@ import {
   Screen,
   SheetButton,
   type SheetButtonOption,
-  TextField,
+  SearchField,
 } from '@/ui';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -47,6 +49,8 @@ export default function ShopsListScreen(): React.ReactElement {
 
   const {
     items,
+    data,
+    dataUpdatedAt,
     isPending,
     isError,
     error,
@@ -60,6 +64,11 @@ export default function ShopsListScreen(): React.ReactElement {
     isActive: status === 'all' ? undefined : status === 'active',
     sort,
   });
+
+  const total = data?.pages[0]?.total ?? items.length;
+  const sortLabel = SORT_OPTIONS.find((option) => option.value === sort)?.label ?? '';
+  const hasInitialError = isError && data === undefined;
+  const hasRefreshError = isError && data !== undefined;
 
   const filterGroups: FilterSheetGroup[] = [
     {
@@ -78,18 +87,31 @@ export default function ShopsListScreen(): React.ReactElement {
   return (
     <Screen padded={false}>
       <View style={styles.header}>
-        <Header title="Магазины" onBack={() => router.back()} />
-        <TextField
+        <Header
+          title="Магазины"
+          subtitle={`Всего магазинов: ${total}`}
+          onBack={() => router.back()}
+          titleAction={{
+            accessibilityLabel: 'Добавить магазин',
+            icon: 'add-circle-outline',
+            onPress: () => router.navigate('/shops/new'),
+          }}
+        />
+        <SearchField
           value={search}
           onChangeText={setSearch}
-          placeholder="Поиск по названию или ID"
-          icon="search"
-          tone="control"
+          placeholder="Поиск по названию или ID магазина"
         />
         <FilterSortBar>
-          <FilterSheet groups={filterGroups} activeCount={status === 'all' ? 0 : 1} />
+          <FilterSheet
+            groups={filterGroups}
+            label="Фильтр"
+            activeCount={status === 'all' ? 0 : 1}
+            showActiveCount
+          />
           <SheetButton
-            label="Сортировать"
+            label="Сортировка"
+            detail={sortLabel}
             icon="swap-vertical-outline"
             title="Сортировка"
             options={SORT_OPTIONS}
@@ -103,7 +125,7 @@ export default function ShopsListScreen(): React.ReactElement {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : isError ? (
+      ) : hasInitialError ? (
         <View style={styles.center}>
           <AppText muted style={styles.errorText}>
             {describeError(error)}
@@ -132,7 +154,13 @@ export default function ShopsListScreen(): React.ReactElement {
             }
           }}
           ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
-          ListEmptyComponent={<AppText muted>Магазины не найдены.</AppText>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="storefront-outline"
+              title="Магазины не найдены"
+              description="Измените поисковый запрос или выбранный фильтр."
+            />
+          }
           renderItem={({ item }) => (
             <ShopCard shop={item} onPress={openShop} showStatus={false} showActive />
           )}
@@ -140,11 +168,14 @@ export default function ShopsListScreen(): React.ReactElement {
       )}
 
       <View style={styles.footer}>
-        <Button
-          label="Создать магазин"
-          icon="add-outline"
-          onPress={() => router.push('/shops/new')}
-        />
+        {!isPending && !hasInitialError ? (
+          <DataStatusBar
+            hasRefreshError={hasRefreshError}
+            updatedAt={dataUpdatedAt}
+            isRefreshing={isRefetching}
+            onRefresh={() => void refetch()}
+          />
+        ) : null}
       </View>
     </Screen>
   );
@@ -152,14 +183,14 @@ export default function ShopsListScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   center: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
   },
   errorText: {
     marginBottom: spacing.lg,
@@ -169,16 +200,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.listTop,
+    paddingBottom: screenInsets.listBottom,
   },
   footer: {
     backgroundColor: colors.background,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingBottom: screenInsets.footerBottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.footerTop,
   },
 });

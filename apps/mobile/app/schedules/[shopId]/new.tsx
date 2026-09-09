@@ -1,22 +1,48 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { describeError } from '@/api/error-messages';
+import { useShopPatrolRoutes } from '@/features/patrol-routes/queries';
 import { ScheduleForm, type ScheduleFormValues } from '@/features/schedules/ScheduleForm';
 import { useCreateSchedule } from '@/features/schedules/queries';
-import { spacing } from '@/theme';
-import { FormHeader, Header, Screen } from '@/ui';
+import { screenInsets } from '@/theme';
+import { AsyncStateScreen, FormHeader, Header, Screen } from '@/ui';
 
 export default function NewScheduleScreen(): React.ReactElement {
   const router = useRouter();
   const { shopId } = useLocalSearchParams<{ shopId: string }>();
   const { mutate, isPending, isError, error } = useCreateSchedule(shopId);
+  const routes = useShopPatrolRoutes(shopId);
+
+  if (routes.isPending) {
+    return <AsyncStateScreen loading onBack={() => router.back()} />;
+  }
+
+  if (routes.isError) {
+    return (
+      <AsyncStateScreen
+        message={describeError(routes.error)}
+        onBack={() => router.back()}
+        onRetry={() => void routes.refetch()}
+      />
+    );
+  }
 
   function handleSubmit(values: ScheduleFormValues): void {
     mutate(
       {
         shopId,
         name: values.name,
+        isActive: values.isActive,
+        routeId: values.routeId,
+        period: values.period,
+        earlyStartMinutes: values.earlyStartMinutes,
         weekdays: values.weekdays,
         startTime: values.startTime,
         endTime: values.endTime,
@@ -29,16 +55,17 @@ export default function NewScheduleScreen(): React.ReactElement {
     <Screen padded={false}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Header onBack={() => router.back()} />
+          <Header onBack={() => router.back()} right={<View />} />
           <FormHeader
-            icon="time-outline"
+            icon="calendar-outline"
             title="Новое расписание"
-            subtitle="График обходов магазина"
+            subtitle="Настройте маршрут, дни и время обхода"
           />
           <ScheduleForm
+            routes={routes.data ?? []}
             submitLabel="Создать расписание"
             submitting={isPending}
             error={isError ? describeError(error) : null}
@@ -55,8 +82,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
+    paddingBottom: screenInsets.bottom,
   },
 });

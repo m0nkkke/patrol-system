@@ -1,108 +1,74 @@
-import type { UserRole } from '@patrol/shared';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import { ShopMultiSelectList } from '@/features/shops/ShopMultiSelectList';
-import { ROLE_ICONS } from '@/features/users/role';
 import { useUpdateUser, useUser } from '@/features/users/queries';
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
-  Button,
-  FieldLabel,
+  AsyncStateScreen,
+  CancelButton,
   FormHeader,
   Header,
+  InfoCallout,
   Screen,
-  SegmentedControl,
-  type SegmentOption,
+  StatusToggleCard,
+  SubmitButton,
   TextField,
 } from '@/ui';
-
-const ROLE_SEGMENTS: SegmentOption<UserRole>[] = [
-  { value: 'employee', label: 'Обходчик', icon: ROLE_ICONS.employee },
-  { value: 'manager', label: 'Менеджер', icon: ROLE_ICONS.manager },
-  { value: 'admin', label: 'Админ', icon: ROLE_ICONS.admin },
-];
-
-type StatusValue = 'active' | 'inactive';
-
-const STATUS_SEGMENTS: SegmentOption<StatusValue>[] = [
-  { value: 'active', label: 'Активен', icon: 'checkmark-circle-outline' },
-  { value: 'inactive', label: 'Неактивен', icon: 'close-circle-outline' },
-];
 
 export default function EditUserScreen(): React.ReactElement {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: user, isPending, isError, error, refetch } = useUser(id);
-  const { mutate, isPending: isSaving, isError: isSaveError, error: saveError } = useUpdateUser(id);
+  const update = useUpdateUser(id);
 
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<UserRole>('employee');
-  const [status, setStatus] = useState<StatusValue>('active');
-  const [shopIds, setShopIds] = useState<string[]>([]);
+  const [isActive, setIsActive] = useState(true);
   const [seeded, setSeeded] = useState(false);
 
   useEffect(() => {
     if (!user || seeded) {
       return;
     }
+
     setFullName(user.fullName);
-    setRole(user.role);
-    setStatus(user.isActive ? 'active' : 'inactive');
-    const ids = user.shopIds ?? (user.shops ?? []).map((shop) => shop.id);
-    const primary = user.shopId;
-    setShopIds(primary ? [primary, ...ids.filter((shopId) => shopId !== primary)] : ids);
+    setIsActive(user.isActive);
     setSeeded(true);
-  }, [user, seeded]);
+  }, [seeded, user]);
 
   if (isPending) {
-    return (
-      <Screen centered>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </Screen>
-    );
+    return <AsyncStateScreen loading onBack={() => router.back()} />;
   }
 
   if (isError || !user) {
     return (
-      <Screen centered>
-        <AppText muted style={styles.centerText}>
-          {describeError(error)}
-        </AppText>
-        <Button label="Повторить" variant="secondary" onPress={() => void refetch()} />
-      </Screen>
+      <AsyncStateScreen
+        message={describeError(error)}
+        onBack={() => router.back()}
+        onRetry={() => void refetch()}
+      />
     );
   }
 
-  const needsShop = role !== 'admin';
-  const isValid = fullName.trim().length >= 2 && (!needsShop || shopIds.length > 0);
-
-  function toggleShop(shopId: string): void {
-    setShopIds((prev) =>
-      prev.includes(shopId) ? prev.filter((value) => value !== shopId) : [...prev, shopId],
-    );
-  }
-
-  function setPrimaryShop(shopId: string): void {
-    setShopIds((prev) =>
-      prev.includes(shopId) ? [shopId, ...prev.filter((value) => value !== shopId)] : prev,
-    );
-  }
+  const isValid = fullName.trim().length >= 2;
 
   function handleSubmit(): void {
-    if (!isValid || isSaving) {
+    if (!isValid || update.isPending) {
       return;
     }
-    mutate(
+
+    update.mutate(
       {
         fullName: fullName.trim(),
-        role,
-        isActive: status === 'active',
-        shopId: needsShop ? shopIds[0] : undefined,
-        shopIds: needsShop ? shopIds : undefined,
+        isActive,
       },
       { onSuccess: () => router.back() },
     );
@@ -112,11 +78,15 @@ export default function EditUserScreen(): React.ReactElement {
     <Screen padded={false}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.topArea}>
-          <Header onBack={() => router.back()} />
-          <FormHeader icon="create" title="Редактирование" subtitle="Изменение данных пользователя" />
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Header onBack={() => router.back()} right={<View />} />
+          <FormHeader
+            icon="create-outline"
+            title="Редактирование"
+            subtitle="Изменение данных пользователя"
+          />
 
           <TextField
             label="ФИО"
@@ -129,48 +99,39 @@ export default function EditUserScreen(): React.ReactElement {
           />
 
           <View style={styles.gapLg}>
-            <FieldLabel label="Роль" required />
-            <SegmentedControl options={ROLE_SEGMENTS} value={role} onChange={setRole} />
-          </View>
-
-          <View style={styles.gapLg}>
-            <FieldLabel label="Статус" />
-            <SegmentedControl options={STATUS_SEGMENTS} value={status} onChange={setStatus} />
-          </View>
-
-          {needsShop ? (
-            <View style={styles.gapLg}>
-              <FieldLabel label="Магазины" required />
-            </View>
-          ) : null}
-        </View>
-
-        {needsShop ? (
-          <View style={styles.shopArea}>
-            <ShopMultiSelectList
-              selectedIds={shopIds}
-              onToggle={toggleShop}
-              onSetPrimary={setPrimaryShop}
+            <StatusToggleCard
+              label="Статус пользователя"
+              value={isActive}
+              onChange={setIsActive}
+              activeLabel="Пользователь активен"
+              inactiveLabel="Пользователь неактивен"
+              activeDescription="Пользователь может входить и работать в системе"
+              inactiveDescription="Неактивный пользователь не может войти в систему"
             />
           </View>
-        ) : (
-          <View style={styles.flex} />
-        )}
 
-        <View style={styles.footer}>
-          {isSaveError ? (
-            <AppText variant="caption" color={colors.danger} style={styles.footerError}>
-              {describeError(saveError)}
+          {update.isError ? (
+            <AppText variant="caption" color={colors.danger} style={styles.gapLg}>
+              {describeError(update.error)}
             </AppText>
           ) : null}
-          <Button
-            label="Сохранить"
-            icon="checkmark-circle-outline"
-            onPress={handleSubmit}
-            loading={isSaving}
-            disabled={!isValid}
-          />
-        </View>
+
+          <View style={styles.info}>
+            <InfoCallout text="История изменений сохраняется в системе" />
+          </View>
+
+          <View style={styles.actions}>
+            <SubmitButton
+              label="Сохранить изменения"
+              onPress={handleSubmit}
+              loading={update.isPending}
+              disabled={!isValid}
+            />
+            <View style={styles.cancelButton}>
+              <CancelButton onPress={() => router.back()} />
+            </View>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -180,30 +141,25 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  topArea: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  shopArea: {
-    flex: 1,
-    paddingHorizontal: spacing.xl,
+  scroll: {
+    paddingBottom: screenInsets.bottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   centerText: {
     marginBottom: spacing.lg,
     textAlign: 'center',
   },
-  footer: {
-    backgroundColor: colors.background,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-  },
-  footerError: {
-    marginBottom: spacing.sm,
-  },
   gapLg: {
     marginTop: spacing.lg,
+  },
+  info: {
+    marginTop: spacing.xl,
+  },
+  actions: {
+    marginTop: spacing.lg,
+  },
+  cancelButton: {
+    marginTop: spacing.md,
   },
 });

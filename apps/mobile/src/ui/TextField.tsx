@@ -5,6 +5,7 @@ import { StyleSheet, TextInput, type TextInputProps, View } from 'react-native';
 import { colors, layout, radius, spacing, typography } from '@/theme';
 
 import { AppText } from './AppText';
+import { CompactTextIcon } from './CompactTextIcon';
 import { FieldLabel } from './FieldLabel';
 
 type TextFieldProps = TextInputProps & {
@@ -12,7 +13,9 @@ type TextFieldProps = TextInputProps & {
   error?: string | null;
   required?: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  iconText?: string;
   tone?: 'default' | 'control';
+  compact?: boolean;
 };
 
 export function TextField({
@@ -20,7 +23,9 @@ export function TextField({
   error,
   required,
   icon,
+  iconText,
   tone = 'default',
+  compact = false,
   style,
   onFocus,
   onBlur,
@@ -34,12 +39,17 @@ export function TextField({
       <View
         style={[
           styles.inputRow,
+          compact && styles.inputRowCompact,
           tone === 'control' ? styles.inputRowControl : null,
           focused && styles.inputRowFocused,
           error ? styles.inputRowError : null,
         ]}
       >
-        {icon ? (
+        {iconText ? (
+          <View style={styles.icon}>
+            <CompactTextIcon label={iconText} />
+          </View>
+        ) : icon ? (
           <Ionicons
             name={icon}
             size={20}
@@ -48,7 +58,7 @@ export function TextField({
           />
         ) : null}
         <TextInput
-          style={[styles.input, style]}
+          style={[styles.input, compact && styles.inputCompact, style]}
           placeholderTextColor={colors.textMuted}
           onFocus={(event) => {
             setFocused(true);
@@ -82,10 +92,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     minHeight: layout.controlHeight,
+    overflow: 'hidden',
     paddingHorizontal: spacing.lg,
   },
   inputRowFocused: {
     borderColor: colors.primary,
+  },
+  inputRowCompact: {
+    minHeight: 46,
+    paddingHorizontal: spacing.md,
   },
   inputRowControl: {
     backgroundColor: colors.controlSurface,
@@ -101,7 +116,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
     fontSize: typography.body.fontSize,
+    minWidth: 0,
     paddingVertical: spacing.md,
+  },
+  inputCompact: {
+    fontSize: 14,
+    paddingVertical: spacing.sm,
   },
   error: {
     marginTop: spacing.sm,

@@ -1,251 +1,116 @@
-# Production-деплой backend на VPS
+# Production-развёртывание Patrol System
 
-Инструкция описывает первый деплой backend Patrol System на VPS с Docker Compose, PostgreSQL, Redis и Nginx. Документ рассчитан на Ubuntu 22.04/24.04 и сервер уровня 2 CPU / 4 GB RAM / 30 GB SSD.
+Production-стек запускает web-панель, API, PostgreSQL и Redis отдельными контейнерами. Единственная
+точка входа на хосте — web gateway на `127.0.0.1:8080`.
 
-## Состав production-стека
+Compose использует отдельное имя проекта `patrol-system-prod`, поэтому его контейнеры, сети и
+volumes не пересекаются с локальным development-стеком.
 
-- `backend` — NestJS API, доступен на хосте только через `127.0.0.1:3000`.
-- `postgres` — PostgreSQL 15, порт наружу не публикуется.
-- `redis` — Redis 7 с паролем и AOF, порт наружу не публикуется.
-- `backend_storage` — Docker volume для локального файлового хранилища backend.
-- `nginx` — reverse proxy на хосте, принимает HTTPS и проксирует в backend.
-- `certbot` — выпуск и продление Let's Encrypt сертификата.
+## Состав стека
 
-## Подготовка VPS
+- `web` — Nginx, который раздаёт React/Vite SPA и проксирует `/api/*` в backend;
+- `backend` — NestJS API, доступный только внутри Docker-сети;
+- `postgres` — основная база данных без опубликованного порта;
+- `redis` — внутреннее хранилище служебного состояния с паролем и AOF;
+- `backend_storage` — постоянный volume для загруженных файлов.
 
-Обновить систему и поставить базовые пакеты:
+PostgreSQL и Redis подключены к изолированной сети `data`. Web подключён к сети `edge`. Backend
+связывает обе сети, но наружу напрямую не публикуется.
 
-```bash
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y ca-certificates curl git nginx certbot python3-certbot-nginx ufw
-```
+## Конфигурация
 
-Установить Docker по официальной инструкции Docker для Ubuntu, затем проверить:
-
-```bash
-docker --version
-docker compose version
-```
-
-Настроить firewall:
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
-sudo ufw status
-```
-
-PostgreSQL, Redis и backend-порт `3000` не нужно открывать наружу.
-
-## Размещение проекта
-
-Рекомендуемый путь на сервере:
-
-```bash
-sudo mkdir -p /opt/patrol-system
-sudo chown -R "$USER":"$USER" /opt/patrol-system
-cd /opt/patrol-system
-git clone <repo-url> .
-```
-
-Перед первым запуском убедиться, что в репозитории есть:
-
-- `apps/backend/Dockerfile`
-- `docker-compose.prod.yml`
-- `.env.production.example`
-- `deploy/nginx/patrol-api.conf`
-- `deploy/scripts/backup-postgres.sh`
-
-## Production env
-
-Создать файл `.env.production` на сервере:
+Создать deployment-конфигурацию из примера:
 
 ```bash
 cp .env.production.example .env.production
-nano .env.production
 ```
 
-Обязательные значения для замены:
+В `.env.production` задаются пароли PostgreSQL и Redis, разные JWT-секреты длиной не менее 64
+символов, разрешённый web origin и остальные серверные параметры. Файл не коммитится.
 
-```env
-DATABASE_PASSWORD=<сильный пароль PostgreSQL>
-REDIS_PASSWORD=<сильный пароль Redis>
-JWT_ACCESS_SECRET=<секрет длиной минимум 64 символа>
-JWT_REFRESH_SECRET=<другой секрет длиной минимум 64 символа>
-CORS_ORIGINS=https://api.example.ru
-```
+`WEB_PORT` задаёт локальный порт gateway и по умолчанию равен `8080`. Web использует относительный
+адрес `/api/v1`, поэтому домен API не встраивается в его JavaScript bundle.
 
-Секреты можно сгенерировать так:
-
-```bash
-openssl rand -base64 64
-```
-
-Для production оставить:
-
-```env
-NODE_ENV=production
-API_PREFIX=api/v1
-DATABASE_HOST=postgres
-REDIS_HOST=redis
-FILE_STORAGE_BACKEND=local
-FILE_STORAGE_LOCAL_ROOT=/app/storage
-REPORTING_CORE_PUBLISH_ENABLED=false
-REPORTING_CORE_TRANSPORT=disabled
-SWAGGER_ENABLED=false
-```
-
-Seed-скрипты на production не запускать автоматически. Тестовые данные допустимы только вручную и только для staging/demo.
-
-Когда главное ядро отчетности будет готово, включить отправку outbox-событий:
-
-```env
-REPORTING_CORE_PUBLISH_ENABLED=true
-REPORTING_CORE_TRANSPORT=http
-REPORTING_CORE_URL=https://reporting-core.example.ru
-REPORTING_CORE_API_KEY=<service-token>
-```
-
-## Первый запуск
-
-Собрать и поднять контейнеры:
+## Сборка и запуск
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 ```
 
-Проверить состояние:
+Состояние и логи:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 docker compose --env-file .env.production -f docker-compose.prod.yml logs -f backend
+docker compose --env-file .env.production -f docker-compose.prod.yml logs -f web
 ```
 
-Запустить миграции:
+Production-образ backend не содержит dev-зависимостей. Миграции выполняются по скомпилированному
+JavaScript:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend \
-  npm run migration:run -w @patrol/backend
+  npm run migration:run:prod -w @patrol/backend
 ```
 
-Проверить health endpoint локально на сервере:
+Проверка единой точки входа:
 
 ```bash
-curl http://127.0.0.1:3000/api/v1/health
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/api/v1/health
 ```
 
-Ожидаемый ответ:
+Панель открывается по адресу `http://127.0.0.1:8080`. Прямые маршруты, например `/reports` и
+`/management`, обрабатываются SPA fallback.
 
-```json
-{"ok":true}
-```
+## VPS и HTTPS
 
-## Nginx и HTTPS
+На VPS контейнерный gateway остаётся привязанным к `127.0.0.1:8080`. Хостовый Nginx принимает
+HTTPS и пересылает весь трафик в gateway. Шаблон находится в
+`deploy/nginx/patrol-system.conf`.
 
-В файле `deploy/nginx/patrol-api.conf` заменить `api.example.ru` на реальный домен API.
-
-Скопировать конфиг:
+После замены `patrol.example.ru` на рабочий домен:
 
 ```bash
-sudo cp deploy/nginx/patrol-api.conf /etc/nginx/sites-available/patrol-api.conf
-sudo ln -s /etc/nginx/sites-available/patrol-api.conf /etc/nginx/sites-enabled/patrol-api.conf
+sudo cp deploy/nginx/patrol-system.conf /etc/nginx/sites-available/patrol-system.conf
+sudo ln -s /etc/nginx/sites-available/patrol-system.conf /etc/nginx/sites-enabled/patrol-system.conf
 sudo nginx -t
 sudo systemctl reload nginx
+sudo certbot --nginx -d patrol.example.ru
 ```
 
-Выпустить сертификат:
+После выпуска сертификата сайт доступен на `https://patrol.example.ru`, а mobile API — на
+`https://patrol.example.ru/api/v1`.
+
+## Обновление
 
 ```bash
-sudo certbot --nginx -d api.example.ru
-```
-
-После выпуска сертификата снова проверить:
-
-```bash
-curl https://api.example.ru/api/v1/health
-```
-
-Swagger в production по умолчанию выключен:
-
-```env
-SWAGGER_ENABLED=false
-```
-
-Если Swagger нужно временно включить для staging/demo или закрытого production-доступа, он должен быть защищен Basic Auth:
-
-```env
-SWAGGER_ENABLED=true
-SWAGGER_BASIC_AUTH_ENABLED=true
-SWAGGER_BASIC_AUTH_USER=<docs-user>
-SWAGGER_BASIC_AUTH_PASSWORD=<strong-docs-password>
-```
-
-Backend не стартует в `NODE_ENV=production` со включенным Swagger без Basic Auth.
-
-## Обновление версии
-
-Типовой деплой новой версии:
-
-```bash
-cd /opt/patrol-system
 git pull
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend \
-  npm run migration:run -w @patrol/backend
-curl http://127.0.0.1:3000/api/v1/health
+  npm run migration:run:prod -w @patrol/backend
+curl http://127.0.0.1:8080/api/v1/health
 ```
 
-Если миграция не требуется, команда просто сообщит, что новых миграций нет.
+Миграции запускаются после успешной сборки и старта сервисов. Если новых миграций нет, TypeORM
+завершает команду без изменения схемы.
 
-## Бэкапы PostgreSQL
+## Остановка и данные
 
-Скрипт `deploy/scripts/backup-postgres.sh` делает `pg_dump` в custom-формате и удаляет локальные копии старше `RETENTION_DAYS`.
-
-Фото и другие загруженные файлы в режиме `FILE_STORAGE_BACKEND=local` лежат в Docker volume `backend_storage` и не попадают в PostgreSQL dump. Для production нужно отдельно копировать `/app/storage` или весь volume `backend_storage` во внешнее хранилище.
-
-Первый ручной запуск:
+Остановить стек с сохранением базы и файлов:
 
 ```bash
-chmod +x deploy/scripts/backup-postgres.sh
-APP_DIR=/opt/patrol-system BACKUP_DIR=/opt/patrol-backups/postgres ./deploy/scripts/backup-postgres.sh
+docker compose --env-file .env.production -f docker-compose.prod.yml down
 ```
 
-Cron для ежедневного бэкапа в 03:15:
+Команда с `--volumes` удаляет постоянные данные и для обычной остановки не используется.
 
-```bash
-crontab -e
-```
+Резервная копия PostgreSQL создаётся скриптом `deploy/scripts/backup-postgres.sh`. Загруженные
+файлы находятся отдельно в volume `backend_storage` и должны резервироваться независимо от базы.
 
-Добавить:
+## Ограничение web-аутентификации
 
-```cron
-15 3 * * * APP_DIR=/opt/patrol-system BACKUP_DIR=/opt/patrol-backups/postgres /opt/patrol-system/deploy/scripts/backup-postgres.sh >> /opt/patrol-backups/backup.log 2>&1
-```
-
-Локальный бэкап на том же VPS защищает от ошибок приложения, но не защищает от потери сервера. Для production нужно дополнительно выгружать дампы во внешнее хранилище: S3, Яндекс Object Storage или другой сервер.
-
-Восстановление дампа:
-
-```bash
-set -a
-. ./.env.production
-set +a
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
-  pg_restore -U "$DATABASE_USER" -d "$DATABASE_NAME" --clean --if-exists < /path/to/patrol.dump
-```
-
-Перед восстановлением production-базы обязательно сделать свежий дамп текущего состояния.
-
-## Минимальный чеклист перед отдачей mobile-команде
-
-- `https://<api-domain>/api/v1/health` возвращает `{"ok":true}`.
-- Миграции выполнены без ошибок.
-- В production `.env.production` указаны новые JWT-секреты, не локальные значения.
-- PostgreSQL и Redis не доступны из интернета.
-- `POST /api/v1/auth/login` работает с bootstrap-админом или созданным админом.
-- `GET /api/v1/mobile/profile` работает с JWT.
-- `POST /api/v1/mobile/devices/push-token` принимает Expo token, если push включены.
-- Cron-бэкап настроен и хотя бы один дамп создан.
-- Mobile-разработчикам передан базовый URL API: `https://<api-domain>/api/v1`.
+Контейнерная схема готова для production-размещения, но текущий web-клиент хранит access и refresh
+tokens в `sessionStorage`. Публичный production-релиз панели выполняется после перехода на
+защищённую cookie-сессию согласно `docs/web/security.md`. Это ограничение не относится к mobile
+APK и не мешает закрытому тестированию панели на демонстрационных данных.

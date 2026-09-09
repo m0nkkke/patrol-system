@@ -115,3 +115,44 @@ export function formatDuration(fromIso?: string, toIso?: string): string {
   }
   return `${minutes} мин`;
 }
+
+export function formatDurationMinutes(totalSeconds?: number | null): string {
+  if (totalSeconds === undefined || totalSeconds === null || Number.isNaN(totalSeconds)) {
+    return '—';
+  }
+
+  const totalMinutes = Math.round(Math.max(0, totalSeconds) / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) {
+    return `${hours} ч ${minutes} мин`;
+  }
+  return `${minutes} мин`;
+}
+
+export function formatClockDuration(fromIso?: string, toIso?: string): string {
+  if (!fromIso || !toIso) {
+    return '—';
+  }
+
+  const fromMs = new Date(fromIso).getTime();
+  const toMs = new Date(toIso).getTime();
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs) || toMs < fromMs) {
+    return '—';
+  }
+
+  return formatClockSeconds(Math.floor((toMs - fromMs) / 1000));
+}
+
+export function formatClockSeconds(totalSeconds?: number | null): string {
+  if (totalSeconds === undefined || totalSeconds === null || Number.isNaN(totalSeconds)) {
+    return '—';
+  }
+
+  const total = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}

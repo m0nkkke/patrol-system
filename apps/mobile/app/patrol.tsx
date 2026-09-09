@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -15,76 +14,40 @@ import {
 import type { KeyboardEvent } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import { reportMissedPointAttempt } from '@/api/patrols.api';
-import type { Patrol, RoutePoint } from '@/api/types';
-import { getDeviceId } from '@/device/device-id';
-import { getCurrentCoords } from '@/device/location';
-import { patrolStatusLabel, patrolStatusTone } from '@/features/patrol/patrol-status';
-import { createLocalEvent } from '@/features/patrol/offline/local-events';
-import { requestSync } from '@/features/patrol/offline/sync-manager';
-import { useLocalPatrolEvents } from '@/features/patrol/offline/use-local-events';
-import { PlannedScheduleList } from '@/features/patrol/PlannedScheduleList';
+import { ApiError } from '@/api/errors';
+import type { Patrol } from '@/api/types';
+import { ActivePatrolFlow } from '@/features/patrol/ActivePatrolFlow';
+import { usePendingEventCount } from '@/features/patrol/offline/use-pending-events';
+import { PatrolStartPanel } from '@/features/patrol/PatrolStartPanel';
 import {
   useActivePatrol,
-  useAvailableSchedules,
   useCancelPatrol,
   useCompletePatrol,
   usePatrolRoute,
-  useStartPatrol,
 } from '@/features/patrol/queries';
-import { formatScheduleTime } from '@/features/schedules/format';
-import { nfcReader } from '@/nfc';
-import { colors, radius, spacing } from '@/theme';
+import { useAuthStore } from '@/store/auth-store';
+import { colors, radius, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   AppDialog,
-  AppToast,
-  Badge,
+  AsyncStateScreen,
   Button,
   Card,
+  EntityIcon,
   Header,
-  NfcScanOverlay,
-  ProgressBar,
   Screen,
   TextField,
 } from '@/ui';
 
 export default function PatrolScreen(): React.ReactElement {
   const router = useRouter();
-  const route = usePatrolRoute();
+  const selectedShopId = useAuthStore((state) => state.selectedShopId);
   const active = useActivePatrol();
+  const route = usePatrolRoute(active.data);
   const cancel = useCancelPatrol();
   const [finishing, setFinishing] = useState<Patrol | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
-
-  if (route.isPending || active.isPending) {
-    return (
-      <Screen centered>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </Screen>
-    );
-  }
-
-  if (route.isError || !route.data) {
-    return (
-      <Screen centered>
-        <AppText muted style={styles.centerText}>
-          {describeError(route.error ?? active.error)}
-        </AppText>
-        <Button
-          label="Повторить"
-          variant="secondary"
-          onPress={() => {
-            void route.refetch();
-            void active.refetch();
-          }}
-        />
-      </Screen>
-    );
-  }
-
   const activePatrol = active.data;
-  const isScanning = Boolean(activePatrol) && finishing === null;
 
   function handleCancel(reason?: string): void {
     if (!activePatrol) {
@@ -95,23 +58,108 @@ export default function PatrolScreen(): React.ReactElement {
       {
         onSuccess: () => {
           setCancelOpen(false);
-          router.replace('/');
+          router.dismissTo('/');
         },
       },
     );
   }
 
+  if (active.isPending || (active.data && route.isPending)) {
+    return <AsyncStateScreen loading onBack={() => router.dismissTo('/')} />;
+  }
+
+  if (active.isError || (active.data && (route.isError || !route.data))) {
+    const error = active.error ?? route.error;
+    const legacyPatrol =
+      error instanceof ApiError && error.code === 'PATROL_ROUTE_SNAPSHOT_UNAVAILABLE';
+
+    return (
+      <Screen padded={false}>
+        <View style={styles.errorScreen}>
+          <Header
+            compact
+            title="Обход недоступен"
+            onBack={() => router.dismissTo('/')}
+            right={<View />}
+          />
+          <Card style={styles.errorCard}>
+            <View style={styles.errorHeader}>
+              <EntityIcon icon="alert-circle-outline" tone="warning" />
+              <View style={styles.errorCopy}>
+                <AppText variant="label">
+                  {legacyPatrol ? 'Нужно начать новый обход' : 'Не удалось загрузить обход'}
+                </AppText>
+                <AppText variant="caption" muted style={styles.gapSm}>
+                  {legacyPatrol
+                    ? 'Этот обход создан до обновления маршрутов и не может быть безопасно продолжен. Отмените его, затем начните новый.'
+                    : describeError(error)}
+                </AppText>
+              </View>
+            </View>
+            <View style={styles.gapLg}>
+              <Button
+                label="Повторить"
+                icon="refresh-outline"
+                variant="secondary"
+                onPress={() => {
+                  void route.refetch();
+                  void active.refetch();
+                }}
+              />
+            </View>
+            {activePatrol ? (
+              <View style={styles.gapSm}>
+                <Button
+                  label="Отменить этот обход"
+                  icon="close-circle-outline"
+                  variant="dangerOutline"
+                  onPress={() => setCancelOpen(true)}
+                />
+              </View>
+            ) : null}
+            <View style={styles.gapSm}>
+              <Button label="На главную" variant="ghost" onPress={() => router.dismissTo('/')} />
+            </View>
+          </Card>
+        </View>
+        <ReportModal
+          visible={cancelOpen}
+          title="Отменить обход"
+          subtitle="После отмены можно будет начать новый обход с актуальным маршрутом."
+          placeholder="Причина отмены (необязательно)"
+          confirmLabel="Отменить обход"
+          confirmVariant="danger"
+          loading={cancel.isPending}
+          error={cancel.isError ? describeError(cancel.error) : null}
+          onConfirm={handleCancel}
+          onClose={() => setCancelOpen(false)}
+        />
+      </Screen>
+    );
+  }
+
+  const isScanning = Boolean(activePatrol) && finishing === null;
+
   return (
     <Screen padded={false}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          {finishing ? null : <Header />}
-          <View style={styles.titleRow}>
-            <AppText variant="heading">Обход</AppText>
-            {isScanning ? (
+          {finishing ? null : (
+            <Header
+              compact
+              title={activePatrol ? 'Текущий обход' : 'Обход'}
+              subtitle={
+                activePatrol
+                  ? (activePatrol.schedule?.name ?? activePatrol.shop?.name ?? 'Маршрут магазина')
+                  : 'Начните обход в доступное окно расписания'
+              }
+            />
+          )}
+          {isScanning ? (
+            <View style={styles.cancelRow}>
               <TouchableOpacity
                 style={styles.cancelAction}
                 onPress={() => setCancelOpen(true)}
@@ -120,21 +168,25 @@ export default function PatrolScreen(): React.ReactElement {
               >
                 <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
                 <AppText variant="body" color={colors.danger} style={styles.cancelActionText}>
-                  Отменить
+                  Отменить обход
                 </AppText>
               </TouchableOpacity>
-            ) : null}
-          </View>
+            </View>
+          ) : null}
           {finishing ? (
-            <CompletionView patrol={finishing} onDone={() => router.replace('/')} />
-          ) : activePatrol ? (
-            <ActivePatrolView
+            <CompletionView patrol={finishing} onDone={() => router.dismissTo('/')} />
+          ) : activePatrol && route.data ? (
+            <ActivePatrolFlow
               patrol={activePatrol}
               points={route.data}
               onAllScanned={setFinishing}
             />
           ) : (
-            <StartPatrolView />
+            <PatrolStartPanel
+              shopId={selectedShopId}
+              onOpenPlan={() => router.push('/schedule-plan')}
+              onSelectShop={() => router.push('/select-shop')}
+            />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -152,243 +204,6 @@ export default function PatrolScreen(): React.ReactElement {
         onClose={() => setCancelOpen(false)}
       />
     </Screen>
-  );
-}
-
-function StartPatrolView(): React.ReactElement {
-  const schedules = useAvailableSchedules();
-  const { mutate, isPending, isError, error } = useStartPatrol();
-  const toastError = schedules.isError
-    ? describeError(schedules.error)
-    : isError
-      ? describeError(error)
-      : null;
-
-  if (schedules.isPending) {
-    return (
-      <Card>
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      </Card>
-    );
-  }
-
-  const scheduleItems = schedules.data ?? [];
-  const current = scheduleItems.find((schedule) => schedule.isAvailable);
-  const planned = scheduleItems.filter((schedule) => !schedule.isAvailable);
-
-  if (!current) {
-    return (
-      <Card>
-        <AppToast message={toastError} />
-        <AppText variant="label">Обход пока недоступен</AppText>
-        <AppText variant="caption" muted style={styles.gapSm}>
-          Ближайшие плановые обходы:
-        </AppText>
-        <PlannedScheduleList schedules={planned.length > 0 ? planned : scheduleItems} />
-        {scheduleItems.length === 0 ? (
-          <AppText variant="caption" muted style={styles.gapSm}>
-            Плановых обходов пока нет.
-          </AppText>
-        ) : null}
-        {schedules.isError ? (
-          <AppText variant="caption" color={colors.danger} style={styles.gapSm}>
-            {describeError(schedules.error)}
-          </AppText>
-        ) : null}
-        <View style={styles.gapLg}>
-          <Button label="Начать обход" disabled onPress={() => undefined} />
-        </View>
-        <View style={styles.gapSm}>
-          <Button
-            label="Обновить"
-            icon="refresh-outline"
-            variant="secondary"
-            onPress={() => void schedules.refetch()}
-            loading={schedules.isFetching}
-          />
-        </View>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <AppToast message={toastError} />
-      <AppText variant="label">{current.name}</AppText>
-      <View style={styles.windowRow}>
-        <Ionicons name="time-outline" size={15} color={colors.textMuted} />
-        <AppText variant="caption" muted style={styles.windowText}>
-          Доступно с {formatScheduleTime(current.startTime)} до {formatScheduleTime(current.endTime)}
-        </AppText>
-      </View>
-      {isError ? (
-        <AppText variant="caption" color={colors.danger} style={styles.gapSm}>
-          {describeError(error)}
-        </AppText>
-      ) : null}
-      <View style={styles.gapLg}>
-        <Button label="Начать обход" onPress={() => mutate(current.id)} loading={isPending} />
-      </View>
-      <View style={styles.gapSm}>
-        <Button
-          label="Обновить"
-          icon="refresh-outline"
-          variant="secondary"
-          onPress={() => void schedules.refetch()}
-          loading={schedules.isFetching}
-        />
-      </View>
-    </Card>
-  );
-}
-
-function ActivePatrolView({
-  patrol,
-  points,
-  onAllScanned,
-}: {
-  patrol: Patrol;
-  points: RoutePoint[];
-  onAllScanned: (patrol: Patrol) => void;
-}): React.ReactElement {
-  const localEvents = useLocalPatrolEvents(patrol.id);
-  const pointsScrollRef = useRef<ScrollView>(null);
-  const pointOffsetsRef = useRef(new Map<string, number>());
-  const [pointLayoutVersion, setPointLayoutVersion] = useState(0);
-
-  const scannedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const event of patrol.events ?? []) {
-      ids.add(event.patrolPointId);
-    }
-    for (const event of localEvents) {
-      ids.add(event.patrolPointId);
-    }
-    return ids;
-  }, [patrol.events, localEvents]);
-
-  const pendingCount = useMemo(
-    () => localEvents.filter((event) => event.syncStatus === 'pending').length,
-    [localEvents],
-  );
-
-  const sortedPoints = useMemo(
-    () => [...points].sort((a, b) => a.sortOrder - b.sortOrder),
-    [points],
-  );
-
-  const scannedCount = Math.min(scannedIds.size, patrol.totalPoints);
-  const currentPoint = sortedPoints.find((point) => !scannedIds.has(point.id));
-  const allScanned = scannedCount >= patrol.totalPoints;
-
-  useEffect(() => {
-    if (!currentPoint) {
-      return undefined;
-    }
-
-    const currentOffset = pointOffsetsRef.current.get(currentPoint.id);
-    if (currentOffset === undefined) {
-      return undefined;
-    }
-
-    const timeout = setTimeout(() => {
-      pointsScrollRef.current?.scrollTo({
-        animated: true,
-        y: Math.max(0, currentOffset - 88),
-      });
-    }, 80);
-
-    return () => clearTimeout(timeout);
-  }, [currentPoint, pointLayoutVersion]);
-
-  useEffect(() => {
-    if (allScanned) {
-      onAllScanned(patrol);
-    }
-  }, [allScanned, onAllScanned, patrol]);
-
-  return (
-    <View>
-      <Card style={styles.gapLg}>
-        <View style={styles.row}>
-          <AppText variant="label">
-            {scannedCount} / {patrol.totalPoints} точек
-          </AppText>
-          <Badge label={patrolStatusLabel(patrol.status)} tone={patrolStatusTone(patrol.status)} />
-        </View>
-        <View style={styles.gapSm}>
-          <ProgressBar value={scannedCount} max={patrol.totalPoints} />
-        </View>
-        {patrol.schedule ? (
-          <View style={styles.dueRow}>
-            <Ionicons name="time-outline" size={15} color={colors.textMuted} />
-            <AppText variant="caption" muted style={styles.dueText}>
-              Завершить до {formatScheduleTime(patrol.schedule.endTime)}
-            </AppText>
-          </View>
-        ) : null}
-        {pendingCount > 0 ? (
-          <AppText variant="caption" color={colors.warning} style={styles.gapSm}>
-            Ожидают синхронизации: {pendingCount}
-          </AppText>
-        ) : null}
-      </Card>
-
-      {allScanned ? null : (
-        <ScanAction
-          patrol={patrol}
-          points={points}
-          scannedIds={scannedIds}
-          currentPoint={currentPoint}
-        />
-      )}
-
-      <View>
-        <AppText variant="label" style={styles.gapLg}>
-          Точки маршрута
-        </AppText>
-        <ScrollView
-          ref={pointsScrollRef}
-          style={styles.pointsScroll}
-          contentContainerStyle={styles.pointsScrollContent}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator={sortedPoints.length > 4}
-        >
-          {sortedPoints.map((point) => {
-            const scanned = scannedIds.has(point.id);
-            const isCurrent = !scanned && point.id === currentPoint?.id;
-            return (
-              <View
-                key={point.id}
-                onLayout={(event) => {
-                  const nextOffset = event.nativeEvent.layout.y;
-                  const previousOffset = pointOffsetsRef.current.get(point.id);
-                  if (previousOffset !== nextOffset) {
-                    pointOffsetsRef.current.set(point.id, nextOffset);
-                    setPointLayoutVersion((version) => version + 1);
-                  }
-                }}
-              >
-                <Card style={styles.pointCard}>
-                  <View style={styles.row}>
-                    <AppText variant="body" style={styles.pointName}>
-                      {point.sortOrder}. {point.name}
-                    </AppText>
-                    <Badge
-                      label={scanned ? 'Отмечена' : isCurrent ? 'Текущая' : 'Ожидает'}
-                      tone={scanned ? 'success' : isCurrent ? 'warning' : 'neutral'}
-                    />
-                  </View>
-                </Card>
-              </View>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-    </View>
   );
 }
 
@@ -462,7 +277,7 @@ function ReportModal({
             ? { paddingBottom: keyboardBottom }
             : null,
         ]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
       >
         <TouchableOpacity style={styles.backdropFill} activeOpacity={1} onPress={handleClose} />
@@ -515,51 +330,52 @@ function CompletionView({
   patrol: Patrol;
   onDone: () => void;
 }): React.ReactElement {
-  const localEvents = useLocalPatrolEvents(patrol.id);
+  const pendingCount = usePendingEventCount(patrol.id);
   const complete = useCompletePatrol();
   const [report, setReport] = useState('');
   const [doneDialogVisible, setDoneDialogVisible] = useState(false);
 
-  const pendingCount = useMemo(
-    () => localEvents.filter((event) => event.syncStatus === 'pending').length,
-    [localEvents],
-  );
-
   function finish(): void {
+    const completionReport = report.trim();
     complete.mutate(
-      { patrolId: patrol.id, report: report.trim() || undefined },
+      { patrolId: patrol.id, report: completionReport || undefined },
       {
         onSuccess: () => {
-          setDoneDialogVisible(true);
+          if (completionReport) {
+            setDoneDialogVisible(true);
+          } else {
+            onDone();
+          }
         },
       },
     );
   }
 
   return (
-    <Card>
+    <Card style={styles.completionCard}>
       <AppDialog
         visible={doneDialogVisible}
         tone="success"
-        title="Обход завершён"
-        message="Отчёт сохранён. Проверяющий увидит результат в истории обходов."
+        title="Комментарий сохранён"
+        message="Проверяющий увидит его в истории завершённого обхода."
         actions={[{ label: 'На главную', onPress: onDone }]}
         onClose={onDone}
       />
       <View style={styles.completeHeader}>
-        <Ionicons name="checkmark-circle" size={28} color={colors.success} />
-        <AppText variant="label" style={styles.completeTitle}>
-          Все точки пройдены
-        </AppText>
+        <EntityIcon icon="checkmark" tone="success" />
+        <View style={styles.completeCopy}>
+          <AppText variant="label">Обход завершён</AppText>
+          <AppText variant="caption" muted style={styles.gapSm}>
+            Последняя точка зафиксирована. При желании добавьте комментарий.
+          </AppText>
+        </View>
       </View>
-      <AppText variant="caption" muted style={styles.gapSm}>
-        Опишите задержки или замечания (необязательно). Это увидит проверяющий.
-      </AppText>
       <View style={styles.gapLg}>
         <TextField
+          label="Комментарий к обходу"
           value={report}
           onChangeText={setReport}
-          placeholder="Например: задержка на точке 3 — помогал покупателю"
+          placeholder="Опишите задержки или замечания"
           multiline
           style={styles.reportInput}
         />
@@ -571,174 +387,18 @@ function CompletionView({
       ) : null}
       <View style={styles.gapLg}>
         <Button
-          label="Завершить обход"
-          icon="checkmark-done-outline"
+          label={report.trim() ? 'Сохранить комментарий' : 'Готово'}
+          icon={report.trim() ? 'save-outline' : 'checkmark-outline'}
           onPress={finish}
           loading={complete.isPending}
           disabled={pendingCount > 0}
         />
         {pendingCount > 0 ? (
           <AppText variant="caption" muted style={styles.gapSm}>
-            Синхронизируем отмеченные точки…
+            Синхронизируем данные обхода…
           </AppText>
         ) : null}
       </View>
-    </Card>
-  );
-}
-
-function ScanAction({
-  patrol,
-  points,
-  scannedIds,
-  currentPoint,
-}: {
-  patrol: Patrol;
-  points: RoutePoint[];
-  scannedIds: Set<string>;
-  currentPoint?: RoutePoint;
-}): React.ReactElement {
-  const [nfcAvailable, setNfcAvailable] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<{
-    actions: { label: string; onPress: () => void; variant?: 'primary' | 'secondary' | 'danger' | 'ghost' }[];
-    message: string;
-    title: string;
-    tone: 'danger' | 'info' | 'success' | 'warning';
-  } | null>(null);
-
-  useEffect(() => {
-    void nfcReader.isAvailable().then(setNfcAvailable);
-  }, []);
-
-  async function recordUid(rawUid: string): Promise<void> {
-    const normalizedUid = rawUid.trim().toLowerCase();
-    const point = points.find((candidate) => candidate.nfcTag?.uid === normalizedUid);
-    if (!point) {
-      setError('Метка не принадлежит этому маршруту.');
-      return;
-    }
-    if (scannedIds.has(point.id)) {
-      setError('Эта точка уже отмечена.');
-      return;
-    }
-    if (currentPoint && point.id !== currentPoint.id) {
-      setDialog({
-        actions: [{ label: 'Понятно', onPress: () => setDialog(null) }],
-        message: `Сейчас нужно отсканировать точку ${currentPoint.sortOrder}. ${currentPoint.name}. Точка ${point.sortOrder}. ${point.name} не отмечена.`,
-        title: 'Вернитесь к маршруту',
-        tone: 'warning',
-      });
-      void reportMissedPointAttempt(patrol.id, {
-        attemptedPatrolPointId: point.id,
-        deviceId: await getDeviceId(),
-        expectedPatrolPointId: currentPoint.id,
-        nfcUid: normalizedUid,
-        scannedAt: new Date().toISOString(),
-      }).catch(() => undefined);
-      return;
-    }
-
-    const deviceId = await getDeviceId();
-    const coords = await getCurrentCoords();
-
-    await createLocalEvent({
-      patrolId: patrol.id,
-      patrolPointId: point.id,
-      nfcUid: normalizedUid,
-      deviceId,
-      scannedAt: new Date().toISOString(),
-      lat: coords?.lat,
-      lng: coords?.lng,
-      gpsAccuracy: coords?.gpsAccuracy,
-    });
-
-    requestSync();
-  }
-
-  async function handleScanNfc(): Promise<void> {
-    if (busy) {
-      return;
-    }
-    setError(null);
-    const supported = await nfcReader.isAvailable();
-    setNfcAvailable(supported);
-    if (!supported) {
-      setError('NFC недоступен на этом устройстве.');
-      return;
-    }
-
-    const enabled = await nfcReader.isEnabled();
-    if (!enabled) {
-      setDialog({
-        actions: [
-          {
-            label: 'Открыть настройки',
-            onPress: () => {
-              setDialog(null);
-              void nfcReader.openSettings();
-            },
-          },
-          { label: 'Позже', onPress: () => setDialog(null), variant: 'ghost' },
-        ],
-        message: 'Включите NFC в настройках телефона и повторите сканирование.',
-        title: 'NFC выключен',
-        tone: 'warning',
-      });
-      return;
-    }
-
-    setBusy(true);
-    setScanning(true);
-    try {
-      const uid = await nfcReader.readUid();
-      await recordUid(uid);
-    } catch {
-      setError('Не удалось считать NFC-метку.');
-    } finally {
-      setScanning(false);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card style={styles.gapLg}>
-      <AppToast message={error} />
-      <NfcScanOverlay
-        visible={scanning}
-        title="Сканируем метку"
-        subtitle="Поднесите телефон к NFC-метке контрольной точки."
-        onCancel={() => void nfcReader.cancel()}
-      />
-      {dialog ? (
-        <AppDialog
-          visible
-          title={dialog.title}
-          message={dialog.message}
-          tone={dialog.tone}
-          actions={dialog.actions}
-          onClose={() => setDialog(null)}
-        />
-      ) : null}
-      <Button
-        label="Сканировать NFC"
-        icon="scan-outline"
-        onPress={() => void handleScanNfc()}
-        disabled={busy}
-      />
-      {!nfcAvailable ? (
-        <AppText variant="caption" muted style={styles.gapSm}>
-          При нажатии проверим NFC и подскажем, если его нужно включить.
-        </AppText>
-      ) : null}
-
-      {error ? (
-        <AppText variant="caption" color={colors.danger} style={styles.gapSm}>
-          {error}
-        </AppText>
-      ) : null}
     </Card>
   );
 }
@@ -748,61 +408,36 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
+    paddingBottom: screenInsets.bottom,
   },
   centerText: {
     marginBottom: spacing.lg,
     textAlign: 'center',
   },
-  row: {
+  errorScreen: {
+    flex: 1,
+    paddingBottom: screenInsets.bottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
+  },
+  errorCard: {
+    padding: spacing.lg,
+  },
+  errorHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+  },
+  errorCopy: {
+    flex: 1,
+    marginLeft: spacing.md,
   },
   gapSm: {
     marginTop: spacing.sm,
   },
-  gapMd: {
-    marginTop: spacing.md,
-  },
   gapLg: {
     marginTop: spacing.lg,
-  },
-  center: {
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-  },
-  windowRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginTop: spacing.sm,
-  },
-  windowText: {
-    marginLeft: spacing.xs,
-  },
-  dueRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginTop: spacing.sm,
-  },
-  dueText: {
-    marginLeft: spacing.xs,
-  },
-  pointsScroll: {
-    maxHeight: 360,
-  },
-  pointsScrollContent: {
-    paddingBottom: spacing.md,
-  },
-  pointCard: {
-    marginTop: spacing.md,
-    padding: spacing.lg,
-  },
-  pointName: {
-    flex: 1,
-    marginRight: spacing.md,
   },
   backdrop: {
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -832,14 +467,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
   },
-  completeTitle: {
-    marginLeft: spacing.sm,
+  completionCard: {
+    padding: spacing.lg,
   },
-  titleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+  completeCopy: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  cancelRow: {
+    alignItems: 'flex-end',
+    marginBottom: spacing.md,
   },
   cancelAction: {
     alignItems: 'center',

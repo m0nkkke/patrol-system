@@ -7,8 +7,17 @@ import type { AdminUser } from '@/api/types';
 import { useInfiniteUsers } from '@/features/users/queries';
 import { UserCard } from '@/features/users/UserCard';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { colors, spacing } from '@/theme';
-import { AppText, Button, Header, ListFooter, Screen, TextField } from '@/ui';
+import { colors, screenInsets, spacing } from '@/theme';
+import {
+  AppText,
+  Button,
+  DataStatusBar,
+  EmptyState,
+  Header,
+  ListFooter,
+  Screen,
+  SearchField,
+} from '@/ui';
 
 export default function HistoryEmployeesScreen(): React.ReactElement {
   const router = useRouter();
@@ -17,6 +26,8 @@ export default function HistoryEmployeesScreen(): React.ReactElement {
 
   const {
     items,
+    data,
+    dataUpdatedAt,
     isPending,
     isError,
     error,
@@ -25,7 +36,9 @@ export default function HistoryEmployeesScreen(): React.ReactElement {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useInfiniteUsers({ search: debouncedSearch, role: 'employee', sort: 'fullName:asc' });
+  } = useInfiniteUsers({ search: debouncedSearch, role: 'security_guard', sort: 'fullName:asc' });
+  const hasInitialError = isError && data === undefined;
+  const hasRefreshError = isError && data !== undefined;
 
   const openEmployee = useCallback(
     (user: AdminUser) =>
@@ -44,12 +57,10 @@ export default function HistoryEmployeesScreen(): React.ReactElement {
           subtitle="Выберите обходчика"
           onBack={() => router.back()}
         />
-        <TextField
+        <SearchField
           value={search}
           onChangeText={setSearch}
           placeholder="Поиск по ФИО"
-          icon="search"
-          tone="control"
         />
       </View>
 
@@ -57,7 +68,7 @@ export default function HistoryEmployeesScreen(): React.ReactElement {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
-      ) : isError ? (
+      ) : hasInitialError ? (
         <View style={styles.center}>
           <AppText muted style={styles.errorText}>
             {describeError(error)}
@@ -86,24 +97,40 @@ export default function HistoryEmployeesScreen(): React.ReactElement {
             }
           }}
           ListFooterComponent={<ListFooter loading={isFetchingNextPage} />}
-          ListEmptyComponent={<AppText muted>Обходчики не найдены.</AppText>}
+          ListEmptyComponent={
+            <EmptyState
+              icon="people-outline"
+              title="Сотрудники не найдены"
+              description="Измените поисковый запрос."
+            />
+          }
           renderItem={({ item }) => <UserCard user={item} onPress={openEmployee} />}
         />
       )}
+      {!isPending && !hasInitialError ? (
+        <View style={styles.footer}>
+          <DataStatusBar
+            hasRefreshError={hasRefreshError}
+            isRefreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            updatedAt={dataUpdatedAt}
+          />
+        </View>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   center: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
   },
   errorText: {
     marginBottom: spacing.lg,
@@ -113,8 +140,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.listTop,
+    paddingBottom: screenInsets.listBottom,
+  },
+  footer: {
+    backgroundColor: colors.background,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    paddingBottom: screenInsets.footerBottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.footerTop,
   },
 });

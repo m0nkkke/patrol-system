@@ -5,18 +5,20 @@ import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useInfiniteShops, useShopsByIds } from '@/features/route-setup/queries';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { colors, radius, spacing } from '@/theme';
-import { AppText, ListFooter, TextField } from '@/ui';
+import { AppText, ListFooter, SearchField } from '@/ui';
 
 type ShopMultiSelectListProps = {
   selectedIds: string[];
   onToggle: (shopId: string) => void;
   onSetPrimary: (shopId: string) => void;
+  showPrimarySelection?: boolean;
 };
 
 export function ShopMultiSelectList({
   selectedIds,
   onToggle,
   onSetPrimary,
+  showPrimarySelection = true,
 }: ShopMultiSelectListProps): React.ReactElement {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search);
@@ -36,12 +38,10 @@ export function ShopMultiSelectList({
 
   return (
     <View style={styles.container}>
-      <TextField
+      <SearchField
         value={search}
         onChangeText={setSearch}
-        placeholder="Поиск магазина"
-        icon="search"
-        tone="control"
+        placeholder="Поиск по названию или ID магазина"
       />
       <FlatList
         style={styles.list}
@@ -66,7 +66,7 @@ export function ShopMultiSelectList({
           const isPrimary = item.id === primaryId;
           return (
             <TouchableOpacity
-              style={[styles.row, selected && styles.rowSelected]}
+              style={styles.row}
               onPress={() => onToggle(item.id)}
               activeOpacity={0.7}
             >
@@ -76,21 +76,21 @@ export function ShopMultiSelectList({
                 color={selected ? colors.primary : colors.textMuted}
               />
               <View style={styles.nameWrap}>
-                <AppText variant="label" numberOfLines={1}>
+                <AppText variant="label" numberOfLines={2}>
                   {item.name}
                 </AppText>
                 {item.address ? (
-                  <AppText variant="caption" muted numberOfLines={1} style={styles.address}>
+                  <AppText variant="caption" muted numberOfLines={2} style={styles.address}>
                     {item.address}
                   </AppText>
                 ) : null}
-                {isPrimary ? (
+                {showPrimarySelection && isPrimary ? (
                   <AppText variant="caption" color={colors.primary} style={styles.primaryHint}>
                     Основной магазин
                   </AppText>
                 ) : null}
               </View>
-              {selected ? (
+              {showPrimarySelection && selected ? (
                 <TouchableOpacity onPress={() => onSetPrimary(item.id)} hitSlop={10}>
                   <Ionicons
                     name={isPrimary ? 'star' : 'star-outline'}
@@ -125,14 +125,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     flexDirection: 'row',
     marginBottom: spacing.md,
-    padding: spacing.lg,
-  },
-  rowSelected: {
-    borderColor: colors.primary,
+    minHeight: 84,
+    padding: spacing.md,
   },
   nameWrap: {
     flex: 1,

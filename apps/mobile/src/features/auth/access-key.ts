@@ -20,5 +20,5 @@ export function formatAccessKey(input: string): string {
 }
 
 export function isAccessKeyComplete(formatted: string): boolean {
-  return formatted.replace(/-/g, '').length === ACCESS_KEY_RAW_LENGTH;
+  return /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){2}$/.test(formatted);
 }

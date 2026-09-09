@@ -5,7 +5,7 @@ import { Animated, Modal, StyleSheet, View } from 'react-native';
 import { colors, radius, spacing } from '@/theme';
 
 import { AppText } from './AppText';
-import { Button } from './Button';
+import { CancelButton } from './FormButtons';
 
 type NfcScanOverlayProps = {
   visible: boolean;
@@ -85,7 +85,7 @@ export function NfcScanOverlay({
 
           {onCancel ? (
             <View style={styles.action}>
-              <Button label="Отмена" variant="secondary" onPress={onCancel} />
+              <CancelButton onPress={onCancel} />
             </View>
           ) : null}
         </View>

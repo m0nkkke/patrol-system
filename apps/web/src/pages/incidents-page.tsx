@@ -22,6 +22,7 @@ import {
 import { useDeferredValue, useMemo, useState } from 'react';
 
 import { api, getApiErrorMessage } from '../lib/api';
+import { incidentDescription } from '../lib/incident-description';
 import type {
   ControlIncident,
   IncidentSeverity,
@@ -194,7 +195,7 @@ export function IncidentsPage(): React.JSX.Element {
               <tbody>{incidentsQuery.data?.items.map((incident) => (
                 <tr className={params.incidentId === incident.id ? 'is-selected' : undefined} key={incident.id} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.currentTarget.click(); } }} onClick={() => void openIncident(incident.id)}>
                   <td><SeverityBadge severity={incident.severity} /></td>
-                  <td><strong>{incidentTypeLabel(incident.type)}</strong><small>{incident.message}</small></td>
+                  <td><strong>{incidentTypeLabel(incident.type)}</strong><small>{incidentDescription(incident)}</small></td>
                   <td>{incident.shop.name ?? 'Без названия'}<small>{incident.patrol.routeName ?? 'Маршрут не указан'}</small></td>
                   <td>{incident.employee.fullName ?? 'Не указан'}</td>
                   <td><time>{formatDateTime(incident.createdAt)}</time></td>
@@ -237,7 +238,7 @@ function InvestigationCard({ incident }: { incident: ControlIncident }): React.J
         <h2>{incidentTypeLabel(incident.type)}</h2>
         <time>{formatDateTime(incident.createdAt, true)}</time>
       </header>
-      <p className="incident-message">{incident.message}</p>
+      <p className="incident-message">{incidentDescription(incident)}</p>
 
       <section className="investigation-section">
         <h3><MapPin size={16} /> Контекст</h3>

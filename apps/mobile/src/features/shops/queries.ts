@@ -1,7 +1,15 @@
 import type { CreateShopDto } from '@patrol/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { createShop } from '@/api/shops.api';
+import { createShop, getAssignedMobileShops } from '@/api/shops.api';
+
+export function useAssignedMobileShops(enabled = true) {
+  return useQuery({
+    queryKey: ['mobile-assigned-shops'],
+    queryFn: getAssignedMobileShops,
+    enabled,
+  });
+}
 
 export function useCreateShop() {
   const queryClient = useQueryClient();

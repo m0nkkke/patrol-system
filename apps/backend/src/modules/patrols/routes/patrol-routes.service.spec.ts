@@ -12,7 +12,7 @@ type PatrolRoutesRepositoryMock = Pick<
   PatrolRoutesRepository,
   'create' | 'findById' | 'findByShop' | 'findPoint' | 'update' | 'findVersions'
 >;
-type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
+type ShopsServiceMock = Pick<ShopsService, 'findOne' | 'recalculateRouteStatus'>;
 
 describe('PatrolRoutesService', () => {
   let patrolPointsService: jest.Mocked<PatrolPointsServiceMock>;
@@ -34,6 +34,7 @@ describe('PatrolRoutesService', () => {
     };
     shopsService = {
       findOne: jest.fn(),
+      recalculateRouteStatus: jest.fn(),
     };
     service = new PatrolRoutesService(
       patrolPointsService as unknown as PatrolPointsService,
@@ -77,6 +78,7 @@ describe('PatrolRoutesService', () => {
       },
       createActor(),
     );
+    expect(shopsService.recalculateRouteStatus).toHaveBeenCalledWith('shop-id');
   });
 
   it('rejects dwell settings for points outside the route', async () => {
@@ -179,6 +181,7 @@ describe('PatrolRoutesService', () => {
       }),
       createActor(),
     );
+    expect(shopsService.recalculateRouteStatus).toHaveBeenCalledWith('shop-id');
   });
 
   it('restricts route history to assigned shops for inspectors and local setters', async () => {

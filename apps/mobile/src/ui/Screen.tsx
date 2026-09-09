@@ -1,7 +1,7 @@
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets } from '@/theme';
 
 type ScreenProps = {
   children: React.ReactNode;
@@ -34,8 +34,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   padded: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
   centered: {
     justifyContent: 'center',

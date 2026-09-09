@@ -7,6 +7,8 @@ import { registerDevicePushToken } from '@/api/notifications.api';
 
 import { getDeviceId } from './device-id';
 
+let permissionRequest: Promise<boolean> | null = null;
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -24,7 +26,7 @@ function getProjectId(): string | undefined {
   return Constants.easConfig?.projectId;
 }
 
-async function configureAndroidChannel(): Promise<void> {
+export async function configureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') {
     return;
   }
@@ -35,13 +37,18 @@ async function configureAndroidChannel(): Promise<void> {
   });
 }
 
-async function ensurePermission(): Promise<boolean> {
-  const settings = await Notifications.getPermissionsAsync();
-  if (settings.granted) {
-    return true;
-  }
-  const request = await Notifications.requestPermissionsAsync();
-  return request.granted;
+export async function ensureNotificationPermission(): Promise<boolean> {
+  permissionRequest ??= (async () => {
+    const settings = await Notifications.getPermissionsAsync();
+    if (settings.granted) {
+      return true;
+    }
+    const request = await Notifications.requestPermissionsAsync();
+    return request.granted;
+  })().finally(() => {
+    permissionRequest = null;
+  });
+  return permissionRequest;
 }
 
 export async function registerPushToken(): Promise<void> {
@@ -52,7 +59,7 @@ export async function registerPushToken(): Promise<void> {
       return;
     }
 
-    if (!(await ensurePermission())) {
+    if (!(await ensureNotificationPermission())) {
       return;
     }
 

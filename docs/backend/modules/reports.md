@@ -154,9 +154,11 @@ Endpoints для службы контроля:
 
 Access: `admin`, `inspector`. Inspector access is limited to assigned shops.
 
-`GET /api/v1/control/staff` возвращает полный список сотрудников, включая неактивных. Фильтры:
-`shopId`, `role`, `isActive`, `search`, `page`, `limit`, `sort`. Поддерживается сортировка по
-`fullName`, `role` и `isActive`.
+`GET /api/v1/control/staff` возвращает список сотрудников в назначениях, включая неактивных, но
+не включает пользователей с ролью `inspector`. Проверяющие работают с этим списком как с объектом
+контроля, а управляются администратором через общий раздел пользователей. Фильтры: `shopId`, `role`,
+`isActive`, `search`, `page`, `limit`, `sort`. Поддерживается сортировка по `fullName`, `role` и
+`isActive`.
 
 `GET /api/v1/control/staff/:id` возвращает ФИО, роль, активность, основной магазин и объединенный
 список назначенных магазинов. Для `inspector` хотя бы одно назначение сотрудника должно пересекаться

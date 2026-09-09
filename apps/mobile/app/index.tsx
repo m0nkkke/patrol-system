@@ -1,216 +1,267 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 
 import { PatrolHomeWidget } from '@/features/patrol/PatrolHomeWidget';
 import { useShop } from '@/features/route-setup/queries';
+import { useAssignedMobileShops } from '@/features/shops/queries';
 import { roleLabel } from '@/features/users/role';
 import { useAuthStore } from '@/store/auth-store';
-import { colors, spacing } from '@/theme';
-import { AppText, Card, MenuItem, Screen } from '@/ui';
+import { colors, screenInsets, spacing } from '@/theme';
+import {
+  AppText,
+  DashboardContextCard,
+  DashboardGroup,
+  DashboardLogout,
+  DashboardMenuPanel,
+  DashboardProfile,
+  DashboardQuickActions,
+  DashboardSection,
+  Screen,
+  type DashboardAction,
+} from '@/ui';
 
 export default function HomeScreen(): React.ReactElement {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const selectedShopId = useAuthStore((state) => state.selectedShopId);
   const signOut = useAuthStore((state) => state.signOut);
 
   const role = user?.role;
   const isAdmin = role === 'admin';
-  const isManager = role === 'manager';
-  const isEmployee = role === 'employee';
-  const hasAccess = isAdmin || isManager || isEmployee;
+  const isInspector = role === 'inspector';
+  const isRouteSetter = role === 'route_setter';
+  const isLocalRouteSetter = role === 'local_route_setter';
+  const isSecurityGuard = role === 'security_guard';
+  const hasAccess =
+    isAdmin || isInspector || isRouteSetter || isLocalRouteSetter || isSecurityGuard;
+  const effectiveShopId = selectedShopId ?? user?.shopId;
 
   function openHistory(): void {
-    if (user?.shopId) {
-      router.push({ pathname: '/history/[shopId]', params: { shopId: user.shopId } });
+    if (isAdmin || isInspector) {
+      router.push('/control-patrols');
+    } else if (effectiveShopId) {
+      router.push({ pathname: '/history/[shopId]', params: { shopId: effectiveShopId } });
     } else {
       router.push('/history');
     }
   }
 
   function openSchedules(): void {
-    if (user?.shopId) {
-      router.push({ pathname: '/schedules/[shopId]', params: { shopId: user.shopId } });
+    if (isLocalRouteSetter && effectiveShopId) {
+      router.push({ pathname: '/schedules/[shopId]', params: { shopId: effectiveShopId } });
     } else {
       router.push('/schedules/shops');
     }
   }
 
-  function openRouteSetup(): void {
-    if (user?.shopId) {
-      router.push({ pathname: '/route-setup/[shopId]', params: { shopId: user.shopId } });
+  function openPatrolRoutes(): void {
+    if (isLocalRouteSetter && effectiveShopId) {
+      router.push({ pathname: '/patrol-routes/[shopId]', params: { shopId: effectiveShopId } });
     } else {
-      router.push('/route-setup/shops');
+      router.push('/patrol-routes/shops');
     }
   }
 
   function openNfcReplace(): void {
-    if (user?.shopId) {
-      router.push({ pathname: '/nfc-replace/[shopId]', params: { shopId: user.shopId } });
+    if (isLocalRouteSetter && effectiveShopId) {
+      router.push({ pathname: '/nfc-replace/[shopId]', params: { shopId: effectiveShopId } });
     } else {
       router.push('/nfc-replace/shops');
     }
   }
 
+  const adminQuickActions: DashboardAction[] = [
+    {
+      icon: 'storefront-outline',
+      iconBadge: 'add',
+      onPress: () => router.push('/shops/new'),
+      title: 'Новый магазин',
+    },
+    {
+      icon: 'person-outline',
+      iconBadge: 'add',
+      onPress: () => router.push('/users/new'),
+      title: 'Новый пользователь',
+    },
+  ];
+
+  const managementActions: DashboardAction[] = [
+    {
+      icon: 'storefront-outline',
+      onPress: () => router.push('/shops'),
+      subtitle: 'Список магазинов и редактирование',
+      title: 'Магазины',
+    },
+    {
+      icon: 'people-outline',
+      onPress: () => router.push('/users'),
+      subtitle: 'Список сотрудников и их данные',
+      title: 'Пользователи',
+    },
+  ];
+
+  const setupActions: DashboardAction[] = [
+    {
+      icon: 'git-network-outline',
+      onPress: openPatrolRoutes,
+      subtitle: isLocalRouteSetter
+        ? 'Маршруты и контрольные точки вашего магазина'
+        : 'Состав маршрутов и каталог контрольных точек',
+      title: 'Маршруты и точки',
+    },
+    {
+      icon: 'swap-horizontal-outline',
+      onPress: openNfcReplace,
+      subtitle: isLocalRouteSetter
+        ? 'Замена метки в вашем магазине'
+        : 'Перепривязать метку у точки',
+      title: 'Замена NFC-метки',
+    },
+    {
+      icon: 'calendar-outline',
+      onPress: openSchedules,
+      subtitle: isLocalRouteSetter
+        ? 'График обходов вашего магазина'
+        : 'График обходов по магазинам',
+      title: 'Расписания',
+    },
+  ];
+
+  const adminSetupActions: DashboardAction[] = [
+    {
+      icon: 'swap-horizontal-outline',
+      onPress: openNfcReplace,
+      subtitle: 'Перепривязать метку у контрольной точки',
+      title: 'Замена NFC-метки',
+    },
+  ];
+
+  const controlActions: DashboardAction[] = [
+    {
+      icon: 'document-text-outline',
+      onPress: openHistory,
+      subtitle: isInspector ? 'Обходы назначенных магазинов' : 'По магазинам или сотрудникам',
+      title: 'История обходов',
+    },
+    {
+      icon: 'warning-outline',
+      iconBackground: colors.dangerSurface,
+      iconColor: colors.danger,
+      onPress: () => router.push('/incidents'),
+      subtitle: isInspector
+        ? 'Подозрительные обходы назначенных магазинов'
+        : 'Подозрительные обходы по всем магазинам',
+      title: 'Нарушения',
+    },
+    {
+      icon: 'documents-outline',
+      onPress: () => router.push('/control-reports'),
+      subtitle: isInspector
+        ? 'Отчёты и фотографии назначенных магазинов'
+        : 'Отчёты и фотографии сотрудников контроля',
+      title: 'Операционные отчёты',
+    },
+    {
+      icon: 'mail-unread-outline',
+      iconBackground: colors.iconOrangeBackground,
+      iconColor: colors.iconOrange,
+      onPress: () => router.push('/control-appeals'),
+      subtitle: isInspector
+        ? 'Обращения по назначенным магазинам'
+        : 'Обращения сотрудников и изменение статусов',
+      title: 'Анонимные обращения',
+    },
+  ];
+
+  const inspectorActions: DashboardAction[] = [
+    {
+      icon: 'people-outline',
+      onPress: () => router.push('/control-staff'),
+      subtitle: 'Ответственные по назначенным магазинам',
+      title: 'Сотрудники и назначения',
+    },
+    {
+      icon: 'analytics-outline',
+      onPress: () => router.push('/control-shops'),
+      subtitle: 'Сводка, ответственные, обходы и нарушения',
+      title: 'Контроль магазинов',
+    },
+    ...controlActions,
+  ];
+
+  const guardScheduleActions: DashboardAction[] = [
+    {
+      icon: 'calendar-outline',
+      onPress: () => router.push('/schedule-plan'),
+      subtitle: 'Плановые обходы на ближайшие 7 дней',
+      title: 'График обходов',
+    },
+  ];
+
+  const guardReportActions: DashboardAction[] = [
+    {
+      icon: 'document-text-outline',
+      onPress: () => router.push('/reports'),
+      subtitle: 'Создать отчёт и прикрепить фотографии',
+      title: 'Операционный отчёт',
+    },
+    {
+      icon: 'chatbox-ellipses-outline',
+      iconBackground: colors.iconSlateBackground,
+      iconColor: colors.iconSlate,
+      onPress: () => router.push('/anonymous'),
+      subtitle: 'Отправить обращение службе контроля',
+      title: 'Анонимно',
+    },
+  ];
+
   return (
     <Screen padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <TouchableOpacity
-          style={styles.profile}
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <DashboardProfile
+          fullName={user?.authorizationFullName ?? user?.fullName ?? 'Пользователь'}
+          role={role ? roleLabel(role) : ''}
           onPress={() => router.push('/profile')}
-          activeOpacity={0.7}
-        >
-          <View style={styles.profileText}>
-            <AppText variant="caption" muted>
-              Добрый день,
-            </AppText>
-            <AppText variant="heading">{user?.fullName ?? ''}</AppText>
-            {role ? (
-              <AppText variant="caption" color={colors.roleText} style={styles.chipText}>
-                {roleLabel(role)}
-              </AppText>
-            ) : null}
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-        </TouchableOpacity>
+        />
 
-        {(isManager || isEmployee) && user?.shopId ? (
-          <PrimaryShopCard shopId={user.shopId} />
+        {isSecurityGuard && effectiveShopId ? (
+          <SelectedShopContext shopId={effectiveShopId} />
+        ) : isLocalRouteSetter && effectiveShopId ? (
+          <PrimaryShopContext shopId={effectiveShopId} />
+        ) : isRouteSetter ? (
+          <DashboardContextCard
+            icon="business-outline"
+            label="Область работы"
+            name="Все активные магазины"
+            address="Магазин выбирается перед каждым действием"
+          />
         ) : null}
 
         {isAdmin ? (
-          <View>
-            <SectionLabel title="Управление" />
-            <MenuItem
-              icon="business-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Новый магазин"
-              subtitle="Регистрация торговой точки"
-              onPress={() => router.push('/shops/new')}
-            />
-            <MenuItem
-              icon="person-add-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Новый пользователь"
-              subtitle="Создать сотрудника, выдать ключ"
-              onPress={() => router.push('/users/new')}
-            />
-            <MenuItem
-              icon="storefront-outline"
-              iconColor={colors.iconSlate}
-              iconBackground={colors.iconSlateBackground}
-              title="Магазины"
-              subtitle="Список магазинов и редактирование"
-              onPress={() => router.push('/shops')}
-            />
-            <MenuItem
-              icon="people-outline"
-              iconColor={colors.iconSlate}
-              iconBackground={colors.iconSlateBackground}
-              title="Пользователи"
-              subtitle="Список сотрудников и их данные"
-              onPress={() => router.push('/users')}
-            />
-            <MenuItem
-              icon="git-network-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Маршруты"
-              subtitle="Настройка точек и NFC-меток"
-              onPress={openRouteSetup}
-            />
-            <MenuItem
-              icon="swap-horizontal-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Замена NFC-метки"
-              subtitle="Перепривязать метку у точки"
-              onPress={openNfcReplace}
-            />
-            <MenuItem
-              icon="calendar-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Расписания"
-              subtitle="График обходов по магазинам"
-              onPress={openSchedules}
-            />
-
-            <SectionLabel title="Контроль обходов" />
-            <MenuItem
-              icon="document-text-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="История обходов"
-              subtitle="По магазинам или сотрудникам"
-              onPress={openHistory}
-            />
-            <MenuItem
-              icon="warning-outline"
-              iconColor={colors.danger}
-              iconBackground={colors.dangerSurface}
-              title="Нарушения"
-              subtitle="Подозрительные обходы по всем магазинам"
-              onPress={() => router.push('/incidents')}
-            />
-          </View>
+          <>
+            <DashboardQuickActions actions={adminQuickActions} />
+            <DashboardSection title="Управление" actions={managementActions} />
+            <DashboardSection title="Настройка обходов" actions={adminSetupActions} />
+            <DashboardSection title="Контроль обходов" actions={controlActions} />
+          </>
         ) : null}
 
-        {isManager ? (
-          <View>
-            <SectionLabel title="Управление" />
-            <MenuItem
-              icon="git-network-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Маршруты"
-              subtitle="Настройка маршрута вашего магазина"
-              onPress={openRouteSetup}
-            />
-            <MenuItem
-              icon="swap-horizontal-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Замена NFC-метки"
-              subtitle="Замена метки в вашем магазине"
-              onPress={openNfcReplace}
-            />
-            <MenuItem
-              icon="calendar-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="Расписания"
-              subtitle="График обходов вашего магазина"
-              onPress={openSchedules}
-            />
-
-            <SectionLabel title="Контроль обходов" />
-            <MenuItem
-              icon="document-text-outline"
-              iconColor={colors.iconBlue}
-              iconBackground={colors.iconBlueBackground}
-              title="История обходов"
-              subtitle="Обходы вашего магазина"
-              onPress={openHistory}
-            />
-            <MenuItem
-              icon="warning-outline"
-              iconColor={colors.danger}
-              iconBackground={colors.dangerSurface}
-              title="Нарушения"
-              subtitle="Подозрительные обходы вашего магазина"
-              onPress={() => router.push('/incidents')}
-            />
-          </View>
+        {isRouteSetter || isLocalRouteSetter ? (
+          <DashboardSection title="Настройка обходов" actions={setupActions} />
         ) : null}
 
-        {isEmployee ? (
-          <View>
-            <SectionLabel title="Обход" />
-            <PatrolHomeWidget />
-          </View>
+        {isInspector ? (
+          <DashboardSection title="Контроль обходов" actions={inspectorActions} />
+        ) : null}
+
+        {isSecurityGuard && effectiveShopId ? (
+          <>
+            <DashboardGroup title="Обход">
+              <PatrolHomeWidget shopId={effectiveShopId} />
+              <DashboardMenuPanel actions={guardScheduleActions} />
+            </DashboardGroup>
+            <DashboardSection title="Отчёты и связь" actions={guardReportActions} />
+          </>
         ) : null}
 
         {!hasAccess ? (
@@ -218,29 +269,14 @@ export default function HomeScreen(): React.ReactElement {
             Нет доступных действий для вашей роли.
           </AppText>
         ) : null}
-      </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.logout} onPress={() => void signOut()} activeOpacity={0.7}>
-          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <AppText variant="button" color={colors.danger} style={styles.logoutText}>
-            Выйти
-          </AppText>
-        </TouchableOpacity>
-      </View>
+        <DashboardLogout onPress={() => void signOut()} />
+      </ScrollView>
     </Screen>
   );
 }
 
-function SectionLabel({ title }: { title: string }): React.ReactElement {
-  return (
-    <AppText variant="caption" muted style={styles.section}>
-      {title.toUpperCase()}
-    </AppText>
-  );
-}
-
-function PrimaryShopCard({ shopId }: { shopId: string }): React.ReactElement | null {
+function PrimaryShopContext({ shopId }: { shopId: string }): React.ReactElement | null {
   const { data: shop } = useShop(shopId);
 
   if (!shop) {
@@ -248,88 +284,37 @@ function PrimaryShopCard({ shopId }: { shopId: string }): React.ReactElement | n
   }
 
   return (
-    <Card style={styles.shopCard}>
-      <View style={styles.shopIcon}>
-        <Ionicons name="storefront-outline" size={20} color={colors.primary} />
-      </View>
-      <View style={styles.shopInfo}>
-        <AppText variant="caption" muted>
-          Основной магазин
-        </AppText>
-        <AppText variant="label">{shop.name}</AppText>
-        {shop.address ? (
-          <AppText variant="caption" muted style={styles.shopAddress}>
-            {shop.address}
-          </AppText>
-        ) : null}
-      </View>
-    </Card>
+    <DashboardContextCard label="Основной магазин" name={shop.name} address={shop.address} />
+  );
+}
+
+function SelectedShopContext({ shopId }: { shopId: string }): React.ReactElement | null {
+  const router = useRouter();
+  const { data: shops } = useAssignedMobileShops();
+  const shop = shops?.find((item) => item.id === shopId);
+
+  if (!shop) {
+    return null;
+  }
+
+  return (
+    <DashboardContextCard
+      label="Выбранный магазин"
+      name={shop.name}
+      address={shop.address}
+      onPress={() => router.push('/select-shop')}
+      trailingIcon="swap-horizontal-outline"
+    />
   );
 }
 
 const styles = StyleSheet.create({
   scroll: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
-  },
-  profile: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginBottom: spacing.lg,
-  },
-  profileText: {
-    flex: 1,
-  },
-  shopCard: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginBottom: spacing.sm,
-  },
-  shopIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.iconBlueBackground,
-    borderRadius: 999,
-    height: 40,
-    justifyContent: 'center',
-    marginRight: spacing.md,
-    width: 40,
-  },
-  shopInfo: {
-    flex: 1,
-  },
-  shopAddress: {
-    marginTop: spacing.xs,
-  },
-  chipText: {
-    fontWeight: '600',
-    marginTop: spacing.sm,
-  },
-  section: {
-    fontWeight: '600',
-    letterSpacing: 0.6,
-    marginBottom: spacing.sm,
-    marginTop: spacing.lg,
+    paddingBottom: screenInsets.bottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.horizontal,
   },
   noAccess: {
-    marginTop: spacing.lg,
-  },
-  footer: {
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
-  },
-  logout: {
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderColor: colors.danger,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: spacing.lg,
-  },
-  logoutText: {
-    marginLeft: spacing.sm,
+    marginTop: spacing.xl,
   },
 });

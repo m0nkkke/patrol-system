@@ -8,16 +8,19 @@ import { ApiError } from '@/api/errors';
 import type { Shop } from '@/api/types';
 import { useCreateShop } from '@/features/shops/queries';
 import { RUSSIAN_TIMEZONES, timezoneCurrentTime } from '@/lib/timezones';
-import { colors, radius, spacing } from '@/theme';
+import { useNetworkStatus } from '@/lib/use-network-status';
+import { colors, radius, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   Button,
+  CompactTextIcon,
   FormHeader,
   Header,
   ResultHeader,
   ResultScreen,
   Screen,
   Select,
+  SubmitButton,
   TextField,
 } from '@/ui';
 
@@ -30,6 +33,7 @@ export default function CreateShopScreen(): React.ReactElement {
   const [address, setAddress] = useState('');
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [createdShop, setCreatedShop] = useState<Shop | null>(null);
+  const networkStatus = useNetworkStatus();
 
   const { mutate, isPending, isError, error } = useCreateShop();
 
@@ -64,7 +68,10 @@ export default function CreateShopScreen(): React.ReactElement {
       <CreatedShopResult
         shop={createdShop}
         onCreateMore={resetForm}
-        onDone={() => router.replace('/shops')}
+        onOpen={() =>
+          router.dismissTo({ pathname: '/shops/[id]', params: { id: createdShop.id } })
+        }
+        onDone={() => router.dismissTo('/shops')}
       />
     );
   }
@@ -72,7 +79,7 @@ export default function CreateShopScreen(): React.ReactElement {
   const isValid = name.trim().length >= 2;
 
   function handleSubmit(): void {
-    if (!isValid || isPending) {
+    if (!isValid || isPending || networkStatus !== 'online') {
       return;
     }
     mutate(
@@ -90,12 +97,12 @@ export default function CreateShopScreen(): React.ReactElement {
     <Screen padded={false}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Header onBack={() => router.back()} />
           <FormHeader
-            icon="business"
+            icon="storefront-outline"
             title="Новый магазин"
             subtitle="Заполните информацию о точке"
           />
@@ -119,7 +126,7 @@ export default function CreateShopScreen(): React.ReactElement {
 
           <TextField
             label="ID магазина"
-            icon="pricetag-outline"
+            iconText="ID"
             value={externalId}
             onChangeText={setExternalId}
             placeholder="00234343"
@@ -133,7 +140,7 @@ export default function CreateShopScreen(): React.ReactElement {
               icon="location-outline"
               value={address}
               onChangeText={setAddress}
-              placeholder="Красноярск, ул. Мира, 1"
+              placeholder="Улан-Удэ, ул. Ленина, 1"
             />
           </View>
           <View style={styles.gapLg}>
@@ -144,7 +151,6 @@ export default function CreateShopScreen(): React.ReactElement {
               value={timezone}
               options={timezoneOptions}
               onChange={setTimezone}
-              searchable
             />
           </View>
 
@@ -154,14 +160,27 @@ export default function CreateShopScreen(): React.ReactElement {
             </AppText>
           ) : null}
 
-          <View style={styles.gapXl}>
-            <Button
-              label="Создать магазин"
-              icon="checkmark-circle-outline"
-              onPress={handleSubmit}
-              loading={isPending}
-              disabled={!isValid}
-            />
+          <View style={styles.submitSection}>
+            <AppText variant="caption" muted>
+              Поля, отмеченные{' '}
+              <AppText variant="caption" color={colors.danger}>
+                *
+              </AppText>
+              , обязательны
+            </AppText>
+            {networkStatus === 'offline' ? (
+              <AppText variant="caption" color={colors.warning} style={styles.offlineHint}>
+                Для создания магазина требуется подключение к интернету.
+              </AppText>
+            ) : null}
+            <View style={styles.submitButton}>
+              <SubmitButton
+                label="Создать магазин"
+                onPress={handleSubmit}
+                loading={isPending}
+                disabled={!isValid || networkStatus !== 'online'}
+              />
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -172,20 +191,32 @@ export default function CreateShopScreen(): React.ReactElement {
 function CreatedShopResult({
   shop,
   onCreateMore,
+  onOpen,
   onDone,
 }: {
   shop: Shop;
   onCreateMore: () => void;
+  onOpen: () => void;
   onDone: () => void;
 }): React.ReactElement {
+  const timezone = RUSSIAN_TIMEZONES.find((item) => item.value === shop.timezone);
+  const timezoneLabel = timezone ? `${timezone.city} · ${timezone.offset}` : shop.timezone;
+
   return (
     <ResultScreen
-      onBack={onDone}
       footer={
         <>
-          <Button label="Создать ещё" icon="add-outline" onPress={onCreateMore} />
+          <Button label="Создать ещё" onPress={onCreateMore} />
+          <View style={styles.gapMd}>
+            <Button
+              label="Перейти в магазин"
+              variant="secondary"
+              icon="storefront-outline"
+              onPress={onOpen}
+            />
+          </View>
           <View style={styles.gapSm}>
-            <Button label="Готово" variant="ghost" onPress={onDone} />
+            <Button label="Готово" icon="checkmark-outline" variant="ghost" onPress={onDone} />
           </View>
         </>
       }
@@ -195,28 +226,70 @@ function CreatedShopResult({
         iconColor={colors.success}
         iconBackground={colors.successBackground}
         title="Магазин создан!"
-        subtitle="Магазин добавлен в систему"
+        celebration
       />
 
       <View style={styles.shopCard}>
-        <View style={styles.shopIcon}>
-          <Ionicons name="storefront-outline" size={24} color={colors.primary} />
+        <View style={styles.shopHeading}>
+          <View style={styles.shopIcon}>
+            <Ionicons name="storefront-outline" size={24} color={colors.primary} />
+          </View>
+          <AppText variant="heading" numberOfLines={2} style={styles.shopName}>
+            {shop.name}
+          </AppText>
         </View>
-        <View style={styles.shopInfo}>
-          <AppText variant="heading">{shop.name}</AppText>
-          {shop.externalId ? (
-            <AppText variant="caption" muted style={styles.shopMeta}>
-              ID: {shop.externalId}
-            </AppText>
-          ) : null}
-          {shop.address ? (
-            <AppText variant="caption" muted style={styles.shopMeta}>
-              {shop.address}
-            </AppText>
-          ) : null}
+
+        <View style={styles.shopDetails}>
+          <ShopResultRow
+            iconText="ID"
+            label="ID магазина"
+            value={shop.externalId ?? '—'}
+            first
+          />
+          <ShopResultRow icon="location-outline" label="Адрес" value={shop.address ?? '—'} />
+          <ShopResultRow icon="time-outline" label="Часовой пояс" value={timezoneLabel} />
         </View>
       </View>
+
+      <View style={styles.successNotice}>
+        <Ionicons name="checkmark-circle-outline" size={24} color={colors.success} />
+        <AppText variant="body" style={styles.successNoticeText}>
+          Информация о магазине сохранена и готова к настройке
+        </AppText>
+      </View>
     </ResultScreen>
+  );
+}
+
+function ShopResultRow({
+  first = false,
+  icon,
+  iconText,
+  label,
+  value,
+}: {
+  first?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconText?: string;
+  label: string;
+  value: string;
+}): React.ReactElement {
+  return (
+    <View style={[styles.shopDetailRow, first && styles.shopDetailRowFirst]}>
+      <View style={styles.shopDetailLabel}>
+        {iconText ? (
+          <CompactTextIcon label={iconText} />
+        ) : icon ? (
+          <Ionicons name={icon} size={20} color={colors.textMuted} />
+        ) : null}
+        <AppText variant="caption" muted style={styles.shopDetailLabelText}>
+          {label}
+        </AppText>
+      </View>
+      <AppText variant="body" numberOfLines={3} style={styles.shopDetailValue}>
+        {value}
+      </AppText>
+    </View>
   );
 }
 
@@ -225,9 +298,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
+    paddingBottom: screenInsets.bottom,
   },
   divider: {
     alignItems: 'center',
@@ -244,13 +317,15 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
   },
   shopCard: {
-    alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    flexDirection: 'row',
     padding: spacing.lg,
+  },
+  shopHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
   },
   shopIcon: {
     alignItems: 'center',
@@ -261,11 +336,50 @@ const styles = StyleSheet.create({
     marginRight: spacing.lg,
     width: 48,
   },
-  shopInfo: {
+  shopName: {
     flex: 1,
+    minWidth: 0,
   },
-  shopMeta: {
-    marginTop: spacing.xs,
+  shopDetails: {
+    marginTop: spacing.lg,
+  },
+  shopDetailRow: {
+    alignItems: 'center',
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    minHeight: 64,
+    paddingVertical: spacing.md,
+  },
+  shopDetailRowFirst: {
+    borderTopWidth: 0,
+  },
+  shopDetailLabel: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    width: '46%',
+  },
+  shopDetailLabelText: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  shopDetailValue: {
+    flex: 1,
+    marginLeft: spacing.md,
+    textAlign: 'right',
+  },
+  successNotice: {
+    alignItems: 'center',
+    backgroundColor: colors.successBackground,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  successNoticeText: {
+    flex: 1,
+    marginLeft: spacing.md,
   },
   gapSm: {
     marginTop: spacing.sm,
@@ -273,7 +387,16 @@ const styles = StyleSheet.create({
   gapLg: {
     marginTop: spacing.lg,
   },
-  gapXl: {
+  gapMd: {
+    marginTop: spacing.md,
+  },
+  submitSection: {
     marginTop: spacing.xl,
+  },
+  submitButton: {
+    marginTop: spacing.md,
+  },
+  offlineHint: {
+    marginTop: spacing.sm,
   },
 });

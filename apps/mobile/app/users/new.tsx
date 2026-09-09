@@ -13,84 +13,72 @@ import {
 } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
-import type { CreatedUser } from '@/api/types';
-import { useShopsByIds } from '@/features/route-setup/queries';
-import { ShopMultiSelectList } from '@/features/shops/ShopMultiSelectList';
+import type { CreatedUser, Shop } from '@/api/types';
+import { ShopSelectionField } from '@/features/shops/ShopSelectionField';
+import { ShopSelectionModal } from '@/features/shops/ShopSelectionModal';
 import { useCreateUser } from '@/features/users/queries';
-import { ROLE_ICONS, roleLabel } from '@/features/users/role';
-import { colors, radius, spacing } from '@/theme';
+import { ROLE_OPTIONS, roleLabel } from '@/features/users/role';
+import { useNetworkStatus } from '@/lib/use-network-status';
+import { colors, radius, screenInsets, spacing } from '@/theme';
 import {
   AppText,
   Button,
-  FieldLabel,
+  Card,
   FormHeader,
   Header,
   ResultHeader,
   ResultScreen,
   Screen,
-  SegmentedControl,
-  type SegmentOption,
+  Select,
+  SubmitButton,
   TextField,
 } from '@/ui';
-
-const ROLE_SEGMENTS: SegmentOption<UserRole>[] = [
-  { value: 'employee', label: 'Обходчик', icon: ROLE_ICONS.employee },
-  { value: 'manager', label: 'Менеджер', icon: ROLE_ICONS.manager },
-  { value: 'admin', label: 'Админ', icon: ROLE_ICONS.admin },
-];
 
 export default function CreateUserScreen(): React.ReactElement {
   const router = useRouter();
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<UserRole>('employee');
-  const [shopIds, setShopIds] = useState<string[]>([]);
+  const [role, setRole] = useState<UserRole>('security_guard');
+  const [selectedShops, setSelectedShops] = useState<Shop[]>([]);
+  const [primaryShopId, setPrimaryShopId] = useState<string | undefined>();
+  const [shopSelectionOpen, setShopSelectionOpen] = useState(false);
   const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null);
+  const networkStatus = useNetworkStatus();
 
   const { mutate, isPending, isError, error } = useCreateUser();
 
   function resetForm(): void {
     setFullName('');
-    setRole('employee');
-    setShopIds([]);
+    setRole('security_guard');
+    setSelectedShops([]);
+    setPrimaryShopId(undefined);
     setCreatedUser(null);
-  }
-
-  function toggleShop(shopId: string): void {
-    setShopIds((prev) =>
-      prev.includes(shopId) ? prev.filter((id) => id !== shopId) : [...prev, shopId],
-    );
-  }
-
-  function setPrimaryShop(shopId: string): void {
-    setShopIds((prev) =>
-      prev.includes(shopId) ? [shopId, ...prev.filter((id) => id !== shopId)] : prev,
-    );
   }
 
   if (createdUser) {
     return (
       <CreatedUserResult
         user={createdUser}
-        shopIds={shopIds}
+        shops={selectedShops}
         onCreateMore={resetForm}
-        onDone={() => router.replace('/users')}
+        onDone={() => router.dismissTo('/users')}
       />
     );
   }
 
-  const needsShop = role !== 'admin';
-  const isValid = fullName.trim().length >= 2 && (!needsShop || shopIds.length > 0);
+  const needsShop = role !== 'admin' && role !== 'route_setter';
+  const isValid = fullName.trim().length >= 2 && (!needsShop || selectedShops.length > 0);
 
   function handleSubmit(): void {
-    if (!isValid || isPending) {
+    if (!isValid || isPending || networkStatus !== 'online') {
       return;
     }
     mutate(
       {
         fullName: fullName.trim(),
         role,
-        shopId: needsShop ? shopIds[0] : undefined,
-        shopIds: needsShop ? shopIds : undefined,
+        isUniversalRouteSetter: role === 'route_setter',
+        shopId: needsShop ? (primaryShopId ?? selectedShops[0]?.id) : undefined,
+        shopIds: needsShop ? selectedShops.map((shop) => shop.id) : undefined,
       },
       { onSuccess: setCreatedUser },
     );
@@ -100,14 +88,14 @@ export default function CreateUserScreen(): React.ReactElement {
     <Screen padded={false}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.topArea}>
           <Header onBack={() => router.back()} />
           <FormHeader
-            icon="person-add"
+            icon="person-outline"
             title="Новый пользователь"
-            subtitle="Создание сотрудника, выдача ключа"
+            subtitle="Создайте сотрудника и выдайте ключ"
           />
 
           <TextField
@@ -121,70 +109,96 @@ export default function CreateUserScreen(): React.ReactElement {
           />
 
           <View style={styles.gapLg}>
-            <FieldLabel label="Роль" required />
-            <SegmentedControl options={ROLE_SEGMENTS} value={role} onChange={setRole} />
+            <Select
+              label="Роль"
+              required
+              icon="shield-checkmark-outline"
+              value={role}
+              title="Роль пользователя"
+              options={ROLE_OPTIONS}
+              onChange={(value) => setRole(value as UserRole)}
+            />
           </View>
 
           {needsShop ? (
             <View style={styles.gapLg}>
-              <FieldLabel label="Магазины" required />
+              <ShopSelectionField
+                selectedShops={selectedShops}
+                primaryShopId={primaryShopId}
+                required
+                onPress={() => setShopSelectionOpen(true)}
+              />
             </View>
           ) : null}
         </View>
 
+        <View style={styles.flex} />
+
         {needsShop ? (
-          <View style={styles.shopArea}>
-            <ShopMultiSelectList
-              selectedIds={shopIds}
-              onToggle={toggleShop}
-              onSetPrimary={setPrimaryShop}
-            />
+          <View style={styles.noticeWrap}>
+            <View style={styles.accessNotice}>
+              <Ionicons name="information-circle-outline" size={22} color={colors.primary} />
+              <AppText variant="body" style={styles.accessNoticeText}>
+                Пользователь получит доступ только к выбранным магазинам
+              </AppText>
+            </View>
           </View>
-        ) : (
-          <View style={styles.flex} />
-        )}
+        ) : null}
 
         <View style={styles.footer}>
+          {networkStatus === 'offline' ? (
+            <AppText variant="caption" color={colors.warning} style={styles.footerError}>
+              Для создания пользователя требуется подключение к интернету.
+            </AppText>
+          ) : null}
           {isError ? (
             <AppText variant="caption" color={colors.danger} style={styles.footerError}>
               {describeError(error)}
             </AppText>
           ) : null}
-          <Button
+          <SubmitButton
             label="Создать пользователя"
-            icon="checkmark-circle-outline"
             onPress={handleSubmit}
             loading={isPending}
-            disabled={!isValid}
+            disabled={!isValid || networkStatus !== 'online'}
           />
         </View>
       </KeyboardAvoidingView>
+
+      <ShopSelectionModal
+        visible={shopSelectionOpen}
+        selectedShops={selectedShops}
+        primaryShopId={primaryShopId}
+        required
+        onClose={() => setShopSelectionOpen(false)}
+        onApply={(selection) => {
+          setSelectedShops(selection.shops);
+          setPrimaryShopId(selection.primaryShopId);
+          setShopSelectionOpen(false);
+        }}
+      />
     </Screen>
   );
 }
 
 function CreatedUserResult({
   user,
-  shopIds,
+  shops,
   onCreateMore,
   onDone,
 }: {
   user: CreatedUser;
-  shopIds: string[];
+  shops: Shop[];
   onCreateMore: () => void;
   onDone: () => void;
 }): React.ReactElement {
-  const shops = useShopsByIds(shopIds);
   const [copied, setCopied] = useState(false);
 
   const accessKey = user.accessKey ?? '—';
   const assignedNames = shops.map((shop) => shop.name);
-  const shopsLabel =
-    assignedNames.length === 0
-      ? ''
-      : assignedNames.length === 1
-        ? `Магазин: ${assignedNames[0]}`
-        : `Магазины: ${assignedNames.join(', ')}`;
+  const visibleShopNames = assignedNames.slice(0, 4);
+  const hiddenShopCount = assignedNames.length - visibleShopNames.length;
+  const shopsSummary = `${visibleShopNames.join(', ')}${hiddenShopCount > 0 ? `, и ещё ${hiddenShopCount}` : ''}`;
 
   async function handleCopy(): Promise<void> {
     try {
@@ -215,61 +229,83 @@ function CreatedUserResult({
             onPress={() => void handleShare()}
           />
           <View style={styles.gapMd}>
-            <Button
-              label="Создать ещё"
-              variant="secondary"
-              icon="person-add-outline"
-              onPress={onCreateMore}
-            />
+            <Button label="Создать ещё" onPress={onCreateMore} />
           </View>
           <View style={styles.gapSm}>
-            <Button label="Готово" variant="ghost" onPress={onDone} />
+            <Button label="Готово" icon="checkmark-outline" variant="ghost" onPress={onDone} />
           </View>
         </>
       }
     >
       <ResultHeader
         icon="checkmark"
-          iconColor={colors.success}
-          iconBackground={colors.successBackground}
-          title="Пользователь создан!"
-          subtitle="Сотрудник может войти в систему"
-        />
+        iconColor={colors.success}
+        iconBackground={colors.successBackground}
+        title="Пользователь создан!"
+        subtitle="Сотрудник может войти в систему"
+        celebration
+      />
 
-        <View style={styles.infoCard}>
-          <AppText variant="heading">{user.fullName}</AppText>
-          <AppText variant="caption" muted style={styles.gapXs}>
-            {roleLabel(user.role)}
-          </AppText>
-          {shopsLabel ? (
-            <AppText variant="caption" muted style={styles.gapXs}>
-              {shopsLabel}
+      <Card style={styles.userCard}>
+        <View style={styles.userHeading}>
+          <View style={styles.userIcon}>
+            <Ionicons name="person-outline" size={24} color={colors.primary} />
+          </View>
+          <View style={styles.userInfo}>
+            <AppText variant="heading" numberOfLines={2}>
+              {user.fullName}
             </AppText>
-          ) : null}
+            <AppText variant="body" muted style={styles.userRole}>
+              {roleLabel(user.role)}
+            </AppText>
+          </View>
         </View>
+        {shopsSummary ? (
+          <View style={styles.assignedShops}>
+            <AppText variant="caption" muted>
+              Магазины:
+            </AppText>
+            <AppText variant="body" style={styles.assignedShopNames}>
+              {shopsSummary}
+            </AppText>
+          </View>
+        ) : null}
+      </Card>
 
-        <View style={[styles.infoCard, styles.gapLg]}>
-          <AppText variant="caption" muted>
-            Ключ доступа
-          </AppText>
-          <AppText variant="title" selectable style={styles.keyValue}>
-            {accessKey}
-          </AppText>
+      <Card style={styles.keyCard}>
+        <View style={styles.keyHeading}>
+          <View style={styles.keyIcon}>
+            <Ionicons name="key-outline" size={25} color={colors.success} />
+          </View>
+          <View style={styles.keyContent}>
+            <AppText variant="caption" muted>
+              Ключ доступа
+            </AppText>
+            <AppText variant="title" selectable numberOfLines={2} style={styles.keyValue}>
+              {accessKey}
+            </AppText>
+          </View>
+        </View>
+        <View style={styles.keyActions}>
           <TouchableOpacity
             style={styles.copyLink}
             onPress={() => void handleCopy()}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={copied ? 'checkmark' : 'copy-outline'}
+              name={copied ? 'checkmark' : 'clipboard-outline'}
               size={16}
               color={colors.primary}
             />
             <AppText variant="label" color={colors.primary} style={styles.copyLinkText}>
-              {copied ? 'Скопировано' : 'Скопировать'}
+              {copied ? 'Ключ скопирован' : 'Скопировать ключ'}
             </AppText>
           </TouchableOpacity>
+          <AppText variant="caption" muted style={styles.keyHint}>
+            Передайте этот ключ сотруднику
+          </AppText>
         </View>
+      </Card>
     </ResultScreen>
   );
 }
@@ -279,35 +315,97 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topArea: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
   },
-  shopArea: {
+  noticeWrap: {
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: spacing.sm,
+  },
+  accessNotice: {
+    alignItems: 'center',
+    backgroundColor: colors.controlSurface,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  accessNoticeText: {
     flex: 1,
-    paddingHorizontal: spacing.xl,
+    marginLeft: spacing.md,
   },
   footer: {
     backgroundColor: colors.background,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingBottom: screenInsets.actionFooterBottom,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.actionFooterTop,
   },
   footerError: {
     marginBottom: spacing.sm,
   },
-  infoCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
+  userCard: {
     padding: spacing.lg,
   },
+  userHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  userIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.iconBlueBackground,
+    borderRadius: radius.sm,
+    height: 48,
+    justifyContent: 'center',
+    marginRight: spacing.lg,
+    width: 48,
+  },
+  userInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  userRole: {
+    marginTop: spacing.xs,
+  },
+  assignedShops: {
+    marginLeft: 48 + spacing.lg,
+    marginTop: spacing.lg,
+  },
+  assignedShopNames: {
+    marginTop: spacing.xs,
+  },
+  keyCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+  },
+  keyHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  keyIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.successBackground,
+    borderRadius: radius.sm,
+    height: 48,
+    justifyContent: 'center',
+    marginRight: spacing.lg,
+    width: 48,
+  },
+  keyContent: {
+    flex: 1,
+    minWidth: 0,
+  },
   keyValue: {
-    letterSpacing: 2,
-    marginBottom: spacing.md,
     marginTop: spacing.sm,
+  },
+  keyActions: {
+    borderTopColor: colors.border,
+    borderStyle: 'dashed',
+    borderTopWidth: 1,
+    marginLeft: 48 + spacing.lg,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
   },
   copyLink: {
     alignItems: 'center',
@@ -317,8 +415,8 @@ const styles = StyleSheet.create({
   copyLinkText: {
     marginLeft: spacing.xs,
   },
-  gapXs: {
-    marginTop: spacing.xs,
+  keyHint: {
+    marginTop: spacing.sm,
   },
   gapSm: {
     marginTop: spacing.sm,
@@ -328,8 +426,5 @@ const styles = StyleSheet.create({
   },
   gapLg: {
     marginTop: spacing.lg,
-  },
-  gapXl: {
-    marginTop: spacing.xl,
   },
 });

@@ -1,54 +1,136 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { memo } from 'react';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { PatrolSchedule } from '@/api/types';
 import { formatScheduleTime, formatWeekdays } from '@/features/schedules/format';
-import { colors, spacing } from '@/theme';
-import { AppText, Badge, Card } from '@/ui';
+import { colors, radius, spacing } from '@/theme';
+import { AppText } from '@/ui';
 
 type ScheduleCardProps = {
   schedule: PatrolSchedule;
+  routeName?: string;
   onPress: () => void;
 };
 
-export function ScheduleCard({ schedule, onPress }: ScheduleCardProps): React.ReactElement {
+function ScheduleCardComponent({
+  schedule,
+  routeName,
+  onPress,
+}: ScheduleCardProps): React.ReactElement {
+  const inactive = !schedule.isActive;
+  const statusColor = schedule.isActive ? colors.success : colors.danger;
+
   return (
-    <Card style={styles.card} onPress={onPress}>
-      <View style={styles.row}>
-        <View style={styles.info}>
-          <AppText variant="label">{schedule.name}</AppText>
-          <AppText variant="caption" muted style={styles.meta}>
-            {formatScheduleTime(schedule.startTime)}–{formatScheduleTime(schedule.endTime)} ·{' '}
-            {formatWeekdays(schedule.weekdays)}
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.icon, inactive && styles.iconInactive]}>
+        <Ionicons
+          name="calendar-outline"
+          size={22}
+          color={inactive ? colors.danger : colors.primary}
+        />
+      </View>
+
+      <View style={styles.info}>
+        <AppText
+          variant="label"
+          color={inactive ? colors.textMuted : colors.text}
+          numberOfLines={2}
+        >
+          {schedule.name}
+        </AppText>
+        <AppText variant="caption" muted numberOfLines={2} style={styles.meta}>
+          {formatScheduleTime(schedule.startTime)}–{formatScheduleTime(schedule.endTime)} ·{' '}
+          {formatWeekdays(schedule.weekdays)}
+        </AppText>
+        <View style={styles.detailRow}>
+          <Ionicons name="git-network-outline" size={15} color={colors.textMuted} />
+          <AppText variant="caption" muted numberOfLines={1} style={styles.detailText}>
+            {routeName ?? 'Маршрут не указан'}
           </AppText>
-          {!schedule.isActive ? (
-            <View style={styles.statusRow}>
-              <Badge label="Отключено" tone="neutral" />
-            </View>
-          ) : null}
+        </View>
+        <View style={styles.detailRow}>
+          <Ionicons name="timer-outline" size={15} color={colors.textMuted} />
+          <AppText variant="caption" muted numberOfLines={1} style={styles.detailText}>
+            {schedule.earlyStartMinutes > 0
+              ? `Доступно за ${schedule.earlyStartMinutes} мин.`
+              : 'Без раннего старта'}
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.right}>
+        <View style={styles.statusRow}>
+          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+          <AppText variant="caption" color={statusColor} numberOfLines={1} style={styles.statusText}>
+            {schedule.isActive ? 'Активно' : 'Отключено'}
+          </AppText>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       </View>
-    </Card>
+    </TouchableOpacity>
   );
 }
 
+export const ScheduleCard = memo(ScheduleCardComponent);
+
 const styles = StyleSheet.create({
   card: {
-    marginBottom: spacing.md,
-  },
-  row: {
     alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
     flexDirection: 'row',
+    marginBottom: spacing.md,
+    minHeight: 132,
+    padding: spacing.md,
+  },
+  icon: {
+    alignItems: 'center',
+    backgroundColor: colors.iconBlueBackground,
+    borderRadius: radius.sm,
+    height: 44,
+    justifyContent: 'center',
+    marginRight: spacing.md,
+    width: 44,
+  },
+  iconInactive: {
+    backgroundColor: colors.dangerSurface,
   },
   info: {
     flex: 1,
     marginRight: spacing.md,
+    minWidth: 0,
   },
   meta: {
     marginTop: spacing.xs,
   },
-  statusRow: {
+  detailRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
     marginTop: spacing.sm,
+  },
+  detailText: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  right: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  statusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginRight: spacing.sm,
+  },
+  dot: {
+    borderRadius: 4,
+    height: 8,
+    marginRight: spacing.xs,
+    width: 8,
+  },
+  statusText: {
+    fontWeight: '600',
   },
 });

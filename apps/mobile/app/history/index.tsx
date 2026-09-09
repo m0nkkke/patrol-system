@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet } from 'react-native';
 
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets } from '@/theme';
 import { Header, MenuItem, Screen } from '@/ui';
 
 export default function HistoryChooserScreen(): React.ReactElement {
@@ -38,8 +38,8 @@ export default function HistoryChooserScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   scroll: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
+    paddingBottom: screenInsets.bottom,
   },
 });

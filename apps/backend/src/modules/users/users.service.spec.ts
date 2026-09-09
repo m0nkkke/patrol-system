@@ -1,5 +1,6 @@
 import { CreateUserDto } from '@patrol/shared';
 
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { EntityNotFoundError } from '../../common/errors/not-found.error';
 import { SessionRevocationService } from '../auth/sessions/session-revocation.service';
 import { ShopsService } from '../shops/shops.service';
@@ -11,7 +12,7 @@ type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
 type SessionRevocationServiceMock = Pick<SessionRevocationService, 'revokeUserSessions'>;
 type UsersRepositoryMock = Pick<
   UsersRepository,
-  'assignShops' | 'create' | 'findById' | 'softDelete' | 'update'
+  'assignShops' | 'countActiveAdmins' | 'create' | 'findById' | 'softDelete' | 'update'
 >;
 
 describe('UsersService', () => {
@@ -29,6 +30,7 @@ describe('UsersService', () => {
     };
     usersRepository = {
       assignShops: jest.fn(),
+      countActiveAdmins: jest.fn(),
       create: jest.fn(),
       findById: jest.fn(),
       softDelete: jest.fn(),
@@ -207,10 +209,49 @@ describe('UsersService', () => {
     } as UserEntity;
     usersRepository.findById.mockResolvedValue(user);
 
-    await service.delete('user-id');
+    await service.delete('user-id', createActor());
 
     expect(usersRepository.update).toHaveBeenCalledWith('user-id', { sessionVersion: 7 });
     expect(usersRepository.softDelete).toHaveBeenCalledWith('user-id');
     expect(sessionRevocationService.revokeUserSessions).toHaveBeenCalledWith('user-id');
   });
+
+  it('rejects deleting the current administrator account', async () => {
+    await expect(service.delete('admin-id', createActor())).rejects.toMatchObject({
+      code: 'USER_SELF_DELETE_FORBIDDEN',
+    });
+
+    expect(usersRepository.findById).not.toHaveBeenCalled();
+    expect(usersRepository.softDelete).not.toHaveBeenCalled();
+  });
+
+  it('rejects deleting the last active administrator', async () => {
+    usersRepository.findById.mockResolvedValue({
+      createdAt: new Date(),
+      fullName: 'Last administrator',
+      id: 'last-admin-id',
+      isActive: true,
+      passwordHash: 'hash',
+      role: 'admin',
+      sessionVersion: 0,
+      updatedAt: new Date(),
+      username: 'last.admin',
+    } as UserEntity);
+    usersRepository.countActiveAdmins.mockResolvedValue(1);
+
+    await expect(
+      service.delete('last-admin-id', createActor()),
+    ).rejects.toMatchObject({ code: 'USER_LAST_ACTIVE_ADMIN' });
+
+    expect(usersRepository.softDelete).not.toHaveBeenCalled();
+  });
 });
+
+function createActor(): AuthenticatedUser {
+  return {
+    fullName: 'Current administrator',
+    id: 'admin-id',
+    role: 'admin',
+    username: 'current.admin',
+  };
+}

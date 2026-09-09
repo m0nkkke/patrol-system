@@ -4,6 +4,7 @@ const KEYS = {
   accessToken: 'patrol.accessToken',
   refreshToken: 'patrol.refreshToken',
   deviceId: 'patrol.deviceId',
+  selectedShopId: 'patrol.selectedShopId',
 } as const;
 
 type StorageKey = (typeof KEYS)[keyof typeof KEYS];
@@ -43,6 +44,18 @@ export const secureStorage = {
   async clearTokens(): Promise<void> {
     await removeItem(KEYS.accessToken);
     await removeItem(KEYS.refreshToken);
+  },
+
+  getSelectedShopId(): Promise<string | null> {
+    return getItem(KEYS.selectedShopId);
+  },
+
+  async saveSelectedShopId(shopId: string): Promise<void> {
+    await setItem(KEYS.selectedShopId, shopId);
+  },
+
+  async clearSelectedShopId(): Promise<void> {
+    await removeItem(KEYS.selectedShopId);
   },
 
   getDeviceId(): Promise<string | null> {

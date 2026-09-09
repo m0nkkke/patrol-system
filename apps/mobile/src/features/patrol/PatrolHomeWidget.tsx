@@ -2,125 +2,76 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { describeError } from '@/api/error-messages';
-import { PlannedScheduleList } from '@/features/patrol/PlannedScheduleList';
+import { PatrolStartPanel } from '@/features/patrol/PatrolStartPanel';
 import { requestSync } from '@/features/patrol/offline/sync-manager';
 import { usePendingEventCount } from '@/features/patrol/offline/use-pending-events';
-import { useActivePatrol, useAvailableSchedules, useStartPatrol } from '@/features/patrol/queries';
+import { useActivePatrol } from '@/features/patrol/queries';
 import { formatScheduleTime } from '@/features/schedules/format';
-import { colors, radius, spacing } from '@/theme';
-import { AppText, Button, Card } from '@/ui';
+import { appIcons, colors, radius, spacing } from '@/theme';
+import { AppText, Button, Card, EntityIcon, ProgressBar, StatusLabel } from '@/ui';
 
-export function PatrolHomeWidget(): React.ReactElement {
+export function PatrolHomeWidget({ shopId }: { shopId: string }): React.ReactElement {
   const router = useRouter();
   const active = useActivePatrol();
-  const schedules = useAvailableSchedules();
-  const start = useStartPatrol();
   const pending = usePendingEventCount();
 
-  const pendingBar = pending > 0 ? <PendingSyncBar count={pending} /> : null;
-  const scheduleItems = schedules.data ?? [];
-  const current = scheduleItems.find((schedule) => schedule.isAvailable);
-  const planned = scheduleItems.filter((schedule) => !schedule.isAvailable);
-
-  let body: React.ReactElement;
-  if (active.isPending || schedules.isPending) {
-    body = (
-      <Card>
+  if (active.isPending) {
+    return (
+      <Card style={styles.activeCard}>
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
       </Card>
     );
-  } else if (active.data) {
-    body = (
-      <Card>
-        <AppText variant="label">Обход идет</AppText>
-        <AppText variant="caption" muted style={styles.gapSm}>
-          Отмечено {active.data.scannedPoints} из {active.data.totalPoints} точек
-        </AppText>
-        <View style={styles.gapLg}>
-          <Button
-            label="Продолжить обход"
-            icon="walk-outline"
-            onPress={() => router.replace('/patrol')}
-          />
-        </View>
-      </Card>
-    );
-  } else if (!current) {
-    body = (
-      <Card>
-        <AppText variant="label">Обход пока недоступен</AppText>
-        <AppText variant="caption" muted style={styles.gapSm}>
-          Ближайшие плановые обходы:
-        </AppText>
-        <PlannedScheduleList schedules={planned.length > 0 ? planned : scheduleItems} />
-        {scheduleItems.length === 0 ? (
-          <AppText variant="caption" muted style={styles.gapSm}>
-            Плановых обходов пока нет.
-          </AppText>
-        ) : null}
-        {schedules.isError ? (
-          <AppText variant="caption" color={colors.danger} style={styles.gapSm}>
-            {describeError(schedules.error)}
-          </AppText>
-        ) : null}
-        <View style={styles.gapLg}>
-          <Button label="Начать обход" disabled onPress={() => undefined} />
-        </View>
-        <View style={styles.gapSm}>
-          <Button
-            label="Обновить"
-            icon="refresh-outline"
-            variant="secondary"
-            onPress={() => void schedules.refetch()}
-            loading={schedules.isFetching}
-          />
-        </View>
-      </Card>
-    );
-  } else {
-    body = (
-      <Card>
-        <AppText variant="label">{current.name}</AppText>
-        <View style={styles.windowRow}>
-          <Ionicons name="time-outline" size={15} color={colors.textMuted} />
-          <AppText variant="caption" muted style={styles.windowText}>
-            Доступно с {formatScheduleTime(current.startTime)} до{' '}
-            {formatScheduleTime(current.endTime)}
-          </AppText>
-        </View>
-        {start.isError ? (
-          <AppText variant="caption" color={colors.danger} style={styles.gapSm}>
-            {describeError(start.error)}
-          </AppText>
-        ) : null}
-        <View style={styles.gapLg}>
-          <Button
-            label="Начать обход"
-            onPress={() =>
-              start.mutate(current.id, { onSuccess: () => router.replace('/patrol') })
-            }
-            loading={start.isPending}
-          />
-        </View>
-        <View style={styles.gapSm}>
-          <Button
-            label="Обновить"
-            icon="refresh-outline"
-            variant="secondary"
-            onPress={() => void schedules.refetch()}
-            loading={schedules.isFetching}
-          />
-        </View>
-      </Card>
-    );
   }
+
+  const body = active.data ? (
+    <Card style={styles.activeCard}>
+      <View style={styles.activeHeader}>
+        <EntityIcon icon={appIcons.patrol} />
+        <View style={styles.activeCopy}>
+          <AppText variant="label">Обход выполняется</AppText>
+          <AppText variant="caption" muted style={styles.gapXs}>
+            {active.data.schedule?.name ?? active.data.shop?.name ?? 'Текущий маршрут'}
+          </AppText>
+        </View>
+        <StatusLabel label="Идёт" tone="success" />
+      </View>
+
+      <View style={styles.progressHeader}>
+        <AppText variant="caption" muted>
+          Прогресс маршрута
+        </AppText>
+        <AppText variant="caption">
+          {active.data.scannedPoints} из {active.data.totalPoints}
+        </AppText>
+      </View>
+      <ProgressBar value={active.data.scannedPoints} max={active.data.totalPoints} />
+
+      {active.data.schedule ? (
+        <View style={styles.dueRow}>
+          <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+          <AppText variant="caption" muted style={styles.dueText}>
+            Завершить до {formatScheduleTime(active.data.schedule.endTime)}
+          </AppText>
+        </View>
+      ) : null}
+
+      <View style={styles.primaryAction}>
+        <Button
+          label="Продолжить обход"
+          icon={appIcons.patrol}
+          onPress={() => router.replace('/patrol')}
+        />
+      </View>
+    </Card>
+  ) : (
+    <PatrolStartPanel shopId={shopId} onStarted={() => router.replace('/patrol')} />
+  );
 
   return (
     <View>
-      {pendingBar}
+      {pending > 0 ? <PendingSyncBar count={pending} /> : null}
       {body}
     </View>
   );
@@ -128,11 +79,22 @@ export function PatrolHomeWidget(): React.ReactElement {
 
 function PendingSyncBar({ count }: { count: number }): React.ReactElement {
   return (
-    <TouchableOpacity style={styles.pendingBar} onPress={() => requestSync()} activeOpacity={0.7}>
-      <Ionicons name="cloud-upload-outline" size={16} color={colors.warning} />
-      <AppText variant="caption" color={colors.warning} style={styles.pendingText}>
-        Не отправлено сканов: {count} - нажмите для синхронизации
-      </AppText>
+    <TouchableOpacity
+      accessibilityRole="button"
+      style={styles.pendingBar}
+      onPress={() => requestSync()}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="cloud-upload-outline" size={18} color={colors.warning} />
+      <View style={styles.pendingCopy}>
+        <AppText variant="caption" color={colors.warning} style={styles.pendingTitle}>
+          Ожидает отправки: {count}
+        </AppText>
+        <AppText variant="caption" muted style={styles.pendingSubtitle}>
+          Нажмите, чтобы повторить синхронизацию
+        </AppText>
+      </View>
+      <Ionicons name="refresh" size={18} color={colors.warning} />
     </TouchableOpacity>
   );
 }
@@ -142,19 +104,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.lg,
   },
-  gapSm: {
-    marginTop: spacing.sm,
+  activeCard: {
+    padding: spacing.lg,
   },
-  gapLg: {
+  activeHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  activeCopy: {
+    flex: 1,
+    marginHorizontal: spacing.md,
+    minWidth: 0,
+  },
+  gapXs: {
+    marginTop: spacing.xs,
+  },
+  progressHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
     marginTop: spacing.lg,
   },
-  windowRow: {
+  dueRow: {
     alignItems: 'center',
     flexDirection: 'row',
     marginTop: spacing.sm,
   },
-  windowText: {
+  dueText: {
     marginLeft: spacing.xs,
+  },
+  primaryAction: {
+    marginTop: spacing.lg,
   },
   pendingBar: {
     alignItems: 'center',
@@ -165,8 +146,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  pendingText: {
+  pendingCopy: {
     flex: 1,
-    marginLeft: spacing.sm,
+    marginHorizontal: spacing.sm,
+  },
+  pendingTitle: {
+    fontWeight: '600',
+  },
+  pendingSubtitle: {
+    marginTop: 2,
   },
 });

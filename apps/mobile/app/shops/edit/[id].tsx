@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,26 +11,20 @@ import {
 import { describeError } from '@/api/error-messages';
 import { useShop, useUpdateShop } from '@/features/route-setup/queries';
 import { RUSSIAN_TIMEZONES, timezoneCurrentTime } from '@/lib/timezones';
-import { colors, spacing } from '@/theme';
+import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
-  Button,
-  FieldLabel,
+  AsyncStateScreen,
+  CancelButton,
   FormHeader,
   Header,
+  InfoCallout,
   Screen,
-  SegmentedControl,
-  type SegmentOption,
   Select,
+  StatusToggleCard,
+  SubmitButton,
   TextField,
 } from '@/ui';
-
-type StatusValue = 'active' | 'inactive';
-
-const STATUS_SEGMENTS: SegmentOption<StatusValue>[] = [
-  { value: 'active', label: 'Активен', icon: 'checkmark-circle-outline' },
-  { value: 'inactive', label: 'Неактивен', icon: 'close-circle-outline' },
-];
 
 export default function EditShopScreen(): React.ReactElement {
   const router = useRouter();
@@ -43,7 +36,7 @@ export default function EditShopScreen(): React.ReactElement {
   const [externalId, setExternalId] = useState('');
   const [address, setAddress] = useState('');
   const [timezone, setTimezone] = useState('Asia/Irkutsk');
-  const [status, setStatus] = useState<StatusValue>('active');
+  const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
     if (shop) {
@@ -51,7 +44,7 @@ export default function EditShopScreen(): React.ReactElement {
       setExternalId(shop.externalId ?? '');
       setAddress(shop.address ?? '');
       setTimezone(shop.timezone);
-      setStatus(shop.isActive ? 'active' : 'inactive');
+      setIsActive(shop.isActive);
     }
   }, [shop]);
 
@@ -69,21 +62,16 @@ export default function EditShopScreen(): React.ReactElement {
   );
 
   if (isPending) {
-    return (
-      <Screen centered>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </Screen>
-    );
+    return <AsyncStateScreen loading onBack={() => router.back()} />;
   }
 
   if (isError || !shop) {
     return (
-      <Screen centered>
-        <AppText muted style={styles.centerText}>
-          {describeError(error)}
-        </AppText>
-        <Button label="Повторить" variant="secondary" onPress={() => void refetch()} />
-      </Screen>
+      <AsyncStateScreen
+        message={describeError(error)}
+        onBack={() => router.back()}
+        onRetry={() => void refetch()}
+      />
     );
   }
 
@@ -99,7 +87,7 @@ export default function EditShopScreen(): React.ReactElement {
         externalId: externalId.trim() || undefined,
         address: address.trim() || undefined,
         timezone,
-        isActive: status === 'active',
+        isActive,
       },
       { onSuccess: () => router.back() },
     );
@@ -109,11 +97,15 @@ export default function EditShopScreen(): React.ReactElement {
     <Screen padded={false}>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <Header onBack={() => router.back()} />
-          <FormHeader icon="business" title="Редактирование" subtitle="Изменение данных магазина" />
+          <Header onBack={() => router.back()} right={<View />} />
+          <FormHeader
+            icon="storefront-outline"
+            title="Редактирование"
+            subtitle="Изменение данных магазина"
+          />
 
           <TextField
             label="Название"
@@ -127,7 +119,7 @@ export default function EditShopScreen(): React.ReactElement {
           <View style={styles.gapLg}>
             <TextField
               label="ID магазина"
-              icon="pricetag-outline"
+              iconText="ID"
               value={externalId}
               onChangeText={setExternalId}
               placeholder="00234343"
@@ -141,7 +133,7 @@ export default function EditShopScreen(): React.ReactElement {
               icon="location-outline"
               value={address}
               onChangeText={setAddress}
-              placeholder="Красноярск, ул. Мира, 1"
+              placeholder="Улан-Удэ, ул. Ленина, 1"
             />
           </View>
           <View style={styles.gapLg}>
@@ -152,12 +144,18 @@ export default function EditShopScreen(): React.ReactElement {
               value={timezone}
               options={timezoneOptions}
               onChange={setTimezone}
-              searchable
             />
           </View>
           <View style={styles.gapLg}>
-            <FieldLabel label="Статус" />
-            <SegmentedControl options={STATUS_SEGMENTS} value={status} onChange={setStatus} />
+            <StatusToggleCard
+              label="Статус магазина"
+              value={isActive}
+              onChange={setIsActive}
+              activeLabel="Магазин активен"
+              inactiveLabel="Магазин неактивен"
+              activeDescription="Магазин доступен назначенным пользователям"
+              inactiveDescription="Неактивный магазин недоступен пользователям"
+            />
           </View>
 
           {isSaveError ? (
@@ -166,14 +164,20 @@ export default function EditShopScreen(): React.ReactElement {
             </AppText>
           ) : null}
 
-          <View style={styles.gapXl}>
-            <Button
-              label="Сохранить"
-              icon="checkmark-circle-outline"
+          <View style={styles.info}>
+            <InfoCallout text="История изменений сохраняется в системе" />
+          </View>
+
+          <View style={styles.actions}>
+            <SubmitButton
+              label="Сохранить изменения"
               onPress={handleSubmit}
               loading={isSaving}
               disabled={!isValid}
             />
+            <View style={styles.cancelButton}>
+              <CancelButton onPress={() => router.back()} />
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -186,9 +190,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scroll: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xxl,
+    paddingHorizontal: screenInsets.horizontal,
+    paddingTop: screenInsets.top,
+    paddingBottom: screenInsets.bottom,
   },
   centerText: {
     marginBottom: spacing.lg,
@@ -197,7 +201,13 @@ const styles = StyleSheet.create({
   gapLg: {
     marginTop: spacing.lg,
   },
-  gapXl: {
+  info: {
     marginTop: spacing.xl,
+  },
+  actions: {
+    marginTop: spacing.lg,
+  },
+  cancelButton: {
+    marginTop: spacing.md,
   },
 });

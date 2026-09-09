@@ -21,6 +21,7 @@ export class ControlStaffRepository {
       .distinct(true)
       .leftJoinAndSelect('user.shop', 'primaryShop')
       .leftJoinAndSelect('user.shops', 'assignedShop')
+      .andWhere('user.role != :excludedInspectorRole', { excludedInspectorRole: 'inspector' })
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 

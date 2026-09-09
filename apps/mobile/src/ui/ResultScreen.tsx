@@ -6,7 +6,7 @@ import { Header } from './Header';
 import { Screen } from './Screen';
 
 type ResultScreenProps = {
-  onBack: () => void;
+  onBack?: () => void;
   children: React.ReactNode;
   footer: React.ReactNode;
 };
@@ -27,19 +27,19 @@ export function ResultScreen({ onBack, children, footer }: ResultScreenProps): R
 
 const styles = StyleSheet.create({
   headerWrap: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
   },
   scroll: {
     flex: 1,
   },
   content: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
   },
   footer: {
     paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
   },
 });

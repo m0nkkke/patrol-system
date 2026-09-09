@@ -1,4 +1,27 @@
+name: patrol-system-prod
+
 services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -13,6 +36,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - data
 
   redis:
     image: redis:7-alpine
@@ -27,6 +52,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - data
 
   backend:
     build:
@@ -35,8 +62,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.production
-    ports:
-      - "127.0.0.1:3000:3000"
+    expose:
+      - "3000"
     volumes:
       - backend_storage:/app/storage
     depends_on:
@@ -44,6 +71,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - edge
+      - data
     healthcheck:
       test:
         [
@@ -59,3 +89,8 @@ volumes:
   backend_storage:
   postgres_data:
   redis_data:
+
+networks:
+  edge:
+  data:
+    internal: true

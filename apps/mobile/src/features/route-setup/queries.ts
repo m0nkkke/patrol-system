@@ -18,7 +18,7 @@ import {
   scanRoutePoint,
   startRouteSetup,
 } from '@/api/route-setup.api';
-import { getShop, getShops, updateShop } from '@/api/shops.api';
+import { deleteShop, getShop, getShops, updateShop } from '@/api/shops.api';
 import type { Shop } from '@/api/types';
 import { PAGE_SIZE, useInfinitePaginated } from '@/api/use-infinite-paginated';
 
@@ -32,6 +32,10 @@ function routeSetupKey(shopId: string): [string, string] {
 function invalidateShopLists(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: SHOPS_KEY });
   void queryClient.invalidateQueries({ queryKey: SHOPS_INFINITE_KEY });
+}
+
+function invalidateShopPatrolPoints(queryClient: QueryClient, shopId: string): void {
+  void queryClient.invalidateQueries({ queryKey: ['shop-patrol-points', shopId] });
 }
 
 export function useInfiniteShops(params: {
@@ -90,6 +94,18 @@ export function useUpdateShop(shopId: string) {
   });
 }
 
+export function useDeleteShop(shopId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => deleteShop(shopId),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['shop', shopId] });
+      invalidateShopLists(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ['mobile-assigned-shops'] });
+    },
+  });
+}
+
 export function useRouteSetup(shopId: string) {
   return useQuery({
     queryKey: routeSetupKey(shopId),
@@ -104,6 +120,7 @@ export function useStartRouteSetup(shopId: string) {
     onSuccess: (state) => {
       queryClient.setQueryData(routeSetupKey(shopId), state);
       invalidateShopLists(queryClient);
+      invalidateShopPatrolPoints(queryClient, shopId);
       void queryClient.invalidateQueries({ queryKey: ['shop', shopId] });
     },
   });
@@ -116,6 +133,7 @@ export function useScanRoutePoint(shopId: string) {
     onSuccess: (state) => {
       queryClient.setQueryData(routeSetupKey(shopId), state);
       invalidateShopLists(queryClient);
+      invalidateShopPatrolPoints(queryClient, shopId);
       void queryClient.invalidateQueries({ queryKey: ['shop', shopId] });
     },
   });
@@ -128,6 +146,7 @@ export function useResetRouteSetup(shopId: string) {
     onSuccess: (state) => {
       queryClient.setQueryData(routeSetupKey(shopId), state);
       invalidateShopLists(queryClient);
+      invalidateShopPatrolPoints(queryClient, shopId);
       void queryClient.invalidateQueries({ queryKey: ['shop', shopId] });
     },
   });

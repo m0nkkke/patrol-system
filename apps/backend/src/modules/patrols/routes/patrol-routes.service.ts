@@ -24,7 +24,7 @@ export class PatrolRoutesService {
     await this.assertPointsBelongToShop(dto.patrolPointIds, dto.shopId);
     assertPointSettingsBelongToRoute(dto.pointSettings, dto.patrolPointIds);
 
-    return this.patrolRoutesRepository.create(
+    const route = await this.patrolRoutesRepository.create(
       {
         category: dto.category,
         isActive: dto.isActive ?? true,
@@ -35,6 +35,9 @@ export class PatrolRoutesService {
       },
       actor,
     );
+    await this.shopsService.recalculateRouteStatus(dto.shopId);
+
+    return route;
   }
 
   async findByShop(shopId: string): Promise<PatrolRouteEntity[]> {
@@ -90,6 +93,7 @@ export class PatrolRoutesService {
       },
       actor,
     );
+    await this.shopsService.recalculateRouteStatus(route.shopId);
 
     return this.findOne(id);
   }

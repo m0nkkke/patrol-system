@@ -1,8 +1,10 @@
 import * as Crypto from 'expo-crypto';
+import type { PatrolScanAction } from '@patrol/shared';
 
 import { getDatabase, PATROL_EVENTS_TABLE } from '@/db';
 
 export type LocalEventInput = {
+  userId: string;
   patrolId: string;
   patrolPointId: string;
   nfcUid: string;
@@ -11,16 +13,18 @@ export type LocalEventInput = {
   lat?: number;
   lng?: number;
   gpsAccuracy?: number;
+  scanAction: PatrolScanAction;
 };
 
 export async function createLocalEvent(input: LocalEventInput): Promise<void> {
   const database = await getDatabase();
   await database.runAsync(
     `INSERT INTO ${PATROL_EVENTS_TABLE}
-       (local_id, patrol_id, patrol_point_id, nfc_uid, scanned_at, device_id, lat, lng, gps_accuracy, queue_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+       (local_id, user_id, patrol_id, patrol_point_id, nfc_uid, scanned_at, device_id, lat, lng, gps_accuracy, scan_action, queue_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
     [
       Crypto.randomUUID(),
+      input.userId,
       input.patrolId,
       input.patrolPointId,
       input.nfcUid,
@@ -29,6 +33,7 @@ export async function createLocalEvent(input: LocalEventInput): Promise<void> {
       input.lat ?? null,
       input.lng ?? null,
       input.gpsAccuracy ?? null,
+      input.scanAction,
     ],
   );
 }

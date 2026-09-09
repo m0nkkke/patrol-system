@@ -125,14 +125,12 @@ export class ShopsService {
       shopId,
       dto.expectedPoints,
     );
-    const status =
-      registeredPoints >= dto.expectedPoints ? RouteStatus.READY : RouteStatus.SETUP_IN_PROGRESS;
-
     await this.shopsRepository.updateRouteSetup(shopId, {
       expectedPoints: dto.expectedPoints,
       registeredPoints,
-      status,
+      status: RouteStatus.SETUP_IN_PROGRESS,
     });
+    await this.recalculateRouteStatus(shopId);
 
     return this.getRouteSetup(shopId);
   }
@@ -193,16 +191,12 @@ export class ShopsService {
       shopId,
       shop.routeExpectedPoints,
     );
-    const status =
-      registeredPoints >= shop.routeExpectedPoints
-        ? RouteStatus.READY
-        : RouteStatus.SETUP_IN_PROGRESS;
-
     await this.shopsRepository.updateRouteSetup(shopId, {
       expectedPoints: shop.routeExpectedPoints,
       registeredPoints,
-      status,
+      status: RouteStatus.SETUP_IN_PROGRESS,
     });
+    await this.recalculateRouteStatus(shopId);
 
     return this.getRouteSetup(shopId);
   }
@@ -217,6 +211,27 @@ export class ShopsService {
     });
 
     return this.getRouteSetup(shopId);
+  }
+
+  async recalculateRouteStatus(shopId: string): Promise<RouteStatus> {
+    const shop = await this.findOne(shopId);
+    const routeState = await this.shopsRepository.findRouteState(shopId);
+    const legacyRouteReady =
+      shop.routeExpectedPoints > 0 &&
+      shop.routeRegisteredPoints >= shop.routeExpectedPoints;
+    const hasUsableRoute = routeState.hasUsableRoute || legacyRouteReady;
+    const status =
+      hasUsableRoute && routeState.hasActiveSchedule
+        ? RouteStatus.READY
+        : routeState.hasActiveRoute || shop.routeExpectedPoints > 0 || routeState.hasActiveSchedule
+          ? RouteStatus.SETUP_IN_PROGRESS
+          : RouteStatus.NOT_CONFIGURED;
+
+    if (status !== shop.routeStatus) {
+      await this.shopsRepository.updateRouteStatus(shopId, status);
+    }
+
+    return status;
   }
 
   private async assertExternalIdAvailable(externalId: string | undefined, currentShopId?: string): Promise<void> {

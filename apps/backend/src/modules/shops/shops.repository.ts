@@ -30,6 +30,12 @@ type UpdateRouteSetupRecord = {
   status: RouteStatus;
 };
 
+export type ShopRouteState = {
+  hasActiveSchedule: boolean;
+  hasActiveRoute: boolean;
+  hasUsableRoute: boolean;
+};
+
 @Injectable()
 export class ShopsRepository {
   constructor(
@@ -98,6 +104,64 @@ export class ShopsRepository {
       routeRegisteredPoints: data.registeredPoints,
       routeStatus: data.status,
     });
+  }
+
+  async findRouteState(id: string): Promise<ShopRouteState> {
+    const states = await this.repo.query<
+      Array<{ hasActiveRoute: boolean; hasActiveSchedule: boolean; hasUsableRoute: boolean }>
+    >(
+      `
+        SELECT
+          EXISTS (
+            SELECT 1
+            FROM patrol_schedules schedule
+            WHERE schedule.shop_id = $1
+              AND schedule.is_active = TRUE
+          ) AS "hasActiveSchedule",
+          EXISTS (
+            SELECT 1
+            FROM patrol_routes route
+            WHERE route.shop_id = $1
+              AND route.is_active = TRUE
+              AND route.deleted_at IS NULL
+          ) AS "hasActiveRoute",
+          EXISTS (
+            SELECT 1
+            FROM patrol_routes route
+            WHERE route.shop_id = $1
+              AND route.is_active = TRUE
+              AND route.deleted_at IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM patrol_route_points route_point
+                WHERE route_point.route_id = route.id
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM patrol_route_points route_point
+                INNER JOIN patrol_points point ON point.id = route_point.patrol_point_id
+                WHERE route_point.route_id = route.id
+                  AND (
+                    point.is_active = FALSE
+                    OR point.deleted_at IS NOT NULL
+                    OR point.nfc_tag_id IS NULL
+                  )
+              )
+          ) AS "hasUsableRoute"
+      `,
+      [id],
+    );
+    const [state] = states;
+
+    return {
+      hasActiveSchedule: state?.hasActiveSchedule === true,
+      hasActiveRoute: state?.hasActiveRoute === true,
+      hasUsableRoute: state?.hasUsableRoute === true,
+    };
+  }
+
+  async updateRouteStatus(id: string, status: RouteStatus): Promise<void> {
+    await this.repo.update(id, { routeStatus: status });
   }
 }
 
