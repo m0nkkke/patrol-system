@@ -4,6 +4,8 @@
     "private": true,
     "scripts": {
         "build": "nest build",
+        "admin:bootstrap": "ts-node -r tsconfig-paths/register src/database/bootstrap-admin.ts",
+        "admin:bootstrap:prod": "node dist/database/bootstrap-admin.js",
         "lint": "eslint \"src/**/*.ts\"",
         "migration:run": "typeorm-ts-node-commonjs -d src/database/data-source.ts migration:run",
         "migration:run:prod": "typeorm -d dist/database/data-source.js migration:run",

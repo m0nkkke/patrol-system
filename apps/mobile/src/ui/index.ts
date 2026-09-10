@@ -31,6 +31,7 @@ export { FormHeader } from './FormHeader';
 export { Header } from './Header';
 export { InfoCallout } from './InfoCallout';
 export { InfoRow } from './InfoRow';
+export { PreviewableImage } from './PreviewableImage';
 export { ListFooter } from './ListFooter';
 export { MenuItem } from './MenuItem';
 export { NfcScanOverlay } from './NfcScanOverlay';

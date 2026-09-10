@@ -10,7 +10,9 @@
 
 ## Быстрые ссылки
 
+- [Файлы окружения](../environment-configuration.md)
 - [Локальный запуск](guides/local-setup.md)
+- [Первый production-администратор](guides/initial-admin.md)
 - [Seed-данные](guides/seed-data.md)
 - [Web-панель](../web/README.md)
 - [Production-деплой backend](../deployment/backend-production.md)

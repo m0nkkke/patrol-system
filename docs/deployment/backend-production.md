@@ -1,5 +1,7 @@
 # Production-развёртывание Patrol System
 
+Автоматическое развёртывание после merge в `main` описано в `docs/deployment/ci-cd.md`.
+
 Production-стек запускает web-панель, API, PostgreSQL и Redis отдельными контейнерами. Единственная
 точка входа на хосте — web gateway на `127.0.0.1:8080`.
 
@@ -26,7 +28,9 @@ cp .env.production.example .env.production
 ```
 
 В `.env.production` задаются пароли PostgreSQL и Redis, разные JWT-секреты длиной не менее 64
-символов, разрешённый web origin и остальные серверные параметры. Файл не коммитится.
+символов, разрешённый web origin, данные первоначального администратора и остальные серверные
+параметры. Файл не коммитится. `BOOTSTRAP_ADMIN_ACCESS_KEY` должен содержать 12 случайных латинских
+букв и цифр; дефисы между группами по четыре символа необязательны.
 
 `WEB_PORT` задаёт локальный порт gateway и по умолчанию равен `8080`. Web использует относительный
 адрес `/api/v1`, поэтому домен API не встраивается в его JavaScript bundle.
@@ -34,8 +38,12 @@ cp .env.production.example .env.production
 ## Сборка и запуск
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+sh deploy/scripts/deploy-production.sh
 ```
+
+Скрипт проверяет Compose-конфигурацию, собирает образы, запускает хранилища, применяет миграции,
+создаёт первого администратора при необходимости, обновляет backend и web и проверяет health
+endpoints. Production-команды Docker Compose сосредоточены в этом скрипте и не дублируются в CI.
 
 Состояние и логи:
 
@@ -52,6 +60,25 @@ JavaScript:
 docker compose --env-file .env.production -f docker-compose.prod.yml exec backend \
   npm run migration:run:prod -w @patrol/backend
 ```
+
+После миграций создаётся первый администратор:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml exec backend \
+  npm run admin:bootstrap:prod -w @patrol/backend
+```
+
+Команда создаёт или восстанавливает администратора только при отсутствии активного администратора.
+Повторный запуск при существующем активном администраторе ничего не меняет. Ключ не выводится в лог.
+
+После успешного создания удалить значение `BOOTSTRAP_ADMIN_ACCESS_KEY` из `.env.production` и
+пересоздать backend-контейнер, чтобы секрет не оставался в его окружении:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+Подробное поведение команды описано в `docs/backend/guides/initial-admin.md`.
 
 Проверка единой точки входа:
 
@@ -85,15 +112,13 @@ sudo certbot --nginx -d patrol.example.ru
 ## Обновление
 
 ```bash
-git pull
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-docker compose --env-file .env.production -f docker-compose.prod.yml exec backend \
-  npm run migration:run:prod -w @patrol/backend
-curl http://127.0.0.1:8080/api/v1/health
+git pull --ff-only origin main
+sh deploy/scripts/deploy-production.sh
 ```
 
-Миграции запускаются после успешной сборки и старта сервисов. Если новых миграций нет, TypeORM
-завершает команду без изменения схемы.
+В штатном production-процессе эти действия автоматически выполняет GitHub Actions. Миграции
+запускаются после успешной сборки образов и до замены контейнеров приложения. Если новых миграций
+нет, TypeORM завершает команду без изменения схемы.
 
 ## Остановка и данные
 

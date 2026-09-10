@@ -9,7 +9,7 @@ import {
   PatrolScanAction,
   PatrolStatus,
 } from '@patrol/shared';
-import { In, LessThan, Repository, SelectQueryBuilder } from 'typeorm';
+import { EntityManager, In, LessThan, Repository, SelectQueryBuilder } from 'typeorm';
 
 import { PatrolEventEntity } from './entities/patrol-event.entity';
 import { PatrolIncidentEntity } from './entities/patrol-incident.entity';
@@ -138,46 +138,66 @@ export class PatrolsRepository {
   ) {}
 
   createPatrol(data: CreatePatrolRecord): Promise<PatrolEntity> {
+    return this.patrols.manager.transaction((manager) => this.createPatrolRecord(manager, data));
+  }
+
+  createPatrolAndIncident(
+    data: CreatePatrolRecord,
+    incidentData: Omit<CreatePatrolIncidentRecord, 'patrolId'>,
+  ): Promise<{ incident: PatrolIncidentEntity; patrol: PatrolEntity }> {
     return this.patrols.manager.transaction(async (manager) => {
-      let routeSnapshot: PatrolSnapshotPoint[];
-      if (data.routeId != null) {
-        // Serialize snapshot capture with edits of the route and its point links.
-        const route = await manager.getRepository(PatrolRouteEntity).findOne({
-          where: { id: data.routeId },
-          lock: { mode: 'pessimistic_read' },
-        });
-        if (route === null || !route.isActive || route.shopId !== data.shopId) {
-          throw new DomainValidationError('PATROL_ROUTE_INACTIVE', 'Patrol route is unavailable');
-        }
-        const links = await manager.getRepository(PatrolRoutePointEntity).find({
-          where: { routeId: data.routeId },
-          order: { sortOrder: 'ASC' },
-          relations: { patrolPoint: { nfcTag: true } },
-        });
-        routeSnapshot = links
-          .filter((link) => link.patrolPoint?.isActive)
-          .map((link) => snapshotPoint(link.patrolPoint!, link.sortOrder, link.dwellSeconds));
-      } else {
-        const points = await manager.getRepository(PatrolPointEntity).find({
-          where: { shopId: data.shopId, isActive: true },
-          order: { sortOrder: 'ASC', createdAt: 'ASC' },
-          relations: { nfcTag: true },
-        });
-        routeSnapshot = points.map((point) =>
-          snapshotPoint(point, point.sortOrder, DEFAULT_PATROL_POINT_DWELL_SECONDS),
-        );
-      }
-      if (routeSnapshot.length === 0) {
-        throw new DomainValidationError(
-          'PATROL_ROUTE_EMPTY',
-          'Cannot start patrol without active patrol points',
-        );
-      }
-      const patrols = manager.getRepository(PatrolEntity);
-      return patrols.save(
-        patrols.create({ ...data, routeSnapshot, totalPoints: routeSnapshot.length }),
+      const patrol = await this.createPatrolRecord(manager, data);
+      const incidents = manager.getRepository(PatrolIncidentEntity);
+      const incident = await incidents.save(
+        incidents.create({ ...incidentData, patrolId: patrol.id }),
       );
+
+      return { incident, patrol };
     });
+  }
+
+  private async createPatrolRecord(
+    manager: EntityManager,
+    data: CreatePatrolRecord,
+  ): Promise<PatrolEntity> {
+    let routeSnapshot: PatrolSnapshotPoint[];
+    if (data.routeId != null) {
+      // Serialize snapshot capture with edits of the route and its point links.
+      const route = await manager.getRepository(PatrolRouteEntity).findOne({
+        where: { id: data.routeId },
+        lock: { mode: 'pessimistic_read' },
+      });
+      if (route === null || !route.isActive || route.shopId !== data.shopId) {
+        throw new DomainValidationError('PATROL_ROUTE_INACTIVE', 'Patrol route is unavailable');
+      }
+      const links = await manager.getRepository(PatrolRoutePointEntity).find({
+        where: { routeId: data.routeId },
+        order: { sortOrder: 'ASC' },
+        relations: { patrolPoint: { nfcTag: true } },
+      });
+      routeSnapshot = links
+        .filter((link) => link.patrolPoint?.isActive)
+        .map((link) => snapshotPoint(link.patrolPoint!, link.sortOrder, link.dwellSeconds));
+    } else {
+      const points = await manager.getRepository(PatrolPointEntity).find({
+        where: { shopId: data.shopId, isActive: true },
+        order: { sortOrder: 'ASC', createdAt: 'ASC' },
+        relations: { nfcTag: true },
+      });
+      routeSnapshot = points.map((point) =>
+        snapshotPoint(point, point.sortOrder, DEFAULT_PATROL_POINT_DWELL_SECONDS),
+      );
+    }
+    if (routeSnapshot.length === 0) {
+      throw new DomainValidationError(
+        'PATROL_ROUTE_EMPTY',
+        'Cannot start patrol without active patrol points',
+      );
+    }
+    const patrols = manager.getRepository(PatrolEntity);
+    return patrols.save(
+      patrols.create({ ...data, routeSnapshot, totalPoints: routeSnapshot.length }),
+    );
   }
 
   createPatrolEvent(data: CreatePatrolEventRecord): Promise<PatrolEventEntity> {

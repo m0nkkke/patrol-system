@@ -10,7 +10,16 @@ import { PatrolRoutesService } from './patrol-routes.service';
 type PatrolPointsServiceMock = Pick<PatrolPointsService, 'findOne'>;
 type PatrolRoutesRepositoryMock = Pick<
   PatrolRoutesRepository,
-  'create' | 'findById' | 'findByShop' | 'findPoint' | 'update' | 'findVersions'
+  | 'archive'
+  | 'countActiveSchedules'
+  | 'create'
+  | 'findById'
+  | 'findByIdIncludingArchived'
+  | 'findByShop'
+  | 'findPoint'
+  | 'findVersions'
+  | 'restore'
+  | 'update'
 >;
 type ShopsServiceMock = Pick<ShopsService, 'findOne' | 'recalculateRouteStatus'>;
 
@@ -25,11 +34,15 @@ describe('PatrolRoutesService', () => {
       findOne: jest.fn(),
     };
     repository = {
+      archive: jest.fn(),
+      countActiveSchedules: jest.fn().mockResolvedValue(0),
       create: jest.fn(),
       findById: jest.fn(),
+      findByIdIncludingArchived: jest.fn(),
       findByShop: jest.fn(),
       findPoint: jest.fn(),
       findVersions: jest.fn(),
+      restore: jest.fn(),
       update: jest.fn(),
     };
     shopsService = {
@@ -200,6 +213,38 @@ describe('PatrolRoutesService', () => {
         shopIds: ['shop-id'],
       }),
     ).resolves.toEqual([]);
+  });
+
+  it('blocks disabling a route used by an active schedule', async () => {
+    repository.findById.mockResolvedValue(createRoute());
+    repository.countActiveSchedules.mockResolvedValue(1);
+
+    await expect(
+      service.update('route-id', { isActive: false }, createActor()),
+    ).rejects.toMatchObject({ code: 'PATROL_ROUTE_IN_ACTIVE_SCHEDULE' });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('soft-archives a route after active schedules are disabled', async () => {
+    const route = createRoute();
+    const archived = createRoute({ deletedAt: new Date(), isActive: false });
+    repository.findById.mockResolvedValue(route);
+    repository.archive.mockResolvedValue(archived);
+
+    await expect(service.archive('route-id', createActor())).resolves.toBe(archived);
+    expect(repository.archive).toHaveBeenCalledWith('route-id', createActor());
+    expect(shopsService.recalculateRouteStatus).toHaveBeenCalledWith('shop-id');
+  });
+
+  it('restores an archived route as active', async () => {
+    const archived = createRoute({ deletedAt: new Date(), isActive: false });
+    const restored = createRoute();
+    repository.findByIdIncludingArchived.mockResolvedValue(archived);
+    repository.restore.mockResolvedValue(restored);
+
+    await expect(service.restore('route-id', createActor())).resolves.toBe(restored);
+    expect(repository.restore).toHaveBeenCalledWith('route-id', createActor());
+    expect(shopsService.recalculateRouteStatus).toHaveBeenCalledWith('shop-id');
   });
 });
 

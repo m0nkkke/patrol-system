@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -77,13 +79,14 @@ export class PatrolRoutesController {
     return this.patrolRoutesService.update(id, dto, actor);
   }
 
-  @Post(':id/archive')
+  @Delete(':id')
   @Roles('admin', 'route_setter', 'local_route_setter')
+  @HttpCode(200)
   @ApiOkResponse({ description: 'Patrol route archived' })
   archive(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PatrolRouteEntity> {
-    return this.patrolRoutesService.deactivate(id, actor);
+    return this.patrolRoutesService.archive(id, actor);
   }
 }

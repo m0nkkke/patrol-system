@@ -26,7 +26,7 @@ export async function updateSchedule(
   return response.data;
 }
 
-export async function deactivateSchedule(scheduleId: string): Promise<PatrolSchedule> {
+export async function deleteSchedule(scheduleId: string): Promise<PatrolSchedule> {
   const response = await apiClient.delete<PatrolSchedule>(`/patrol-schedules/${scheduleId}`);
   return response.data;
 }

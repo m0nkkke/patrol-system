@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { colors, radius, spacing } from '@/theme';
 
@@ -10,12 +10,15 @@ type DialogTone = 'danger' | 'info' | 'success' | 'warning';
 type DialogButtonVariant = 'danger' | 'ghost' | 'primary' | 'secondary';
 
 export type AppDialogAction = {
+  disabled?: boolean;
   label: string;
+  loading?: boolean;
   onPress: () => void;
   variant?: DialogButtonVariant;
 };
 
 type AppDialogProps = {
+  children?: React.ReactNode;
   visible: boolean;
   title: string;
   message?: string;
@@ -48,6 +51,7 @@ const toneConfig: Record<DialogTone, { background: string; color: string; icon: 
 };
 
 export function AppDialog({
+  children,
   visible,
   title,
   message,
@@ -59,7 +63,10 @@ export function AppDialog({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.backdrop}
+      >
         <View style={styles.card}>
           <View style={[styles.iconWrap, { backgroundColor: config.background }]}>
             <Ionicons name={config.icon} size={30} color={config.color} />
@@ -74,6 +81,7 @@ export function AppDialog({
               </AppText>
             </ScrollView>
           ) : null}
+          {children ? <View style={styles.content}>{children}</View> : null}
           <View style={styles.actions}>
             {actions.map((action, index) => (
               <View key={`${action.label}-${index}`} style={index > 0 ? styles.actionGap : null}>
@@ -81,12 +89,14 @@ export function AppDialog({
                   label={action.label}
                   variant={action.variant ?? (index === 0 ? 'primary' : 'secondary')}
                   onPress={action.onPress}
+                  disabled={action.disabled}
+                  loading={action.loading}
                 />
               </View>
             ))}
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -123,6 +133,9 @@ const styles = StyleSheet.create({
   messageScroll: {
     marginTop: spacing.sm,
     maxHeight: 180,
+  },
+  content: {
+    marginTop: spacing.lg,
   },
   actions: {
     marginTop: spacing.xl,

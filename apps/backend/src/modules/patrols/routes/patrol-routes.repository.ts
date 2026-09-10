@@ -9,6 +9,7 @@ import { PatrolRouteVersionEntity } from '../entities/patrol-route-version.entit
 
 import { PatrolRoutePointEntity } from '../entities/patrol-route-point.entity';
 import { PatrolRouteEntity } from '../entities/patrol-route.entity';
+import { PatrolScheduleEntity } from '../entities/patrol-schedule.entity';
 
 type CreatePatrolRouteRecord = {
   category: PatrolRouteCategory;
@@ -64,6 +65,14 @@ export class PatrolRoutesRepository {
     });
   }
 
+  findByIdIncludingArchived(id: string): Promise<PatrolRouteEntity | null> {
+    return this.routes.findOne({
+      relations: { points: { patrolPoint: { nfcTag: true } }, shop: true },
+      where: { id },
+      withDeleted: true,
+    });
+  }
+
   findByShop(shopId: string): Promise<PatrolRouteEntity[]> {
     return this.routes.find({
       order: { isActive: 'DESC', name: 'ASC' },
@@ -107,6 +116,44 @@ export class PatrolRoutesRepository {
         await repository.updatePointSettings(id, data.pointSettings);
       }
       await this.saveVersion(manager, (await repository.findById(id))!, actor);
+    });
+  }
+
+  async archive(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
+    return this.routes.manager.transaction(async (manager) => {
+      const repository = this.inTransaction(manager);
+      await repository.routes
+        .createQueryBuilder()
+        .update(PatrolRouteEntity)
+        .set({ deletedAt: () => 'CURRENT_TIMESTAMP', isActive: false })
+        .where('id = :id', { id })
+        .execute();
+      const route = await repository.findByIdIncludingArchived(id);
+      if (route === null) {
+        throw new Error(`Patrol route ${id} disappeared during archival`);
+      }
+      await this.saveVersion(manager, route, actor);
+
+      return route;
+    });
+  }
+
+  async restore(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
+    return this.routes.manager.transaction(async (manager) => {
+      const repository = this.inTransaction(manager);
+      await repository.routes
+        .createQueryBuilder()
+        .update(PatrolRouteEntity)
+        .set({ deletedAt: () => 'NULL', isActive: true })
+        .where('id = :id', { id })
+        .execute();
+      const route = await repository.findById(id);
+      if (route === null) {
+        throw new Error(`Patrol route ${id} disappeared during restore`);
+      }
+      await this.saveVersion(manager, route, actor);
+
+      return route;
     });
   }
 
@@ -164,6 +211,12 @@ export class PatrolRoutesRepository {
       .where('routePoint.route_id = :routeId', { routeId })
       .andWhere('point.is_active = TRUE')
       .getCount();
+  }
+
+  countActiveSchedules(routeId: string): Promise<number> {
+    return this.routes.manager.getRepository(PatrolScheduleEntity).count({
+      where: { isActive: true, routeId },
+    });
   }
 
   findPoint(routeId: string, patrolPointId: string): Promise<PatrolRoutePointEntity | null> {

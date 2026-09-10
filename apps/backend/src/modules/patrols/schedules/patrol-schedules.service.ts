@@ -18,8 +18,15 @@ import { PatrolSchedulesRepository } from './patrol-schedules.repository';
 type AvailablePatrolSchedule = PatrolScheduleEntity & {
   isAvailable: boolean;
   dueAt?: Date;
+  plannedStartAt?: Date;
+  requiresLateStartReason: boolean;
   nextStartAt?: Date;
   nextWeekday?: number;
+};
+
+export type ResolvedPatrolScheduleWindow = {
+  dueAt: Date;
+  plannedStartAt: Date;
 };
 
 type LocalDateTime = {
@@ -123,6 +130,7 @@ export class PatrolSchedulesService {
         available.push({
           ...schedule,
           isAvailable: false,
+          requiresLateStartReason: false,
           nextStartAt: nextStart?.date,
           nextWeekday: nextStart?.weekday,
         });
@@ -130,6 +138,7 @@ export class PatrolSchedulesService {
       }
 
       const dueAt = localDateTimeToUtc(local, schedule.endTime, shop.timezone);
+      const plannedStartAt = localDateTimeToUtc(local, schedule.startTime, shop.timezone);
       const existingPatrol = await this.patrolsRepository.findExistingScheduledPatrol(
         schedule.id,
         dueAt,
@@ -139,6 +148,8 @@ export class PatrolSchedulesService {
         ...schedule,
         dueAt,
         isAvailable: existingPatrol === null,
+        plannedStartAt,
+        requiresLateStartReason: now > plannedStartAt,
         nextStartAt: nextStart?.date,
         nextWeekday: nextStart?.weekday,
       });
@@ -213,6 +224,16 @@ export class PatrolSchedulesService {
     shopId: string,
     now: Date = new Date(),
   ): Promise<Date> {
+    const window = await this.resolveStartWindow(scheduleId, shopId, now);
+
+    return window.dueAt;
+  }
+
+  async resolveStartWindow(
+    scheduleId: string,
+    shopId: string,
+    now: Date = new Date(),
+  ): Promise<ResolvedPatrolScheduleWindow> {
     const [schedule, shop] = await Promise.all([
       this.findOne(scheduleId),
       this.shopsService.findOne(shopId),
@@ -243,7 +264,10 @@ export class PatrolSchedulesService {
       );
     }
 
-    return localDateTimeToUtc(local, schedule.endTime, shop.timezone);
+    return {
+      dueAt: localDateTimeToUtc(local, schedule.endTime, shop.timezone),
+      plannedStartAt: localDateTimeToUtc(local, schedule.startTime, shop.timezone),
+    };
   }
 
   async update(
@@ -257,8 +281,9 @@ export class PatrolSchedulesService {
     const startTime = dto.startTime ?? schedule.startTime;
     const endTime = dto.endTime ?? schedule.endTime;
     const isActive = dto.isActive ?? schedule.isActive;
-    if (dto.routeId !== undefined) {
-      await this.patrolRoutesService.assertRouteUsable(dto.routeId, schedule.shopId);
+    const routeId = dto.routeId ?? schedule.routeId;
+    if (routeId !== undefined && (isActive || dto.routeId !== undefined)) {
+      await this.patrolRoutesService.assertRouteUsable(routeId, schedule.shopId);
     }
 
     validateTimeWindow(startTime, endTime);
@@ -292,8 +317,13 @@ export class PatrolSchedulesService {
     return this.findOne(id);
   }
 
-  deactivate(id: string, actor: AuthenticatedUser): Promise<PatrolScheduleEntity> {
-    return this.update(id, { isActive: false }, actor);
+  async archive(id: string, actor: AuthenticatedUser): Promise<PatrolScheduleEntity> {
+    const schedule = await this.findOne(id);
+    assertCanManageShop(actor, schedule.shopId);
+    const archived = await this.schedulesRepository.archive(id);
+    await this.shopsService.recalculateRouteStatus(schedule.shopId);
+
+    return archived;
   }
 
   private async assertNoOverlap(

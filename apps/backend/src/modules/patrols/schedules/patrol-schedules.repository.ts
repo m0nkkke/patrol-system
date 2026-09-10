@@ -34,6 +34,14 @@ export class PatrolSchedulesRepository {
     return this.schedules.findOne({ relations: { route: true, shop: true }, where: { id } });
   }
 
+  findByIdIncludingArchived(id: string): Promise<PatrolScheduleEntity | null> {
+    return this.schedules.findOne({
+      relations: { route: true, shop: true },
+      where: { id },
+      withDeleted: true,
+    });
+  }
+
   findByShop(shopId: string): Promise<PatrolScheduleEntity[]> {
     return this.schedules.find({
       order: { isActive: 'DESC', period: 'ASC', startTime: 'ASC', name: 'ASC' },
@@ -87,5 +95,28 @@ export class PatrolSchedulesRepository {
 
   async update(id: string, data: UpdatePatrolScheduleRecord): Promise<void> {
     await this.schedules.update(id, data);
+  }
+
+  archive(id: string): Promise<PatrolScheduleEntity> {
+    return this.schedules.manager.transaction(async (manager) => {
+      const schedules = manager.getRepository(PatrolScheduleEntity);
+      await schedules
+        .createQueryBuilder()
+        .update(PatrolScheduleEntity)
+        .set({ deletedAt: () => 'CURRENT_TIMESTAMP', isActive: false })
+        .where('id = :id', { id })
+        .execute();
+      const archived = await schedules.findOne({
+        relations: { route: true, shop: true },
+        where: { id },
+        withDeleted: true,
+      });
+
+      if (archived === null) {
+        throw new Error(`Patrol schedule ${id} disappeared during archival`);
+      }
+
+      return archived;
+    });
   }
 }

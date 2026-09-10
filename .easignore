@@ -26,11 +26,9 @@ apps/mobile/ios/
 apps/backend/
 docs/
 
-# Секреты (никогда не загружать)
-.env
-.env.local
-**/.env
-**/.env.local
+# Все env-файлы, включая production (никогда не загружать)
+.env*
+**/.env*
 *-service-account*.json
 **/google-services.json
 apps/mobile/api-*.json

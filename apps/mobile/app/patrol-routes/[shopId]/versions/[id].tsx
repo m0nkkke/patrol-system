@@ -127,7 +127,7 @@ function VersionCard({
           label="Тип"
           value={version.snapshot.category === 'internal' ? 'Внутренний' : 'Внешний'}
         />
-        <MetaLine label="Статус" value={version.snapshot.isActive ? 'Активен' : 'В архиве'} />
+        <MetaLine label="Статус" value={version.snapshot.isActive ? 'Активен' : 'Отключён'} />
       </View>
 
       <View style={styles.pointsHeader}>

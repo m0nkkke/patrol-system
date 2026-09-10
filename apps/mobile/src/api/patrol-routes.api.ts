@@ -44,7 +44,7 @@ export async function updatePatrolRoute(
   return response.data;
 }
 
-export async function archivePatrolRoute(routeId: string): Promise<PatrolRoute> {
-  const response = await apiClient.post<PatrolRoute>(`/patrol-routes/${routeId}/archive`);
+export async function deletePatrolRoute(routeId: string): Promise<PatrolRoute> {
+  const response = await apiClient.delete<PatrolRoute>(`/patrol-routes/${routeId}`);
   return response.data;
 }

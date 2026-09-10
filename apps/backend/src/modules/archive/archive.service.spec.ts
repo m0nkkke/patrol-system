@@ -20,7 +20,7 @@ describe('ArchiveService', () => {
   let shops: jest.Mocked<RepositoryMock>;
   let users: jest.Mocked<RepositoryMock>;
   let service: ArchiveService;
-  let patrolRoutesService: jest.Mocked<Pick<PatrolRoutesService, 'deactivate' | 'update'>>;
+  let patrolRoutesService: jest.Mocked<Pick<PatrolRoutesService, 'archive' | 'restore'>>;
   let patrolPointsService: jest.Mocked<Pick<PatrolPointsService, 'archive' | 'restore'>>;
 
   beforeEach(() => {
@@ -34,7 +34,7 @@ describe('ArchiveService', () => {
       archive: jest.fn(),
       restore: jest.fn(),
     };
-    patrolRoutesService = { deactivate: jest.fn(), update: jest.fn() };
+    patrolRoutesService = { archive: jest.fn(), restore: jest.fn() };
     service = new ArchiveService(
       fileAssets as unknown as Repository<any>,
       nfcTags as unknown as Repository<any>,
@@ -99,9 +99,9 @@ describe('ArchiveService', () => {
     expect(shops.update).toHaveBeenCalledWith('shop-id', { isActive: true });
   });
 
-  it('restores an inactive patrol route without soft delete', async () => {
-    const restoredRoute = createRoute(true);
-    patrolRoutesService.update.mockResolvedValue(restoredRoute);
+  it('restores a soft-deleted patrol route through route business rules', async () => {
+    const restoredRoute = createRoute({ isActive: true });
+    patrolRoutesService.restore.mockResolvedValue(restoredRoute);
 
     await expect(
       service.restore('patrol-routes', 'route-id', createAdminActor()),
@@ -113,11 +113,23 @@ describe('ArchiveService', () => {
     });
     expect(patrolRoutes.restore).not.toHaveBeenCalled();
     expect(patrolRoutes.update).not.toHaveBeenCalled();
-    expect(patrolRoutesService.update).toHaveBeenCalledWith(
-      'route-id',
-      { isActive: true },
-      createAdminActor(),
-    );
+    expect(patrolRoutesService.restore).toHaveBeenCalledWith('route-id', createAdminActor());
+  });
+
+  it('archives a patrol route through route business rules', async () => {
+    const deletedAt = new Date('2026-08-18T10:00:00.000Z');
+    const archivedRoute = createRoute({ deletedAt, isActive: false });
+    patrolRoutesService.archive.mockResolvedValue(archivedRoute);
+
+    await expect(
+      service.archive('patrol-routes', 'route-id', createAdminActor()),
+    ).resolves.toMatchObject({
+      archiveReason: 'soft_deleted',
+      archived: true,
+      archivedAt: deletedAt,
+      resourceType: 'patrol-routes',
+    });
+    expect(patrolRoutesService.archive).toHaveBeenCalledWith('route-id', createAdminActor());
   });
 
   it('delegates patrol point archive to patrol point business rules', async () => {
@@ -185,12 +197,13 @@ function createShop(data: Partial<ShopEntity>): ShopEntity {
   } as ShopEntity;
 }
 
-function createRoute(isActive: boolean): PatrolRouteEntity {
+function createRoute(data: Partial<PatrolRouteEntity>): PatrolRouteEntity {
   return {
     createdAt: new Date('2026-08-18T09:00:00.000Z'),
     id: 'route-id',
-    isActive,
+    isActive: true,
     name: 'Internal route',
     updatedAt: new Date('2026-08-18T09:30:00.000Z'),
+    ...data,
   } as PatrolRouteEntity;
 }

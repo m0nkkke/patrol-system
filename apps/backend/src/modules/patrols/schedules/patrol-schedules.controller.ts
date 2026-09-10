@@ -76,11 +76,11 @@ export class PatrolSchedulesController {
   @Delete(':id')
   @Roles('admin', 'route_setter', 'local_route_setter')
   @HttpCode(200)
-  @ApiOkResponse({ description: 'Patrol schedule deactivated', type: PatrolScheduleDto })
-  deactivate(
+  @ApiOkResponse({ description: 'Patrol schedule archived', type: PatrolScheduleDto })
+  archive(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<PatrolScheduleEntity> {
-    return this.schedulesService.deactivate(id, actor);
+    return this.schedulesService.archive(id, actor);
   }
 }

@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
 import type { RoutePoint } from '@/api/types';
@@ -20,6 +20,7 @@ import {
   EntityIcon,
   FormHeader,
   Header,
+  PreviewableImage,
   ResultHeader,
   ResultScreen,
   Screen,
@@ -246,7 +247,12 @@ export default function NewPatrolPointScreen(): React.ReactElement {
               subtitle="Поможет сотруднику быстрее найти контрольную точку"
             />
             {photo ? (
-              <Image source={{ uri: photo.uri }} style={styles.photo} resizeMode="cover" />
+              <PreviewableImage
+                accessibilityLabel={`Фото точки ${name.trim() || 'без названия'}`}
+                uri={photo.uri}
+                style={styles.photo}
+                resizeMode="cover"
+              />
             ) : (
               <View style={styles.photoPlaceholder}>
                 <EntityIcon icon="image-outline" size="large" tone="neutral" />

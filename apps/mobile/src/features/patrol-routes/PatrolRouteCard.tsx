@@ -54,7 +54,7 @@ function PatrolRouteCardComponent({ route, onPress }: PatrolRouteCardProps): Rea
         </View>
         <View style={styles.trailing}>
           <StatusLabel
-            label={route.isActive ? 'Активен' : 'В архиве'}
+            label={route.isActive ? 'Активен' : 'Отключён'}
             tone={route.isActive ? 'success' : 'neutral'}
           />
           <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />

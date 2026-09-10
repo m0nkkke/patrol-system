@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsISO8601, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsISO8601, IsOptional, IsString, IsUUID, Length } from 'class-validator';
 
 export class StartPatrolDto {
   @ApiProperty({ format: 'uuid' })
@@ -29,4 +29,14 @@ export class StartPatrolDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({
+    description: 'Required when a scheduled patrol starts after its configured start time',
+    maxLength: 1000,
+    minLength: 5,
+  })
+  @IsOptional()
+  @IsString()
+  @Length(5, 1000)
+  lateStartReason?: string;
 }

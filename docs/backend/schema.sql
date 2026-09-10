@@ -390,6 +390,7 @@ CREATE TABLE patrol_schedules (
   is_active      BOOLEAN NOT NULL DEFAULT TRUE,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at     TIMESTAMPTZ,
 
   CONSTRAINT chk_schedule_time CHECK (end_time > start_time),
   CONSTRAINT chk_schedule_early_start CHECK (early_start_minutes >= 0 AND early_start_minutes <= 1440)
@@ -402,6 +403,7 @@ CREATE INDEX idx_patrol_schedules_shop_id   ON patrol_schedules(shop_id);
 CREATE INDEX idx_patrol_schedules_route_id  ON patrol_schedules(route_id);
 CREATE INDEX idx_patrol_schedules_period    ON patrol_schedules(period);
 CREATE INDEX idx_patrol_schedules_is_active ON patrol_schedules(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_patrol_schedules_deleted_at ON patrol_schedules(deleted_at) WHERE deleted_at IS NULL;
 
 -- ============================================================
 -- 5. ОБХОДЫ И СОБЫТИЯ

@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
+import { ApiError } from '@/api/errors';
 import { PlannedScheduleList } from '@/features/patrol/PlannedScheduleList';
 import { useAvailableSchedules, useStartPatrol } from '@/features/patrol/queries';
 import { formatScheduleTime } from '@/features/schedules/format';
 import { appIcons, colors, spacing } from '@/theme';
-import { AppText, AppToast, Button, Card, EntityIcon, StatusLabel } from '@/ui';
+import { AppDialog, AppText, AppToast, Button, Card, EntityIcon, StatusLabel, TextField } from '@/ui';
 
 type PatrolStartPanelProps = {
   onOpenPlan?: () => void;
@@ -21,6 +23,8 @@ export function PatrolStartPanel({
   onStarted,
   shopId,
 }: PatrolStartPanelProps): React.ReactElement {
+  const [lateStartDialogOpen, setLateStartDialogOpen] = useState(false);
+  const [lateStartReason, setLateStartReason] = useState('');
   const schedules = useAvailableSchedules(shopId);
   const start = useStartPatrol(shopId);
   const error = schedules.isError
@@ -70,10 +74,83 @@ export function PatrolStartPanel({
   const scheduleItems = schedules.data ?? [];
   const current = scheduleItems.find((schedule) => schedule.isAvailable);
   const planned = scheduleItems.filter((schedule) => !schedule.isAvailable);
+  const normalizedLateStartReason = lateStartReason.trim();
+
+  function closeLateStartDialog(): void {
+    if (start.isPending) {
+      return;
+    }
+
+    setLateStartDialogOpen(false);
+    setLateStartReason('');
+  }
+
+  function startCurrentPatrol(reason?: string): void {
+    if (!current) {
+      return;
+    }
+
+    start.mutate(
+      { lateStartReason: reason, scheduleId: current.id },
+      {
+        onError: (startError) => {
+          if (
+            startError instanceof ApiError &&
+            startError.code === 'PATROL_LATE_START_REASON_REQUIRED'
+          ) {
+            setLateStartDialogOpen(true);
+          }
+        },
+        onSuccess: () => {
+          setLateStartDialogOpen(false);
+          setLateStartReason('');
+          onStarted?.();
+        },
+      },
+    );
+  }
 
   return (
     <Card style={styles.card}>
       <AppToast message={error} />
+      <AppDialog
+        visible={lateStartDialogOpen}
+        title="Причина позднего запуска"
+        message="Плановое время начала уже прошло. Укажите причину опоздания — она будет сохранена как нарушение расписания."
+        tone="warning"
+        onClose={closeLateStartDialog}
+        actions={[
+          {
+            disabled: normalizedLateStartReason.length < 5,
+            label: 'Начать обход',
+            loading: start.isPending,
+            onPress: () => startCurrentPatrol(normalizedLateStartReason),
+          },
+          {
+            disabled: start.isPending,
+            label: 'Отмена',
+            onPress: closeLateStartDialog,
+            variant: 'secondary',
+          },
+        ]}
+      >
+        {start.isError ? (
+          <AppText variant="caption" color={colors.danger} style={styles.dialogError}>
+            {describeError(start.error)}
+          </AppText>
+        ) : null}
+        <TextField
+          label="Причина"
+          required
+          multiline
+          maxLength={1000}
+          value={lateStartReason}
+          onChangeText={setLateStartReason}
+          placeholder="Например, задержка предыдущей задачи"
+          style={styles.reasonInput}
+          textAlignVertical="top"
+        />
+      </AppDialog>
       <View style={styles.header}>
         <EntityIcon icon={current ? appIcons.patrol : 'calendar-outline'} />
         <View style={styles.headerCopy}>
@@ -130,7 +207,11 @@ export function PatrolStartPanel({
           loading={start.isPending}
           onPress={() => {
             if (current) {
-              start.mutate(current.id, { onSuccess: onStarted });
+              if (current.requiresLateStartReason) {
+                setLateStartDialogOpen(true);
+              } else {
+                startCurrentPatrol();
+              }
             }
           }}
         />
@@ -202,4 +283,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   planActionText: { marginHorizontal: spacing.sm },
+  dialogError: { marginBottom: spacing.md },
+  reasonInput: { minHeight: 96 },
 });

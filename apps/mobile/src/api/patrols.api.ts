@@ -57,10 +57,15 @@ export async function getAvailableSchedules(shopId: string): Promise<AvailablePa
   return response.data;
 }
 
-export async function startPatrol(shopId: string, scheduleId?: string): Promise<Patrol> {
+export async function startPatrol(
+  shopId: string,
+  scheduleId?: string,
+  lateStartReason?: string,
+): Promise<Patrol> {
   const response = await apiClient.post<Patrol>('/mobile/patrols/start', {
     shopId,
     ...(scheduleId === undefined ? {} : { scheduleId }),
+    ...(lateStartReason === undefined ? {} : { lateStartReason }),
   });
   return response.data;
 }

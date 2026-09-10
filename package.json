@@ -12,6 +12,7 @@
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run build -w @patrol/shared && npm run typecheck -w @patrol/backend && npm run typecheck -w @patrol/shared && npm run typecheck -w @patrol/web",
     "backend:dev": "npm run build -w @patrol/shared && npm run start:dev -w @patrol/backend",
+    "backend:admin:bootstrap": "npm run build -w @patrol/shared && npm run admin:bootstrap -w @patrol/backend",
     "backend:migration:run": "npm run build -w @patrol/shared && npm run migration:run -w @patrol/backend",
     "backend:seed:manual": "npm run build -w @patrol/shared && npm run seed:manual -w @patrol/backend",
     "backend:seed:scenarios": "npm run build -w @patrol/shared && npm run seed:scenarios -w @patrol/backend",
@@ -28,8 +29,12 @@
     },
     "expo-constants": "57.0.17",
     "react-native": "0.86.3",
+    "react-native-gesture-handler": "2.32.0",
     "react-native-reanimated": "4.5.1",
     "react-native-worklets": "0.10.1",
     "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "react-native-gesture-handler": "2.32.0"
   }
 }
