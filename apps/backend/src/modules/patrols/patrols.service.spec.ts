@@ -23,6 +23,7 @@ type PatrolsRepositoryMock = Pick<
   | 'countRouteIntervalsByShop'
   | 'attachArrivalEventToPointVisit'
   | 'createPatrol'
+  | 'createPatrolAndIncident'
   | 'createPatrolEvent'
   | 'createPatrolIncident'
   | 'createPointVisit'
@@ -55,7 +56,10 @@ type PatrolPointsServiceMock = Pick<
 >;
 
 type ShopsServiceMock = Pick<ShopsService, 'findOne'>;
-type PatrolSchedulesServiceMock = Pick<PatrolSchedulesService, 'findOne' | 'resolveDueAt'>;
+type PatrolSchedulesServiceMock = Pick<
+  PatrolSchedulesService,
+  'findOne' | 'resolveStartWindow'
+>;
 type PatrolRoutesServiceMock = Pick<
   PatrolRoutesService,
   'assertPointInRoute' | 'assertRouteUsable' | 'countActivePoints'
@@ -85,7 +89,7 @@ describe('PatrolsService', () => {
     };
     patrolSchedulesService = {
       findOne: jest.fn(),
-      resolveDueAt: jest.fn(),
+      resolveStartWindow: jest.fn(),
     };
     patrolRoutesService = {
       assertPointInRoute: jest.fn(),
@@ -97,6 +101,7 @@ describe('PatrolsService', () => {
       completePointVisit: jest.fn(),
       countRouteIntervalsByShop: jest.fn(),
       createPatrol: jest.fn(),
+      createPatrolAndIncident: jest.fn(),
       createPatrolEvent: jest.fn(),
       createPatrolIncident: jest.fn(),
       createPointVisit: jest.fn(),
@@ -257,7 +262,10 @@ describe('PatrolsService', () => {
       ReturnType<ShopsService['findOne']>
     >);
     patrolPointsService.countActiveByShop.mockResolvedValue(3);
-    patrolSchedulesService.resolveDueAt.mockResolvedValue(dueAt);
+    patrolSchedulesService.resolveStartWindow.mockResolvedValue({
+      dueAt,
+      plannedStartAt: new Date('2099-06-22T03:00:00.000Z'),
+    });
     patrolsRepository.createPatrol.mockResolvedValue(createPatrol({ dueAt }));
 
     await service.start({
@@ -266,7 +274,11 @@ describe('PatrolsService', () => {
       shopId: 'shop-id',
     });
 
-    expect(patrolSchedulesService.resolveDueAt).toHaveBeenCalledWith('schedule-id', 'shop-id');
+    expect(patrolSchedulesService.resolveStartWindow).toHaveBeenCalledWith(
+      'schedule-id',
+      'shop-id',
+      expect.any(Date),
+    );
     expect(usersService.assertAssignedToShop).toHaveBeenCalledWith('employee-id', 'shop-id');
     expect(patrolsRepository.createPatrol).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -274,6 +286,83 @@ describe('PatrolsService', () => {
         scheduleId: 'schedule-id',
       }),
     );
+  });
+
+  it('requires a reason when a scheduled patrol starts late', async () => {
+    shopsService.findOne.mockResolvedValue({ name: 'Shop 1', routeStatus: 'ready' } as Awaited<
+      ReturnType<ShopsService['findOne']>
+    >);
+    patrolPointsService.countActiveByShop.mockResolvedValue(3);
+    patrolSchedulesService.resolveStartWindow.mockResolvedValue({
+      dueAt: new Date('2099-06-22T04:00:00.000Z'),
+      plannedStartAt: new Date('2000-06-22T03:00:00.000Z'),
+    });
+
+    await expect(
+      service.start({
+        employeeId: 'employee-id',
+        scheduleId: 'schedule-id',
+        shopId: 'shop-id',
+      }),
+    ).rejects.toMatchObject({ code: 'PATROL_LATE_START_REASON_REQUIRED' });
+    expect(patrolsRepository.createPatrol).not.toHaveBeenCalled();
+    expect(patrolsRepository.createPatrolAndIncident).not.toHaveBeenCalled();
+  });
+
+  it('atomically records a schedule deviation when a late-start reason is provided', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-06-22T03:10:00.000Z'));
+
+    try {
+      const patrol = createPatrol({ startedAt: new Date('2026-06-22T03:10:00.000Z') });
+      const incident = createIncident({
+        actualSeconds: 600,
+        message: 'Поздний запуск обхода: задержка 600 сек. Причина: авария на дороге',
+        type: PatrolIncidentType.SCHEDULE_DEVIATION,
+      });
+      shopsService.findOne.mockResolvedValue({
+        name: 'Shop 1',
+        routeStatus: 'ready',
+      } as Awaited<ReturnType<ShopsService['findOne']>>);
+      patrolPointsService.countActiveByShop.mockResolvedValue(3);
+      patrolSchedulesService.resolveStartWindow.mockResolvedValue({
+        dueAt: new Date('2026-06-22T04:00:00.000Z'),
+        plannedStartAt: new Date('2026-06-22T03:00:00.000Z'),
+      });
+      patrolsRepository.createPatrolAndIncident.mockResolvedValue({ incident, patrol });
+
+      await expect(
+        service.start({
+          employeeId: 'employee-id',
+          lateStartReason: '  авария на дороге  ',
+          scheduleId: 'schedule-id',
+          shopId: 'shop-id',
+        }),
+      ).resolves.toBe(patrol);
+
+      expect(patrolsRepository.createPatrolAndIncident).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scheduleId: 'schedule-id',
+          startedAt: new Date('2026-06-22T03:10:00.000Z'),
+        }),
+        {
+          actualSeconds: 600,
+          message: 'Поздний запуск обхода: задержка 600 сек. Причина: авария на дороге',
+          shopId: 'shop-id',
+          type: PatrolIncidentType.SCHEDULE_DEVIATION,
+        },
+      );
+      expect(notificationsService.notifyPatrolIncident).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incidentId: incident.id,
+          shopName: 'Shop 1',
+          type: PatrolIncidentType.SCHEDULE_DEVIATION,
+        }),
+      );
+      expect(patrolsRepository.createPatrol).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('returns NFC waiting state with expected next point', async () => {
@@ -338,7 +427,10 @@ describe('PatrolsService', () => {
       ReturnType<ShopsService['findOne']>
     >);
     patrolPointsService.countActiveByShop.mockResolvedValue(3);
-    patrolSchedulesService.resolveDueAt.mockResolvedValue(dueAt);
+    patrolSchedulesService.resolveStartWindow.mockResolvedValue({
+      dueAt,
+      plannedStartAt: new Date('2099-06-22T03:00:00.000Z'),
+    });
     patrolsRepository.findExistingScheduledPatrol.mockResolvedValue(createPatrol({ dueAt }));
 
     await expect(

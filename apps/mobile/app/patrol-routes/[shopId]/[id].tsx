@@ -14,7 +14,7 @@ import {
   type PatrolRouteFormValues,
 } from '@/features/patrol-routes/PatrolRouteForm';
 import {
-  useArchivePatrolRoute,
+  useDeletePatrolRoute,
   usePatrolRoute,
   useShopPatrolPoints,
   useUpdatePatrolRoute,
@@ -40,8 +40,8 @@ export default function EditPatrolRouteScreen(): React.ReactElement {
   const routeQuery = usePatrolRoute(id);
   const pointsQuery = useShopPatrolPoints(shopId);
   const update = useUpdatePatrolRoute(shopId);
-  const archive = useArchivePatrolRoute(shopId);
-  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const deleteRoute = useDeletePatrolRoute(shopId);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   if (routeQuery.isPending || pointsQuery.isPending) {
     return <AsyncStateScreen loading onBack={() => router.back()} />;
@@ -84,33 +84,26 @@ export default function EditPatrolRouteScreen(): React.ReactElement {
     );
   }
 
-  function handleArchive(): void {
-    setArchiveDialogOpen(false);
-    archive.mutate(id, {
+  function handleDelete(): void {
+    setDeleteDialogOpen(false);
+    deleteRoute.mutate(id, {
       onSuccess: () =>
         router.dismissTo({ pathname: '/patrol-routes/[shopId]', params: { shopId } }),
     });
   }
 
-  function handleActivate(): void {
-    update.mutate(
-      { id, payload: { isActive: true } },
-      { onSuccess: () => router.back() },
-    );
-  }
-
   return (
     <Screen padded={false}>
       <AppDialog
-        visible={archiveDialogOpen}
+        visible={deleteDialogOpen}
         title="Удалить маршрут?"
-        message="Маршрут останется в истории и исчезнет из выбора для новых расписаний. Связанные расписания при необходимости отключите отдельно."
+        message="Маршрут будет скрыт из рабочих списков, но сохранится в истории завершённых обходов. Перед удалением отключите связанные с ним расписания."
         tone="warning"
         actions={[
-          { label: 'Удалить', variant: 'danger', onPress: handleArchive },
-          { label: 'Отмена', variant: 'ghost', onPress: () => setArchiveDialogOpen(false) },
+          { label: 'Удалить', variant: 'danger', onPress: handleDelete },
+          { label: 'Отмена', variant: 'ghost', onPress: () => setDeleteDialogOpen(false) },
         ]}
-        onClose={() => setArchiveDialogOpen(false)}
+        onClose={() => setDeleteDialogOpen(false)}
       />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -139,7 +132,7 @@ export default function EditPatrolRouteScreen(): React.ReactElement {
               </AppText>
               <View style={styles.summaryStatus}>
                 <StatusLabel
-                  label={route.isActive ? 'Активен' : 'В архиве'}
+                  label={route.isActive ? 'Активен' : 'Отключён'}
                   tone={route.isActive ? 'success' : 'neutral'}
                 />
               </View>
@@ -164,42 +157,34 @@ export default function EditPatrolRouteScreen(): React.ReactElement {
               initial={{
                 name: route.name,
                 category: route.category,
+                isActive: route.isActive,
                 patrolPointIds: orderedPointIds,
                 pointSettings,
               }}
               submitLabel="Сохранить изменения"
               submitting={update.isPending}
-              error={update.isError ? describeError(update.error) : null}
+              error={
+                update.isError
+                  ? describeError(update.error)
+                  : deleteRoute.isError
+                    ? describeError(deleteRoute.error)
+                    : null
+              }
               onSubmit={handleSubmit}
             />
           </View>
           <View style={styles.cancelAction}>
             <CancelButton onPress={() => router.back()} />
           </View>
-          {route.isActive ? (
-            <View style={styles.secondaryAction}>
-              <Button
-                label="Удалить маршрут"
-                variant="dangerOutline"
-                icon="trash-outline"
-                loading={archive.isPending}
-                onPress={() => setArchiveDialogOpen(true)}
-              />
-            </View>
-          ) : (
-            <View style={styles.secondaryAction}>
-              <AppText variant="caption" muted style={styles.archiveHint}>
-                Маршрут находится в архиве и недоступен для новых обходов.
-              </AppText>
-              <Button
-                label="Вернуть из архива"
-                variant="secondary"
-                icon="refresh-outline"
-                loading={update.isPending}
-                onPress={handleActivate}
-              />
-            </View>
-          )}
+          <View style={styles.secondaryAction}>
+            <Button
+              label="Удалить маршрут"
+              variant="dangerOutline"
+              icon="trash-outline"
+              loading={deleteRoute.isPending}
+              onPress={() => setDeleteDialogOpen(true)}
+            />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
@@ -221,9 +206,6 @@ const styles = StyleSheet.create({
   },
   secondaryAction: {
     marginTop: spacing.xxl,
-  },
-  archiveHint: {
-    marginBottom: spacing.md,
   },
   summaryCard: {
     alignItems: 'center',

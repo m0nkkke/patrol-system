@@ -117,6 +117,7 @@ export class ShopsRepository {
             FROM patrol_schedules schedule
             WHERE schedule.shop_id = $1
               AND schedule.is_active = TRUE
+              AND schedule.deleted_at IS NULL
           ) AS "hasActiveSchedule",
           EXISTS (
             SELECT 1

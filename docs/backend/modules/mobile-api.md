@@ -76,8 +76,9 @@ Mobile должен сохранять снимок по `patrolId` после �
 - Для сценариев СК mobile-клиент должен использовать endpoints с явным `shopId`: `GET /api/v1/mobile/shops/:shopId/route` и `GET /api/v1/mobile/shops/:shopId/patrol-schedules/available`.
 - При старте обхода mobile-клиент передаёт `shopId`; backend проверяет, что магазин назначен текущему пользователю.
 - Точки маршрута могут содержать `photoFileId`; изображение загружается через защищенный `GET /api/v1/files/:id`.
-- Доступные расписания возвращают `period` (`morning`, `noon`, `evening`) и `earlyStartMinutes`; расписание считается доступным с `startTime - earlyStartMinutes` до `endTime`.
+- Доступные расписания возвращают `period` (`morning`, `noon`, `evening`), `earlyStartMinutes`, `plannedStartAt` и `requiresLateStartReason`; расписание считается доступным с `startTime - earlyStartMinutes` до `endTime`.
 - При старте обхода mobile-клиент может передать `routeId`; если выбранное расписание уже привязано к маршруту, backend использует маршрут расписания.
+- Если обход начинается после `startTime`, mobile-клиент передаёт обязательный `lateStartReason`. Backend проверяет опоздание по часовому поясу магазина и атомарно создаёт обход вместе с инцидентом `schedule_deviation`.
 - Мобильное приложение не передаёт `employeeId` при старте обхода: backend использует текущего пользователя из JWT.
 - Событие обхода можно отправить только в обход текущего пользователя.
 - Для офлайн-синхронизации каждое событие содержит `localId` — UUID, созданный на устройстве.

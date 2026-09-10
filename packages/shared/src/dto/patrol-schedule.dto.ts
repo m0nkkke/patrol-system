@@ -138,6 +138,16 @@ export class StartMobilePatrolDto {
   @IsOptional()
   @IsUUID()
   routeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Required when a scheduled patrol starts after its configured start time',
+    maxLength: 1000,
+    minLength: 5,
+  })
+  @IsOptional()
+  @IsString()
+  @Length(5, 1000)
+  lateStartReason?: string;
 }
 
 export class PatrolScheduleDto {
@@ -171,6 +181,9 @@ export class PatrolScheduleDto {
   @ApiProperty()
   isActive: boolean = true;
 
+  @ApiPropertyOptional({ format: 'date-time' })
+  deletedAt?: Date;
+
   @ApiProperty({ format: 'date-time' })
   createdAt: Date = new Date();
 
@@ -184,6 +197,12 @@ export class AvailablePatrolScheduleDto extends PatrolScheduleDto {
 
   @ApiPropertyOptional({ format: 'date-time' })
   dueAt?: Date;
+
+  @ApiPropertyOptional({ format: 'date-time' })
+  plannedStartAt?: Date;
+
+  @ApiProperty()
+  requiresLateStartReason: boolean = false;
 
   @ApiPropertyOptional({ format: 'date-time' })
   nextStartAt?: Date;

@@ -79,11 +79,16 @@ describe('MobileService', () => {
 
   it('forwards the explicitly selected route when starting a mobile patrol', async () => {
     await service.startPatrol(createUser({ role: 'security_guard', shopId: 'shop-id' }), {
+      lateStartReason: 'авария на дороге',
       shopId: 'shop-id',
       routeId: 'route-b',
     });
     expect(patrolsService.start).toHaveBeenCalledWith(
-      expect.objectContaining({ shopId: 'shop-id', routeId: 'route-b' }),
+      expect.objectContaining({
+        lateStartReason: 'авария на дороге',
+        shopId: 'shop-id',
+        routeId: 'route-b',
+      }),
     );
   });
 

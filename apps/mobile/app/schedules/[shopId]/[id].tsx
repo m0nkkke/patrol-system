@@ -13,7 +13,7 @@ import { useShopPatrolRoutes } from '@/features/patrol-routes/queries';
 import { formatScheduleTime } from '@/features/schedules/format';
 import { ScheduleForm, type ScheduleFormValues } from '@/features/schedules/ScheduleForm';
 import {
-  useDeactivateSchedule,
+  useDeleteSchedule,
   useSchedule,
   useUpdateSchedule,
 } from '@/features/schedules/queries';
@@ -26,7 +26,7 @@ export default function EditScheduleScreen(): React.ReactElement {
   const { data: schedule, isPending, isError, error, refetch } = useSchedule(id);
   const routes = useShopPatrolRoutes(shopId);
   const update = useUpdateSchedule(shopId);
-  const deactivate = useDeactivateSchedule(shopId);
+  const deleteSchedule = useDeleteSchedule(shopId);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   if (isPending || routes.isPending) {
@@ -67,7 +67,7 @@ export default function EditScheduleScreen(): React.ReactElement {
 
   function handleDelete(): void {
     setDeleteDialogOpen(false);
-    deactivate.mutate(id, {
+    deleteSchedule.mutate(id, {
       onSuccess: () =>
         router.dismissTo({ pathname: '/schedules/[shopId]', params: { shopId } }),
     });
@@ -78,7 +78,7 @@ export default function EditScheduleScreen(): React.ReactElement {
       <AppDialog
         visible={deleteDialogOpen}
         title="Удалить расписание?"
-        message="Расписание будет отключено и перестанет создавать новые обходы. Уже сформированная история сохранится."
+        message="Расписание будет скрыто из рабочих списков и перестанет создавать новые обходы. История завершённых обходов сохранится."
         tone="danger"
         actions={[
           { label: 'Удалить', variant: 'danger', onPress: handleDelete },
@@ -114,24 +114,22 @@ export default function EditScheduleScreen(): React.ReactElement {
             error={
               update.isError
                 ? describeError(update.error)
-                : deactivate.isError
-                  ? describeError(deactivate.error)
+                : deleteSchedule.isError
+                  ? describeError(deleteSchedule.error)
                   : null
             }
             onCancel={() => router.back()}
             onSubmit={handleSubmit}
           />
-          {schedule.isActive ? (
-            <View style={styles.deleteAction}>
-              <Button
-                label="Удалить расписание"
-                icon="trash-outline"
-                variant="dangerOutline"
-                loading={deactivate.isPending}
-                onPress={() => setDeleteDialogOpen(true)}
-              />
-            </View>
-          ) : null}
+          <View style={styles.deleteAction}>
+            <Button
+              label="Удалить расписание"
+              icon="trash-outline"
+              variant="dangerOutline"
+              loading={deleteSchedule.isPending}
+              onPress={() => setDeleteDialogOpen(true)}
+            />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Screen>

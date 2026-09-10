@@ -13,6 +13,7 @@ function schedule(
     id,
     isActive: true,
     isAvailable: false,
+    requiresLateStartReason: false,
     name: id,
     period: 'morning',
     shopId: 'shop-1',

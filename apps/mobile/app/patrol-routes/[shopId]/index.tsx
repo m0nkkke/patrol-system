@@ -42,7 +42,12 @@ const TAB_OPTIONS = [
   { value: 'routes' as const, label: 'Маршруты', icon: 'git-network-outline' as const },
   { value: 'points' as const, label: 'Точки', icon: 'location-outline' as const },
 ];
-const STATUS_OPTIONS = [
+const ROUTE_STATUS_OPTIONS = [
+  { value: 'all', label: 'Все' },
+  { value: 'active', label: 'Активные' },
+  { value: 'archived', label: 'Отключённые' },
+];
+const POINT_STATUS_OPTIONS = [
   { value: 'all', label: 'Все' },
   { value: 'active', label: 'Активные' },
   { value: 'archived', label: 'В архиве' },
@@ -138,7 +143,7 @@ export default function RouteWorkspaceScreen(): React.ReactElement {
   const filterGroups: FilterSheetGroup[] = [
     {
       title: 'Статус',
-      options: STATUS_OPTIONS,
+      options: isRoutesTab ? ROUTE_STATUS_OPTIONS : POINT_STATUS_OPTIONS,
       value: status,
       onChange: (value) => setStatus(value as StatusFilter),
     },

@@ -75,6 +75,10 @@ export class PatrolRoutesService {
     const route = await this.findOne(id);
     assertCanManageRoute(actor, route.shopId);
 
+    if (dto.isActive === false && route.isActive) {
+      await this.assertNoActiveSchedules(id);
+    }
+
     if (dto.patrolPointIds !== undefined) {
       await this.assertPointsBelongToShop(dto.patrolPointIds, route.shopId);
     }
@@ -98,8 +102,36 @@ export class PatrolRoutesService {
     return this.findOne(id);
   }
 
-  deactivate(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
-    return this.update(id, { isActive: false }, actor);
+  async archive(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
+    const route = await this.findOne(id);
+    assertCanManageRoute(actor, route.shopId);
+    await this.assertNoActiveSchedules(id);
+
+    const archived = await this.patrolRoutesRepository.archive(id, actor);
+    await this.shopsService.recalculateRouteStatus(route.shopId);
+
+    return sortRoutePoints(archived);
+  }
+
+  async restore(id: string, actor: AuthenticatedUser): Promise<PatrolRouteEntity> {
+    const route = await this.patrolRoutesRepository.findByIdIncludingArchived(id);
+
+    if (route === null) {
+      throw new EntityNotFoundError('PatrolRoute', id);
+    }
+
+    assertCanManageRoute(actor, route.shopId);
+    if (route.deletedAt === undefined || route.deletedAt === null) {
+      throw new DomainValidationError(
+        'PATROL_ROUTE_NOT_ARCHIVED',
+        'Patrol route is not archived',
+      );
+    }
+
+    const restored = await this.patrolRoutesRepository.restore(id, actor);
+    await this.shopsService.recalculateRouteStatus(route.shopId);
+
+    return sortRoutePoints(restored);
   }
 
   async findVersions(
@@ -127,6 +159,17 @@ export class PatrolRoutesService {
 
   countActivePoints(routeId: string): Promise<number> {
     return this.patrolRoutesRepository.countActivePoints(routeId);
+  }
+
+  private async assertNoActiveSchedules(routeId: string): Promise<void> {
+    const activeScheduleCount = await this.patrolRoutesRepository.countActiveSchedules(routeId);
+
+    if (activeScheduleCount > 0) {
+      throw new DomainValidationError(
+        'PATROL_ROUTE_IN_ACTIVE_SCHEDULE',
+        'Patrol route must be removed from active schedules before disabling or archiving',
+      );
+    }
   }
 
   async assertPointInRoute(

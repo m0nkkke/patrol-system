@@ -164,19 +164,25 @@ export function useStartPatrol(shopId: string | null) {
   const queryClient = useQueryClient();
   const userId = useAuthStore((state) => state.user?.id);
   return useMutation({
-    mutationFn: (scheduleId?: string) => {
+    mutationFn: ({
+      lateStartReason,
+      scheduleId,
+    }: {
+      lateStartReason?: string;
+      scheduleId?: string;
+    }) => {
       if (shopId === null) {
         throw new Error('Сначала выберите магазин.');
       }
-      return startPatrol(shopId, scheduleId);
+      return startPatrol(shopId, scheduleId, lateStartReason);
     },
-    onSuccess: (patrol, scheduleId) => {
+    onSuccess: (patrol, variables) => {
       queryClient.setQueryData(ACTIVE_PATROL_KEY, patrol);
       if (userId) {
         void persistActivePatrolSnapshots(userId, patrol);
       }
-      if (scheduleId) {
-        void dismissCurrentScheduleReminders(scheduleId).catch((error: unknown) => {
+      if (variables.scheduleId) {
+        void dismissCurrentScheduleReminders(variables.scheduleId).catch((error: unknown) => {
           logger.error(error, { source: 'schedule-reminder-dismissal' });
         });
       }

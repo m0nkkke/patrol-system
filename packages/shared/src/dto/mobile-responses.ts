@@ -154,6 +154,7 @@ export interface PatrolSchedule {
   startTime: string;
   endTime: string;
   isActive: boolean;
+  deletedAt?: string;
 }
 
 export interface PatrolRoute {
@@ -162,6 +163,7 @@ export interface PatrolRoute {
   name: string;
   category: PatrolRouteCategory;
   isActive: boolean;
+  deletedAt?: string;
   points?: Array<{
     id: string;
     sortOrder: number;
@@ -197,6 +199,8 @@ export interface PatrolRouteVersion {
 export interface AvailablePatrolSchedule extends PatrolSchedule {
   isAvailable: boolean;
   dueAt?: string;
+  plannedStartAt?: string;
+  requiresLateStartReason: boolean;
   nextStartAt?: string;
   nextWeekday?: number;
 }

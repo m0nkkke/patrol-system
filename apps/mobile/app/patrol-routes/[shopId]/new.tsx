@@ -35,7 +35,7 @@ export default function NewPatrolRouteScreen(): React.ReactElement {
 
   function handleSubmit(values: PatrolRouteFormValues): void {
     create.mutate(
-      { shopId, isActive: true, ...values },
+      { shopId, ...values },
       { onSuccess: () => router.back() },
     );
   }

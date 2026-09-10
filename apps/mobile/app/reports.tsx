@@ -5,7 +5,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   BackHandler,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -32,6 +31,7 @@ import {
   Button,
   FormHeader,
   Header,
+  PreviewableImage,
   Screen,
   SectionHeading,
   Select,
@@ -264,7 +264,11 @@ export default function ReportsScreen(): React.ReactElement {
                 <View style={styles.photos}>
                   {photos.map((photo, index) => (
                     <View key={`${photo.uri}-${index}`} style={styles.photoItem}>
-                      <Image source={{ uri: photo.uri }} style={styles.photo} />
+                      <PreviewableImage
+                        accessibilityLabel={photo.name}
+                        uri={photo.uri}
+                        style={styles.photo}
+                      />
                       <AppText variant="caption" numberOfLines={1} style={styles.photoName}>
                         {photo.name}
                       </AppText>

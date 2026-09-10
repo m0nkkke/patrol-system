@@ -2,7 +2,7 @@ import type { CreatePatrolRouteDto, UpdatePatrolRouteDto } from '@patrol/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  archivePatrolRoute,
+  deletePatrolRoute,
   createPatrolRoute,
   getPatrolRoute,
   getPatrolRouteVersions,
@@ -69,10 +69,10 @@ export function useUpdatePatrolRoute(shopId: string) {
   });
 }
 
-export function useArchivePatrolRoute(shopId: string) {
+export function useDeletePatrolRoute(shopId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (routeId: string) => archivePatrolRoute(routeId),
+    mutationFn: (routeId: string) => deletePatrolRoute(routeId),
     onSuccess: (route, routeId) => {
       queryClient.setQueryData(['patrol-route', routeId], route);
       void queryClient.invalidateQueries({ queryKey: shopPatrolRoutesKey(shopId) });

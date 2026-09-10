@@ -16,6 +16,7 @@ export const colors = {
   text: '#111827',
   textMuted: '#6b7280',
   textInverse: '#ffffff',
+  imageViewerBackground: '#000000',
 
   danger: '#dc2626',
   dangerSurface: '#fef2f2',

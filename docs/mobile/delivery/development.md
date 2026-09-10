@@ -32,7 +32,7 @@ npm install
 
 ## Локальная переменная API
 
-Создайте `apps/mobile/.env` на основе `.env.example`.
+Создайте `apps/mobile/.env` на основе `apps/mobile/.env.example`.
 
 Android Emulator:
 

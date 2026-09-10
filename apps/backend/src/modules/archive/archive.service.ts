@@ -104,7 +104,7 @@ export class ArchiveService {
     if (resourceType === 'patrol-routes') {
       return toArchiveItem(
         resourceType,
-        await this.patrolRoutesService.deactivate(id, actor),
+        await this.patrolRoutesService.archive(id, actor),
         config,
       );
     }
@@ -142,7 +142,7 @@ export class ArchiveService {
     if (resourceType === 'patrol-routes') {
       return toArchiveItem(
         resourceType,
-        await this.patrolRoutesService.update(id, { isActive: true }, actor),
+        await this.patrolRoutesService.restore(id, actor),
         config,
       );
     }
@@ -207,7 +207,7 @@ export class ArchiveService {
           inactiveColumn: 'isActive',
           repo: this.patrolRoutes,
           searchColumns: ['name'],
-          softDelete: false,
+          softDelete: true,
           updatedAtColumn: 'updated_at',
         };
       case 'shops':

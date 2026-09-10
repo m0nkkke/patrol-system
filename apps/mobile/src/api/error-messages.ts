@@ -13,7 +13,9 @@ const MESSAGES: Record<string, string> = {
   NFC_TAG_MISMATCH: 'Метка не соответствует выбранной точке.',
   PATROL_ROUTE_NOT_READY: 'Маршрут магазина ещё не готов.',
   PATROL_ROUTE_EMPTY: 'У магазина нет активных точек маршрута.',
-  PATROL_ROUTE_INACTIVE: 'Выбранный маршрут недоступен или находится в архиве.',
+  PATROL_ROUTE_INACTIVE: 'Выбранный маршрут отключён и недоступен для новых обходов.',
+  PATROL_ROUTE_IN_ACTIVE_SCHEDULE:
+    'Сначала отключите все активные расписания, использующие этот маршрут.',
   PATROL_ROUTE_SNAPSHOT_UNAVAILABLE: 'Для этого обхода недоступен сохранённый маршрут.',
   PATROL_NOT_IN_PROGRESS: 'Обход уже не активен.',
   PATROL_INCOMPLETE: 'Сначала отметьте все точки маршрута.',
@@ -35,6 +37,7 @@ const MESSAGES: Record<string, string> = {
     'Нельзя изменить расписание или часовой пояс, пока открыто окно обхода. Повторите после его окончания.',
   PATROL_SCHEDULE_FORBIDDEN: 'Нет прав на управление расписаниями этого магазина.',
   PATROL_SCHEDULE_ALREADY_STARTED: 'Этот обход уже выполнен.',
+  PATROL_LATE_START_REASON_REQUIRED: 'Укажите причину позднего начала обхода.',
   NFC_REPLACEMENT_SAME_UID: 'Новая метка совпадает с текущей.',
   SHOP_EXTERNAL_ID_TAKEN: 'Магазин с таким ID уже существует.',
   USER_SELF_DELETE_FORBIDDEN: 'Нельзя удалить собственную учётную запись.',

@@ -72,6 +72,7 @@ export class PatrolsService {
   ) {}
 
   async start(dto: StartPatrolDto): Promise<PatrolEntity> {
+    const startedAt = new Date();
     const shop = await this.shopsService.findOne(dto.shopId);
     await this.usersService.assertAssignedToShop(dto.employeeId, dto.shopId);
 
@@ -122,12 +123,35 @@ export class PatrolsService {
       );
     }
 
-    const dueAt =
+    const scheduleWindow =
       dto.scheduleId === undefined
-        ? dto.dueAt === undefined
-          ? undefined
-          : new Date(dto.dueAt)
-        : await this.patrolSchedulesService.resolveDueAt(dto.scheduleId, dto.shopId);
+        ? undefined
+        : await this.patrolSchedulesService.resolveStartWindow(
+            dto.scheduleId,
+            dto.shopId,
+            startedAt,
+          );
+    const dueAt =
+      scheduleWindow?.dueAt ?? (dto.dueAt === undefined ? undefined : new Date(dto.dueAt));
+    const lateStartSeconds =
+      scheduleWindow === undefined
+        ? undefined
+        : Math.max(
+            0,
+            Math.ceil((startedAt.getTime() - scheduleWindow.plannedStartAt.getTime()) / 1000),
+          );
+    const lateStartReason = dto.lateStartReason?.trim();
+
+    if (
+      lateStartSeconds !== undefined &&
+      lateStartSeconds > 0 &&
+      (lateStartReason === undefined || lateStartReason.length < 5)
+    ) {
+      throw new DomainValidationError(
+        'PATROL_LATE_START_REASON_REQUIRED',
+        'Late scheduled patrol start requires a reason',
+      );
+    }
 
     if (dto.scheduleId !== undefined && dueAt !== undefined) {
       const existingScheduledPatrol = await this.patrolsRepository.findExistingScheduledPatrol(
@@ -143,17 +167,34 @@ export class PatrolsService {
       }
     }
 
-    return this.patrolsRepository.createPatrol({
+    const patrolData = {
       dueAt,
       employeeId: dto.employeeId,
       notes: dto.notes,
       routeId,
       scheduleId: dto.scheduleId,
       shopId: dto.shopId,
-      startedAt: new Date(),
-      status: 'in_progress',
+      startedAt,
+      status: 'in_progress' as const,
       totalPoints,
-    });
+    };
+
+    if (lateStartSeconds !== undefined && lateStartSeconds > 0 && lateStartReason) {
+      const { incident, patrol } = await this.patrolsRepository.createPatrolAndIncident(
+        patrolData,
+        {
+          actualSeconds: lateStartSeconds,
+          message: buildLateStartIncidentMessage(lateStartSeconds, lateStartReason),
+          shopId: dto.shopId,
+          type: PatrolIncidentType.SCHEDULE_DEVIATION,
+        },
+      );
+      await this.notifyIncidentCreated(patrol, incident, shop.name);
+
+      return patrol;
+    }
+
+    return this.patrolsRepository.createPatrol(patrolData);
   }
 
   async findByShop(
@@ -774,6 +815,7 @@ export class PatrolsService {
   private async notifyIncidentCreated(
     patrol: PatrolEntity,
     incident: PatrolIncidentEntity,
+    shopName?: string,
   ): Promise<void> {
     await this.notificationsService.notifyPatrolIncident({
       employeeName: patrol.employee?.fullName,
@@ -781,7 +823,7 @@ export class PatrolsService {
       message: incident.message,
       patrolId: patrol.id,
       shopId: patrol.shopId,
-      shopName: patrol.shop?.name,
+      shopName: shopName ?? patrol.shop?.name,
       type: incident.type,
     });
   }
@@ -931,6 +973,10 @@ function addSeconds(date: Date, seconds: number): Date {
 
 function secondsBetween(from: Date, to: Date): number {
   return Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
+}
+
+function buildLateStartIncidentMessage(actualSeconds: number, reason: string): string {
+  return `Поздний запуск обхода: задержка ${actualSeconds} сек. Причина: ${reason}`;
 }
 
 function inferScanAction(status?: PatrolPointVisitStatus): PatrolScanAction {

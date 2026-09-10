@@ -12,6 +12,7 @@ import {
   FieldLabel,
   SectionHeading,
   SegmentedControl,
+  StatusToggleCard,
   SubmitButton,
   TextField,
 } from '@/ui';
@@ -26,6 +27,7 @@ import {
 
 export type PatrolRouteFormValues = {
   category: PatrolRouteCategory;
+  isActive: boolean;
   name: string;
   patrolPointIds: string[];
   pointSettings: PatrolRoutePointSettingDto[];
@@ -55,6 +57,7 @@ export function PatrolRouteForm({
 }: PatrolRouteFormProps): React.ReactElement {
   const [name, setName] = useState(initial?.name ?? '');
   const [category, setCategory] = useState<PatrolRouteCategory>(initial?.category ?? 'internal');
+  const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const [selectedIds, setSelectedIds] = useState<string[]>(initial?.patrolPointIds ?? []);
   const [dwellByPointId, setDwellByPointId] = useState<Record<string, number>>(() =>
     Object.fromEntries(
@@ -113,6 +116,7 @@ export function PatrolRouteForm({
 
     onSubmit({
       category,
+      isActive,
       name: name.trim(),
       patrolPointIds: selectedIds,
       pointSettings: buildPointSettings(selectedIds, dwellByPointId),
@@ -250,6 +254,18 @@ export function PatrolRouteForm({
             <Ionicons name="add-circle-outline" size={26} color={colors.primary} />
           </TouchableOpacity>
         ))}
+      </View>
+
+      <View style={styles.section}>
+        <StatusToggleCard
+          label="Статус маршрута"
+          value={isActive}
+          onChange={setIsActive}
+          activeLabel="Маршрут активен"
+          inactiveLabel="Маршрут отключён"
+          activeDescription="Маршрут можно использовать в активных расписаниях"
+          inactiveDescription="Маршрут нельзя использовать для запуска новых обходов"
+        />
       </View>
 
       {error ? (

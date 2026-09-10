@@ -11,6 +11,7 @@ import { PatrolSchedulesService } from './patrol-schedules.service';
 
 type PatrolSchedulesRepositoryMock = Pick<
   PatrolSchedulesRepository,
+  | 'archive'
   | 'create'
   | 'findActiveByShopAndLocalTime'
   | 'findById'
@@ -32,6 +33,7 @@ describe('PatrolSchedulesService', () => {
 
   beforeEach(() => {
     repository = {
+      archive: jest.fn(),
       create: jest.fn(),
       findActiveByShopAndLocalTime: jest.fn(),
       findById: jest.fn(),
@@ -67,6 +69,8 @@ describe('PatrolSchedulesService', () => {
 
     expect(result[0]?.isAvailable).toBe(true);
     expect(result[0]?.dueAt).toEqual(new Date('2026-06-22T04:00:00.000Z'));
+    expect(result[0]?.plannedStartAt).toEqual(new Date('2026-06-22T03:00:00.000Z'));
+    expect(result[0]?.requiresLateStartReason).toBe(true);
     expect(result[0]?.nextStartAt).toEqual(new Date('2026-06-23T03:00:00.000Z'));
     expect(result[0]?.nextWeekday).toBe(2);
   });
@@ -147,6 +151,22 @@ describe('PatrolSchedulesService', () => {
     ).resolves.toEqual(new Date('2026-06-22T04:00:00.000Z'));
   });
 
+  it('resolves both planned start and deadline in the shop timezone', async () => {
+    shopsService.findOne.mockResolvedValue(createShop());
+    repository.findById.mockResolvedValue(createSchedule({ earlyStartMinutes: 60 }));
+
+    await expect(
+      service.resolveStartWindow(
+        'schedule-id',
+        'shop-id',
+        new Date('2026-06-22T02:30:00.000Z'),
+      ),
+    ).resolves.toEqual({
+      dueAt: new Date('2026-06-22T04:00:00.000Z'),
+      plannedStartAt: new Date('2026-06-22T03:00:00.000Z'),
+    });
+  });
+
   it('builds mobile schedule plan for local reminders', async () => {
     shopsService.findOne.mockResolvedValue(createShop());
     repository.findByShop.mockResolvedValue([
@@ -223,6 +243,31 @@ describe('PatrolSchedulesService', () => {
       ),
     ).rejects.toBeInstanceOf(DomainValidationError);
     expect(repository.create).not.toHaveBeenCalled();
+  });
+
+  it('soft-archives a schedule and recalculates shop readiness', async () => {
+    const schedule = createSchedule();
+    const archived = createSchedule({ deletedAt: new Date(), isActive: false });
+    repository.findById.mockResolvedValue(schedule);
+    repository.archive.mockResolvedValue(archived);
+
+    await expect(service.archive('schedule-id', createActor())).resolves.toBe(archived);
+    expect(repository.archive).toHaveBeenCalledWith('schedule-id');
+    expect(shopsService.recalculateRouteStatus).toHaveBeenCalledWith('shop-id');
+  });
+
+  it('does not reactivate a schedule whose route is unavailable', async () => {
+    repository.findById.mockResolvedValue(
+      createSchedule({ isActive: false, routeId: 'route-id' }),
+    );
+    patrolRoutesService.assertRouteUsable.mockRejectedValue(
+      new DomainValidationError('PATROL_ROUTE_INACTIVE', 'Patrol route is inactive'),
+    );
+
+    await expect(
+      service.update('schedule-id', { isActive: true }, createActor()),
+    ).rejects.toMatchObject({ code: 'PATROL_ROUTE_INACTIVE' });
+    expect(repository.update).not.toHaveBeenCalled();
   });
 });
 

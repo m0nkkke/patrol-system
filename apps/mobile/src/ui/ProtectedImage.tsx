@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Pressable,
   StyleSheet,
   View,
   type ImageResizeMode,
@@ -15,6 +16,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { colors, spacing } from '@/theme';
 
 import { AppText } from './AppText';
+import { ImageViewerModal } from './ImageViewerModal';
 
 type ProtectedImageProps = {
   fileId: string;
@@ -32,11 +34,13 @@ export function ProtectedImage({
   const accessToken = useAuthStore((state) => state.accessToken);
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   function handleLocalImageError(): void {
     const uri = localUri;
     setLocalUri(null);
     setFailed(true);
+    setViewerOpen(false);
     if (uri) {
       void FileSystem.deleteAsync(uri, { idempotent: true });
     }
@@ -82,27 +86,44 @@ export function ProtectedImage({
   }, [accessToken, fileId]);
 
   return (
-    <View style={[styles.container, style]}>
+    <>
+      <Pressable
+        accessibilityHint={localUri ? 'Открывает фотографию на весь экран' : undefined}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole={localUri ? 'button' : 'image'}
+        disabled={!localUri}
+        onPress={() => setViewerOpen(true)}
+        style={[styles.container, style]}
+      >
+        {localUri ? (
+          <Image
+            source={{ uri: localUri }}
+            style={StyleSheet.absoluteFill}
+            resizeMode={resizeMode}
+            accessibilityLabel={accessibilityLabel}
+            onError={handleLocalImageError}
+          />
+        ) : failed ? (
+          <View style={styles.state}>
+            <AppText variant="caption" muted style={styles.message}>
+              Не удалось загрузить фотографию
+            </AppText>
+          </View>
+        ) : (
+          <View style={styles.state}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
+      </Pressable>
       {localUri ? (
-        <Image
-          source={{ uri: localUri }}
-          style={StyleSheet.absoluteFill}
-          resizeMode={resizeMode}
+        <ImageViewerModal
           accessibilityLabel={accessibilityLabel}
-          onError={handleLocalImageError}
+          onClose={() => setViewerOpen(false)}
+          uri={localUri}
+          visible={viewerOpen}
         />
-      ) : failed ? (
-        <View style={styles.state}>
-          <AppText variant="caption" muted style={styles.message}>
-            Не удалось загрузить фотографию
-          </AppText>
-        </View>
-      ) : (
-        <View style={styles.state}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      )}
-    </View>
+      ) : null}
+    </>
   );
 }
 

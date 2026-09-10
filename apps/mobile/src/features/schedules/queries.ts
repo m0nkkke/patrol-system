@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   createSchedule,
-  deactivateSchedule,
+  deleteSchedule,
   getSchedule,
   getShopSchedules,
   updateSchedule,
@@ -51,10 +51,10 @@ export function useUpdateSchedule(shopId: string) {
   });
 }
 
-export function useDeactivateSchedule(shopId: string) {
+export function useDeleteSchedule(shopId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (scheduleId: string) => deactivateSchedule(scheduleId),
+    mutationFn: (scheduleId: string) => deleteSchedule(scheduleId),
     onSuccess: (updated, scheduleId) => {
       queryClient.setQueryData(['schedule', scheduleId], updated);
       void queryClient.invalidateQueries({ queryKey: shopSchedulesKey(shopId) });

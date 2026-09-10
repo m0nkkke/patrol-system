@@ -211,6 +211,7 @@ export class MobileService {
 
     return this.patrolsService.start({
       employeeId: user.id,
+      lateStartReason: dto.lateStartReason,
       routeId: dto.routeId,
       scheduleId: dto.scheduleId,
       shopId: dto.shopId,

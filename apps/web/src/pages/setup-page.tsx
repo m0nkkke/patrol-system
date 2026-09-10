@@ -170,7 +170,7 @@ function ShopSetup({ shop, canEdit }: { shop: Shop; canEdit: boolean }): React.J
                 <strong>{route.name}</strong>
                 <p className="admin-note">
                   {route.category === 'internal' ? 'Внутренний' : 'Внешний'} · {route.points.length}{' '}
-                  точек · {route.isActive ? 'Активен' : 'В архиве'}
+                  точек · {route.isActive ? 'Активен' : 'Отключён'}
                 </p>
               </div>
               <div className="header-actions">
@@ -195,7 +195,7 @@ function ShopSetup({ shop, canEdit }: { shop: Shop; canEdit: boolean }): React.J
                       disabled={toggle.isPending}
                       onClick={() => toggle.mutate(route)}
                     >
-                      {route.isActive ? 'В архив' : 'Восстановить'}
+                      {route.isActive ? 'Отключить' : 'Включить'}
                     </button>
                   </>
                 ) : null}
