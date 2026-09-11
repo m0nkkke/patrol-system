@@ -34,7 +34,7 @@ const ROLE_OPTIONS: { value: RoleFilter; label: string }[] = [
   { value: 'route_setter', label: 'Универсальные настройщики' },
   { value: 'local_route_setter', label: 'Локальные настройщики' },
   { value: 'inspector', label: 'Проверяющие' },
-  { value: 'admin', label: 'Админы' },
+  { value: 'admin', label: 'Администраторы' },
 ];
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
