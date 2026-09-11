@@ -197,6 +197,7 @@ export interface PatrolRouteVersion {
 }
 
 export interface AvailablePatrolSchedule extends PatrolSchedule {
+  timezone: string;
   isAvailable: boolean;
   dueAt?: string;
   plannedStartAt?: string;

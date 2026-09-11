@@ -13,6 +13,7 @@ import {
   userDetailCapabilities,
 } from '@/features/users/user-detail-capabilities';
 import { formatDateTime } from '@/lib/format';
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { useAuthStore } from '@/store/auth-store';
 import { colors, radius, screenInsets, spacing } from '@/theme';
 import {
@@ -46,6 +47,9 @@ export default function UserDetailScreen(): React.ReactElement {
   const deleteMutation = useDeleteUser(id);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [copied, setCopied] = useState(false);
+  const openEdit = useGuardedPress(() =>
+    router.push({ pathname: '/users/edit/[id]', params: { id } }),
+  );
 
   if (isPending) {
     return <AsyncStateScreen loading onBack={() => router.back()} />;
@@ -228,7 +232,7 @@ export default function UserDetailScreen(): React.ReactElement {
           </View>
           <TouchableOpacity
             style={styles.editAction}
-            onPress={() => router.push({ pathname: '/users/edit/[id]', params: { id: user.id } })}
+            onPress={openEdit}
             accessibilityRole="button"
             accessibilityLabel="Редактировать пользователя"
             hitSlop={8}

@@ -4,6 +4,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { PatrolSchedule } from '@/api/types';
 import { formatScheduleTime, formatWeekdays } from '@/features/schedules/format';
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, spacing } from '@/theme';
 import { AppText } from '@/ui';
 
@@ -20,9 +21,10 @@ function ScheduleCardComponent({
 }: ScheduleCardProps): React.ReactElement {
   const inactive = !schedule.isActive;
   const statusColor = schedule.isActive ? colors.success : colors.danger;
+  const guardedOnPress = useGuardedPress(onPress);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.card} onPress={guardedOnPress} activeOpacity={0.7}>
       <View style={[styles.icon, inactive && styles.iconInactive]}>
         <Ionicons
           name="calendar-outline"

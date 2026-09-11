@@ -193,6 +193,9 @@ export class PatrolScheduleDto {
 
 export class AvailablePatrolScheduleDto extends PatrolScheduleDto {
   @ApiProperty()
+  timezone: string = 'Europe/Moscow';
+
+  @ApiProperty()
   isAvailable: boolean = false;
 
   @ApiPropertyOptional({ format: 'date-time' })

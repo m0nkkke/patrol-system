@@ -4,6 +4,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { Shop } from '@/api/types';
 import { routeStatusColor, routeStatusLabel } from '@/features/route-setup/route-status';
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, spacing } from '@/theme';
 import { AppText, CompactTextIcon } from '@/ui';
 
@@ -27,11 +28,12 @@ function ShopCardComponent({
   const statusColor = routeStatusColor(shop.routeStatus);
   const inactive = showActive && !shop.isActive;
   const activeColor = shop.isActive ? colors.success : colors.danger;
+  const guardedOnPress = useGuardedPress(() => onPress(shop));
 
   return (
     <TouchableOpacity
       style={[styles.card, selected && styles.cardSelected]}
-      onPress={() => onPress(shop)}
+      onPress={guardedOnPress}
       activeOpacity={0.7}
     >
       <View style={[styles.shopIcon, inactive && styles.shopIconInactive]}>

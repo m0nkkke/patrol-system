@@ -5,7 +5,8 @@ import type { AvailablePatrolSchedule } from '@/api/types';
 import { colors, spacing } from '@/theme';
 import { AppText } from '@/ui';
 
-import { formatPlannedWindow, sortPlannedSchedules } from './planned-schedule';
+import { sortPlannedSchedules } from './planned-schedule';
+import { ScheduleTimingDetails } from './ScheduleTimingDetails';
 
 type PlannedScheduleListProps = {
   schedules: AvailablePatrolSchedule[];
@@ -31,12 +32,10 @@ export function PlannedScheduleList({
             <Ionicons name="calendar-outline" size={17} color={colors.primary} />
           </View>
           <View style={styles.content}>
-            <AppText variant="caption" style={styles.name}>
+            <AppText variant="label" style={styles.name}>
               {schedule.name}
             </AppText>
-            <AppText variant="caption" muted>
-              {formatPlannedWindow(schedule)}
-            </AppText>
+            <ScheduleTimingDetails schedule={schedule} />
           </View>
         </View>
       ))}
@@ -49,10 +48,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   item: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    minHeight: 54,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
   },
   itemBorder: {
     borderTopColor: colors.border,
@@ -69,6 +67,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    marginBottom: 2,
+    marginBottom: spacing.md,
   },
 });

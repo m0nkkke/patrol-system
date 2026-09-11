@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 import type { AvailablePatrolSchedule } from '@patrol/shared';
 
-import { formatPlannedWindow, sortPlannedSchedules } from './planned-schedule';
+import { resolveScheduleTiming, sortPlannedSchedules } from './planned-schedule';
 
 function schedule(
   id: string,
@@ -18,6 +18,7 @@ function schedule(
     period: 'morning',
     shopId: 'shop-1',
     startTime: '09:00:00',
+    timezone: 'Europe/Moscow',
     weekdays: [1],
     ...overrides,
   };
@@ -55,16 +56,38 @@ describe('sortPlannedSchedules', () => {
   });
 });
 
-describe('formatPlannedWindow', () => {
-  it('shows the next weekday and trims seconds from the interval', () => {
+describe('resolveScheduleTiming', () => {
+  it('separates availability, on-time start and completion for the next patrol', () => {
     expect(
-      formatPlannedWindow(
+      resolveScheduleTiming(
         schedule('schedule', {
-          endTime: '19:30:00',
-          nextWeekday: 3,
-          startTime: '18:00:00',
+          earlyStartMinutes: 10,
+          endTime: '13:45:00',
+          nextStartAt: '2026-09-11T06:30:00.000Z',
+          startTime: '13:40:00',
         }),
       ),
-    ).toBe('среда, 18:00 - 19:30');
+    ).toEqual({
+      availableFrom: '2026-09-11T06:30:00.000Z',
+      dueAt: '2026-09-11T06:45:00.000Z',
+      plannedStartAt: '2026-09-11T06:40:00.000Z',
+    });
+  });
+
+  it('uses the server occurrence timestamps for an available patrol', () => {
+    expect(
+      resolveScheduleTiming(
+        schedule('schedule', {
+          dueAt: '2026-09-11T06:45:00.000Z',
+          earlyStartMinutes: 10,
+          isAvailable: true,
+          plannedStartAt: '2026-09-11T06:40:00.000Z',
+        }),
+      ),
+    ).toEqual({
+      availableFrom: '2026-09-11T06:30:00.000Z',
+      dueAt: '2026-09-11T06:45:00.000Z',
+      plannedStartAt: '2026-09-11T06:40:00.000Z',
+    });
   });
 });

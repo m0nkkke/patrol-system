@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, spacing } from '@/theme';
 
 type CardProps = {
@@ -9,11 +10,13 @@ type CardProps = {
 };
 
 export function Card({ children, onPress, style }: CardProps): React.ReactElement {
+  const guardedOnPress = useGuardedPress(onPress);
+
   if (onPress) {
     return (
       <Pressable
         style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}
-        onPress={onPress}
+        onPress={guardedOnPress}
       >
         {children}
       </Pressable>

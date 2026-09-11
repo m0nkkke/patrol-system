@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, spacing } from '@/theme';
 
 import { AppText } from './AppText';
@@ -26,10 +27,12 @@ export function DashboardProfile({
   onPress,
   role,
 }: DashboardProfileProps): React.ReactElement {
+  const guardedOnPress = useGuardedPress(onPress);
+
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={guardedOnPress}
       style={({ pressed }) => [styles.profile, pressed && styles.pressed]}
     >
       <View style={styles.profileContent}>
@@ -60,25 +63,32 @@ export function DashboardQuickActions({
   return (
     <View style={styles.quickGrid}>
       {actions.map((action) => (
-        <Pressable
-          accessibilityRole="button"
-          key={action.title}
-          onPress={action.onPress}
-          style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-        >
-          <DashboardIcon action={action} size={20} compact />
-          <AppText
-            variant="label"
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
-            style={styles.quickTitle}
-          >
-            {action.title}
-          </AppText>
-        </Pressable>
+        <DashboardQuickAction key={action.title} action={action} />
       ))}
     </View>
+  );
+}
+
+function DashboardQuickAction({ action }: { action: DashboardAction }): React.ReactElement {
+  const guardedOnPress = useGuardedPress(action.onPress);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={guardedOnPress}
+      style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
+    >
+      <DashboardIcon action={action} size={20} compact />
+      <AppText
+        variant="label"
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
+        style={styles.quickTitle}
+      >
+        {action.title}
+      </AppText>
+    </Pressable>
   );
 }
 
@@ -129,31 +139,48 @@ export function DashboardMenuPanel({
   return (
     <View style={styles.sectionPanel}>
       {actions.map((action, index) => (
-        <Pressable
-          accessibilityRole="button"
+        <DashboardMenuAction
           key={action.title}
-          onPress={action.onPress}
-          style={({ pressed }) => [
-            styles.menuItem,
-            index < actions.length - 1 && styles.menuItemBorder,
-            pressed && styles.pressed,
-          ]}
-        >
-          <DashboardIcon action={action} size={20} />
-          <View style={styles.menuContent}>
-            <AppText variant="label" numberOfLines={2}>
-              {action.title}
-            </AppText>
-            {action.subtitle ? (
-              <AppText variant="caption" muted numberOfLines={2} style={styles.menuSubtitle}>
-                {action.subtitle}
-              </AppText>
-            ) : null}
-          </View>
-          <Ionicons name="chevron-forward" size={22} color={colors.textMuted} />
-        </Pressable>
+          action={action}
+          showBorder={index < actions.length - 1}
+        />
       ))}
     </View>
+  );
+}
+
+function DashboardMenuAction({
+  action,
+  showBorder,
+}: {
+  action: DashboardAction;
+  showBorder: boolean;
+}): React.ReactElement {
+  const guardedOnPress = useGuardedPress(action.onPress);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={guardedOnPress}
+      style={({ pressed }) => [
+        styles.menuItem,
+        showBorder && styles.menuItemBorder,
+        pressed && styles.pressed,
+      ]}
+    >
+      <DashboardIcon action={action} size={20} />
+      <View style={styles.menuContent}>
+        <AppText variant="label" numberOfLines={2}>
+          {action.title}
+        </AppText>
+        {action.subtitle ? (
+          <AppText variant="caption" muted numberOfLines={2} style={styles.menuSubtitle}>
+            {action.subtitle}
+          </AppText>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={22} color={colors.textMuted} />
+    </Pressable>
   );
 }
 
@@ -174,6 +201,7 @@ export function DashboardContextCard({
   onPress,
   trailingIcon,
 }: DashboardContextCardProps): React.ReactElement {
+  const guardedOnPress = useGuardedPress(onPress);
   const content = (
     <>
       <View style={styles.contextIcon}>
@@ -200,7 +228,7 @@ export function DashboardContextCard({
     return (
       <Pressable
         accessibilityRole="button"
-        onPress={onPress}
+        onPress={guardedOnPress}
         style={({ pressed }) => [styles.contextCard, pressed && styles.pressed]}
       >
         {content}
@@ -212,10 +240,12 @@ export function DashboardContextCard({
 }
 
 export function DashboardLogout({ onPress }: { onPress: () => void }): React.ReactElement {
+  const guardedOnPress = useGuardedPress(onPress);
+
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={guardedOnPress}
       style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
     >
       <Ionicons name="log-out-outline" size={22} color={colors.textMuted} />
