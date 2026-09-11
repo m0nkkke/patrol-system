@@ -1,6 +1,24 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { AssignUserShopsDto, CreateUserDto, ListUsersQueryDto, UpdateUserDto } from '@patrol/shared';
+import {
+  AssignUserShopsDto,
+  CreateUserDto,
+  ListUsersQueryDto,
+  UpdateUserDto,
+} from '@patrol/shared';
 
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -40,8 +58,9 @@ export class UsersController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
+    @CurrentUser() actor: AuthenticatedUser,
   ): ReturnType<UsersService['update']> {
-    return this.usersService.update(id, dto);
+    return this.usersService.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -57,7 +76,9 @@ export class UsersController {
   @Post(':id/access-key/rotate')
   @HttpCode(200)
   @ApiOkResponse({ description: 'User access key rotated' })
-  rotateAccessKey(@Param('id', ParseUUIDPipe) id: string): ReturnType<UsersService['rotateAccessKey']> {
+  rotateAccessKey(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): ReturnType<UsersService['rotateAccessKey']> {
     return this.usersService.rotateAccessKey(id);
   }
 

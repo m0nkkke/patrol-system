@@ -1,15 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { describeError } from '@/api/error-messages';
 import { useUpdateUser, useUser } from '@/features/users/queries';
+import { canChangeUserStatus } from '@/features/users/user-detail-capabilities';
+import { useAuthStore } from '@/store/auth-store';
 import { colors, screenInsets, spacing } from '@/theme';
 import {
   AppText,
@@ -27,6 +23,7 @@ import {
 export default function EditUserScreen(): React.ReactElement {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const { data: user, isPending, isError, error, refetch } = useUser(id);
   const update = useUpdateUser(id);
 
@@ -59,6 +56,7 @@ export default function EditUserScreen(): React.ReactElement {
   }
 
   const isValid = fullName.trim().length >= 2;
+  const canChangeStatus = canChangeUserStatus(user.id, currentUserId);
 
   function handleSubmit(): void {
     if (!isValid || update.isPending) {
@@ -68,7 +66,7 @@ export default function EditUserScreen(): React.ReactElement {
     update.mutate(
       {
         fullName: fullName.trim(),
-        isActive,
+        ...(canChangeStatus ? { isActive } : {}),
       },
       { onSuccess: () => router.back() },
     );
@@ -98,17 +96,19 @@ export default function EditUserScreen(): React.ReactElement {
             autoCapitalize="words"
           />
 
-          <View style={styles.gapLg}>
-            <StatusToggleCard
-              label="Статус пользователя"
-              value={isActive}
-              onChange={setIsActive}
-              activeLabel="Пользователь активен"
-              inactiveLabel="Пользователь неактивен"
-              activeDescription="Пользователь может входить и работать в системе"
-              inactiveDescription="Неактивный пользователь не может войти в систему"
-            />
-          </View>
+          {canChangeStatus ? (
+            <View style={styles.gapLg}>
+              <StatusToggleCard
+                label="Статус пользователя"
+                value={isActive}
+                onChange={setIsActive}
+                activeLabel="Пользователь активен"
+                inactiveLabel="Пользователь неактивен"
+                activeDescription="Пользователь может входить и работать в системе"
+                inactiveDescription="Неактивный пользователь не может войти в систему"
+              />
+            </View>
+          ) : null}
 
           {update.isError ? (
             <AppText variant="caption" color={colors.danger} style={styles.gapLg}>
