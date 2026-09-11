@@ -262,7 +262,10 @@ function NfcPointScanner({
   onRefresh: () => ReturnType<ReturnType<typeof usePatrolNfcWaitState>['refetch']>;
 }): React.ReactElement {
   const userId = useAuthStore((authState) => authState.user?.id);
-  const [now, setNow] = useState(Date.now());
+  const [countdownClock, setCountdownClock] = useState<{
+    lockedUntilMs: number | null;
+    now: number;
+  }>(() => ({ lockedUntilMs: null, now: Date.now() }));
   const [paused, setPaused] = useState(false);
   const [waitingForSync, setWaitingForSync] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -280,8 +283,12 @@ function NfcPointScanner({
   const lockedUntilMs = waitState.lockedUntil
     ? new Date(String(waitState.lockedUntil)).getTime()
     : null;
+  const countdownNow =
+    countdownClock.lockedUntilMs === lockedUntilMs
+      ? countdownClock.now
+      : Date.now();
   const remainingSeconds = lockedUntilMs
-    ? Math.max(0, Math.ceil((lockedUntilMs - now) / 1000))
+    ? Math.max(0, Math.ceil((lockedUntilMs - countdownNow) / 1000))
     : (waitState.remainingLockSeconds ?? 0);
   const waitingAtPoint = scanAction === 'depart' && remainingSeconds > 0;
   const readyToListen =
@@ -298,9 +305,12 @@ function NfcPointScanner({
     if (!waitingAtPoint) {
       return undefined;
     }
-    const interval = setInterval(() => setNow(Date.now()), 1000);
+    const interval = setInterval(
+      () => setCountdownClock({ lockedUntilMs, now: Date.now() }),
+      1000,
+    );
     return () => clearInterval(interval);
-  }, [waitingAtPoint]);
+  }, [lockedUntilMs, waitingAtPoint]);
 
   useEffect(() => {
     if (

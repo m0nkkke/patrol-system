@@ -16,6 +16,7 @@ import { PatrolRoutesService } from '../routes/patrol-routes.service';
 import { PatrolSchedulesRepository } from './patrol-schedules.repository';
 
 type AvailablePatrolSchedule = PatrolScheduleEntity & {
+  timezone: string;
   isAvailable: boolean;
   dueAt?: Date;
   plannedStartAt?: Date;
@@ -129,6 +130,7 @@ export class PatrolSchedulesService {
       if (!isScheduleInCurrentWindow(schedule, local.weekday, localTime)) {
         available.push({
           ...schedule,
+          timezone: shop.timezone,
           isAvailable: false,
           requiresLateStartReason: false,
           nextStartAt: nextStart?.date,
@@ -146,6 +148,7 @@ export class PatrolSchedulesService {
 
       available.push({
         ...schedule,
+        timezone: shop.timezone,
         dueAt,
         isAvailable: existingPatrol === null,
         plannedStartAt,

@@ -71,6 +71,7 @@ describe('PatrolSchedulesService', () => {
     expect(result[0]?.dueAt).toEqual(new Date('2026-06-22T04:00:00.000Z'));
     expect(result[0]?.plannedStartAt).toEqual(new Date('2026-06-22T03:00:00.000Z'));
     expect(result[0]?.requiresLateStartReason).toBe(true);
+    expect(result[0]?.timezone).toBe('Asia/Krasnoyarsk');
     expect(result[0]?.nextStartAt).toEqual(new Date('2026-06-23T03:00:00.000Z'));
     expect(result[0]?.nextWeekday).toBe(2);
   });
