@@ -41,6 +41,7 @@ const MESSAGES: Record<string, string> = {
   NFC_REPLACEMENT_SAME_UID: 'Новая метка совпадает с текущей.',
   SHOP_EXTERNAL_ID_TAKEN: 'Магазин с таким ID уже существует.',
   USER_SELF_DELETE_FORBIDDEN: 'Нельзя удалить собственную учётную запись.',
+  USER_SELF_STATUS_CHANGE_FORBIDDEN: 'Нельзя изменить статус собственной учётной записи.',
   USER_LAST_ACTIVE_ADMIN: 'Нельзя удалить последнего активного администратора.',
   MOBILE_PATROL_FORBIDDEN: 'Этот обход принадлежит другому сотруднику.',
   MOBILE_ACTIVE_PATROL_REQUIRED: 'Сначала начните обход в выбранном магазине.',

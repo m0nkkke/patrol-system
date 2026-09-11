@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { AssignUserShopsDto, CreateUserDto, ListUsersQueryDto, UpdateUserDto } from '@patrol/shared';
+import {
+  AssignUserShopsDto,
+  CreateUserDto,
+  ListUsersQueryDto,
+  UpdateUserDto,
+} from '@patrol/shared';
 import { randomUUID } from 'crypto';
 
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
@@ -108,9 +113,20 @@ export class UsersService {
     return toPublicUser(await this.requireEntity(id));
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<PublicUser> {
+  async update(id: string, dto: UpdateUserDto, actor: AuthenticatedUser): Promise<PublicUser> {
     const user = await this.requireEntity(id);
-    assertValidUniversalRouteSetter(dto.role ?? user.role, dto.isUniversalRouteSetter ?? user.isUniversalRouteSetter);
+
+    if (id === actor.id && dto.isActive !== undefined) {
+      throw new DomainValidationError(
+        'USER_SELF_STATUS_CHANGE_FORBIDDEN',
+        'Administrator cannot change their own account status',
+      );
+    }
+
+    assertValidUniversalRouteSetter(
+      dto.role ?? user.role,
+      dto.isUniversalRouteSetter ?? user.isUniversalRouteSetter,
+    );
     const shouldRevokeSessions = dto.isActive !== undefined && dto.isActive !== user.isActive;
 
     const shopIds =
@@ -126,7 +142,7 @@ export class UsersService {
       isUniversalRouteSetter: dto.isUniversalRouteSetter,
       role: dto.role,
       sessionVersion: shouldRevokeSessions ? user.sessionVersion + 1 : undefined,
-      shopId: shopIds === undefined ? undefined : primaryShopId ?? null,
+      shopId: shopIds === undefined ? undefined : (primaryShopId ?? null),
       shops,
       username: dto.username,
     });
@@ -245,15 +261,23 @@ function toPublicUser(user: UserEntity): PublicUser {
   };
 }
 
-function normalizeShopIds(primaryShopId: string | undefined, shopIds: string[] | undefined): string[] {
-  return [...new Set([...(shopIds ?? []), ...(primaryShopId === undefined ? [] : [primaryShopId])])];
+function normalizeShopIds(
+  primaryShopId: string | undefined,
+  shopIds: string[] | undefined,
+): string[] {
+  return [
+    ...new Set([...(shopIds ?? []), ...(primaryShopId === undefined ? [] : [primaryShopId])]),
+  ];
 }
 
 function generateUsername(): string {
   return `user-${randomUUID().slice(0, 8)}`;
 }
 
-function assertValidUniversalRouteSetter(role: UserEntity['role'], isUniversalRouteSetter?: boolean): void {
+function assertValidUniversalRouteSetter(
+  role: UserEntity['role'],
+  isUniversalRouteSetter?: boolean,
+): void {
   if (isUniversalRouteSetter === true && role !== 'route_setter') {
     throw new DomainValidationError(
       'USER_UNIVERSAL_ROUTE_SETTER_ROLE_INVALID',

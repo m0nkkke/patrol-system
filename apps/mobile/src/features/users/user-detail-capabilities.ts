@@ -18,3 +18,7 @@ export function userDetailCapabilities(role: UserRole): UserDetailCapabilities {
 export function canDeleteUser(targetUserId: string, currentUserId?: string): boolean {
   return currentUserId !== undefined && targetUserId !== currentUserId;
 }
+
+export function canChangeUserStatus(targetUserId: string, currentUserId?: string): boolean {
+  return currentUserId !== undefined && targetUserId !== currentUserId;
+}

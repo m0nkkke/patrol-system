@@ -65,9 +65,7 @@ describe('UsersService', () => {
     const secondShop = { id: '00000000-0000-4000-8000-0000000000bb' } as Awaited<
       ReturnType<ShopsService['findOne']>
     >;
-    shopsService.findOne
-      .mockResolvedValueOnce(firstShop)
-      .mockResolvedValueOnce(secondShop);
+    shopsService.findOne.mockResolvedValueOnce(firstShop).mockResolvedValueOnce(secondShop);
     usersRepository.create.mockImplementation((data) =>
       Promise.resolve({
         ...data,
@@ -115,9 +113,7 @@ describe('UsersService', () => {
     usersRepository.findById
       .mockResolvedValueOnce(user)
       .mockResolvedValueOnce({ ...user, shopId: secondShop.id, shops: [firstShop, secondShop] });
-    shopsService.findOne
-      .mockResolvedValueOnce(firstShop)
-      .mockResolvedValueOnce(secondShop);
+    shopsService.findOne.mockResolvedValueOnce(firstShop).mockResolvedValueOnce(secondShop);
 
     const result = await service.assignShops('user-id', {
       primaryShopId: secondShop.id,
@@ -148,10 +144,14 @@ describe('UsersService', () => {
       .mockResolvedValueOnce(user)
       .mockResolvedValueOnce({ ...user, fullName: 'Updated Employee', isActive: false });
 
-    const result = await service.update('user-id', {
-      fullName: 'Updated Employee',
-      isActive: false,
-    });
+    const result = await service.update(
+      'user-id',
+      {
+        fullName: 'Updated Employee',
+        isActive: false,
+      },
+      createActor(),
+    );
 
     expect(usersRepository.update).toHaveBeenCalledWith(
       'user-id',
@@ -164,6 +164,27 @@ describe('UsersService', () => {
     expect(sessionRevocationService.revokeUserSessions).toHaveBeenCalledWith('user-id');
     expect(result.fullName).toBe('Updated Employee');
     expect(result.isActive).toBe(false);
+  });
+
+  it('rejects changing the current administrator status', async () => {
+    usersRepository.findById.mockResolvedValue({
+      createdAt: new Date(),
+      fullName: 'Current administrator',
+      id: 'admin-id',
+      isActive: true,
+      passwordHash: 'hash',
+      role: 'admin',
+      sessionVersion: 0,
+      updatedAt: new Date(),
+      username: 'current.admin',
+    } as UserEntity);
+
+    await expect(
+      service.update('admin-id', { isActive: false }, createActor()),
+    ).rejects.toMatchObject({ code: 'USER_SELF_STATUS_CHANGE_FORBIDDEN' });
+
+    expect(usersRepository.update).not.toHaveBeenCalled();
+    expect(sessionRevocationService.revokeUserSessions).not.toHaveBeenCalled();
   });
 
   it('rotates user access key', async () => {
@@ -239,9 +260,9 @@ describe('UsersService', () => {
     } as UserEntity);
     usersRepository.countActiveAdmins.mockResolvedValue(1);
 
-    await expect(
-      service.delete('last-admin-id', createActor()),
-    ).rejects.toMatchObject({ code: 'USER_LAST_ACTIVE_ADMIN' });
+    await expect(service.delete('last-admin-id', createActor())).rejects.toMatchObject({
+      code: 'USER_LAST_ACTIVE_ADMIN',
+    });
 
     expect(usersRepository.softDelete).not.toHaveBeenCalled();
   });

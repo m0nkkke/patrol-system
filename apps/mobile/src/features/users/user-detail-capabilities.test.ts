@@ -1,29 +1,25 @@
 import type { UserRole } from '@patrol/shared';
 
-import { canDeleteUser, userDetailCapabilities } from './user-detail-capabilities';
+import {
+  canChangeUserStatus,
+  canDeleteUser,
+  userDetailCapabilities,
+} from './user-detail-capabilities';
 
 describe('userDetailCapabilities', () => {
-  it.each<[
-    UserRole,
-    boolean,
-    boolean,
-    boolean,
-  ]>([
+  it.each<[UserRole, boolean, boolean, boolean]>([
     ['security_guard', true, true, true],
     ['local_route_setter', true, false, true],
     ['inspector', true, false, true],
     ['route_setter', false, false, true],
     ['admin', false, false, false],
-  ])(
-    'returns actions for %s',
-    (role, canAssignShops, canViewPatrolHistory, hasAccessKey) => {
-      expect(userDetailCapabilities(role)).toEqual({
-        canAssignShops,
-        canViewPatrolHistory,
-        hasAccessKey,
-      });
-    },
-  );
+  ])('returns actions for %s', (role, canAssignShops, canViewPatrolHistory, hasAccessKey) => {
+    expect(userDetailCapabilities(role)).toEqual({
+      canAssignShops,
+      canViewPatrolHistory,
+      hasAccessKey,
+    });
+  });
 });
 
 describe('canDeleteUser', () => {
@@ -33,5 +29,15 @@ describe('canDeleteUser', () => {
 
   it('allows deleting another user', () => {
     expect(canDeleteUser('other-id', 'admin-id')).toBe(true);
+  });
+});
+
+describe('canChangeUserStatus', () => {
+  it('does not allow an administrator to change their own status', () => {
+    expect(canChangeUserStatus('admin-id', 'admin-id')).toBe(false);
+  });
+
+  it('allows changing another user status', () => {
+    expect(canChangeUserStatus('other-id', 'admin-id')).toBe(true);
   });
 });
