@@ -1,14 +1,9 @@
 import type { AvailablePatrolSchedule } from '@/api/types';
-import { formatScheduleTime } from '@/features/schedules/format';
 
-const WEEKDAY_LABELS: Record<number, string> = {
-  1: 'понедельник',
-  2: 'вторник',
-  3: 'среда',
-  4: 'четверг',
-  5: 'пятница',
-  6: 'суббота',
-  7: 'воскресенье',
+export type ScheduleTiming = {
+  availableFrom: string;
+  dueAt: string;
+  plannedStartAt: string;
 };
 
 export function sortPlannedSchedules(
@@ -17,11 +12,55 @@ export function sortPlannedSchedules(
   return [...schedules].sort(compareByNextStart);
 }
 
-export function formatPlannedWindow(schedule: AvailablePatrolSchedule): string {
-  const weekday = schedule.nextWeekday ? WEEKDAY_LABELS[schedule.nextWeekday] : undefined;
-  const time = `${formatScheduleTime(schedule.startTime)} - ${formatScheduleTime(schedule.endTime)}`;
+export function resolveScheduleTiming(
+  schedule: AvailablePatrolSchedule,
+): ScheduleTiming | null {
+  const effectiveEarlyStartMinutes = Math.min(
+    schedule.earlyStartMinutes,
+    minutesSinceMidnight(schedule.startTime),
+  );
+  const plannedStartAt = parseTimestamp(schedule.plannedStartAt);
+  const dueAt = parseTimestamp(schedule.dueAt);
 
-  return weekday ? `${weekday}, ${time}` : time;
+  if (plannedStartAt !== null) {
+    return {
+      availableFrom: new Date(
+        plannedStartAt - effectiveEarlyStartMinutes * 60_000,
+      ).toISOString(),
+      dueAt: new Date(dueAt ?? plannedStartAt + scheduleDurationMs(schedule)).toISOString(),
+      plannedStartAt: new Date(plannedStartAt).toISOString(),
+    };
+  }
+
+  const availableFrom = parseTimestamp(schedule.nextStartAt);
+  if (availableFrom === null) {
+    return null;
+  }
+
+  const nextPlannedStartAt = availableFrom + effectiveEarlyStartMinutes * 60_000;
+  return {
+    availableFrom: new Date(availableFrom).toISOString(),
+    dueAt: new Date(nextPlannedStartAt + scheduleDurationMs(schedule)).toISOString(),
+    plannedStartAt: new Date(nextPlannedStartAt).toISOString(),
+  };
+}
+
+function parseTimestamp(value?: string): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function minutesSinceMidnight(time: string): number {
+  const [hours = 0, minutes = 0] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+function scheduleDurationMs(schedule: AvailablePatrolSchedule): number {
+  return (minutesSinceMidnight(schedule.endTime) - minutesSinceMidnight(schedule.startTime)) * 60_000;
 }
 
 function compareByNextStart(

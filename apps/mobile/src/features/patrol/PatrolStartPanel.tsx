@@ -6,7 +6,8 @@ import { describeError } from '@/api/error-messages';
 import { ApiError } from '@/api/errors';
 import { PlannedScheduleList } from '@/features/patrol/PlannedScheduleList';
 import { useAvailableSchedules, useStartPatrol } from '@/features/patrol/queries';
-import { formatScheduleTime } from '@/features/schedules/format';
+import { ScheduleTimingDetails } from '@/features/patrol/ScheduleTimingDetails';
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { appIcons, colors, spacing } from '@/theme';
 import { AppDialog, AppText, AppToast, Button, Card, EntityIcon, StatusLabel, TextField } from '@/ui';
 
@@ -27,6 +28,7 @@ export function PatrolStartPanel({
   const [lateStartReason, setLateStartReason] = useState('');
   const schedules = useAvailableSchedules(shopId);
   const start = useStartPatrol(shopId);
+  const guardedOpenPlan = useGuardedPress(onOpenPlan);
   const error = schedules.isError
     ? describeError(schedules.error)
     : start.isError
@@ -74,6 +76,7 @@ export function PatrolStartPanel({
   const scheduleItems = schedules.data ?? [];
   const current = scheduleItems.find((schedule) => schedule.isAvailable);
   const planned = scheduleItems.filter((schedule) => !schedule.isAvailable);
+  const isLate = current?.requiresLateStartReason === true;
   const normalizedLateStartReason = lateStartReason.trim();
 
   function closeLateStartDialog(): void {
@@ -152,32 +155,31 @@ export function PatrolStartPanel({
         />
       </AppDialog>
       <View style={styles.header}>
-        <EntityIcon icon={current ? appIcons.patrol : 'calendar-outline'} />
+        <EntityIcon
+          icon={current ? appIcons.patrol : 'calendar-outline'}
+          tone={current ? (isLate ? 'warning' : 'success') : 'neutral'}
+        />
         <View style={styles.headerCopy}>
           <AppText variant="label">
             {current?.name ?? 'Обход пока недоступен'}
           </AppText>
           <AppText variant="caption" muted style={styles.headerSubtitle}>
-            {current ? 'Можно приступить к маршруту' : 'Начало доступно по расписанию'}
+            {current
+              ? isLate
+                ? 'Плановое время начала прошло'
+                : 'Обход доступен для запуска'
+              : 'Ближайший обход по расписанию'}
           </AppText>
         </View>
         <StatusLabel
-          label={current ? 'Доступен' : 'По плану'}
-          tone={current ? 'success' : 'neutral'}
+          label={current ? (isLate ? 'Опоздание' : 'Можно начать') : 'По плану'}
+          tone={current ? (isLate ? 'warning' : 'success') : 'neutral'}
         />
       </View>
 
       {current ? (
-        <View style={styles.windowRow}>
-          <Ionicons name="time-outline" size={18} color={colors.primary} />
-          <View style={styles.windowCopy}>
-            <AppText variant="caption" muted>
-              Доступное окно
-            </AppText>
-            <AppText variant="body" style={styles.windowValue}>
-              {formatScheduleTime(current.startTime)} - {formatScheduleTime(current.endTime)}
-            </AppText>
-          </View>
+        <View style={styles.timingBlock}>
+          <ScheduleTimingDetails schedule={current} />
         </View>
       ) : (
         <View style={styles.plannedBlock}>
@@ -229,7 +231,7 @@ export function PatrolStartPanel({
         <TouchableOpacity
           accessibilityRole="button"
           activeOpacity={0.7}
-          onPress={onOpenPlan}
+          onPress={guardedOpenPlan}
           style={styles.planAction}
         >
           <Ionicons name="calendar-outline" size={18} color={colors.primary} />
@@ -255,16 +257,12 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', flexDirection: 'row' },
   headerCopy: { flex: 1, marginHorizontal: spacing.md, minWidth: 0 },
   headerSubtitle: { marginTop: spacing.xs },
-  windowRow: {
-    alignItems: 'center',
+  timingBlock: {
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    flexDirection: 'row',
     marginTop: spacing.lg,
     paddingTop: spacing.md,
   },
-  windowCopy: { marginLeft: spacing.sm },
-  windowValue: { marginTop: 2 },
   plannedBlock: {
     borderTopColor: colors.border,
     borderTopWidth: 1,

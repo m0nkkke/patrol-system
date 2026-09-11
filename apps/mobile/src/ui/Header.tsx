@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, spacing } from '@/theme';
 
 import { AppText } from './AppText';
@@ -28,6 +29,9 @@ export function Header({
   titleAction,
 }: HeaderProps): React.ReactElement {
   const router = useRouter();
+  const guardedBack = useGuardedPress(onBack);
+  const guardedHome = useGuardedPress(() => router.dismissTo('/'));
+  const guardedTitleAction = useGuardedPress(titleAction?.onPress);
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
@@ -37,7 +41,7 @@ export function Header({
             accessibilityLabel="Назад"
             accessibilityRole="button"
             style={styles.back}
-            onPress={onBack}
+            onPress={guardedBack}
             hitSlop={12}
             activeOpacity={0.7}
           >
@@ -56,7 +60,7 @@ export function Header({
             accessibilityLabel="Главная"
             accessibilityRole="button"
             style={styles.home}
-            onPress={() => router.dismissTo('/')}
+            onPress={guardedHome}
             hitSlop={12}
             activeOpacity={0.7}
           >
@@ -83,7 +87,7 @@ export function Header({
               accessibilityRole="button"
               activeOpacity={0.7}
               hitSlop={8}
-              onPress={titleAction.onPress}
+              onPress={guardedTitleAction}
               style={styles.titleAction}
             >
               <Ionicons name={titleAction.icon} size={22} color={colors.primary} />

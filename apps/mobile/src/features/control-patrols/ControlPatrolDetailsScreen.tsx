@@ -50,7 +50,7 @@ export function ControlPatrolDetailsScreen(): React.ReactElement {
   }
 
   const item = patrol.data;
-  const canOpenAdministration = role === 'admin';
+  const isAdmin = role === 'admin';
   return (
     <Screen padded={false}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -58,8 +58,8 @@ export function ControlPatrolDetailsScreen(): React.ReactElement {
         <PatrolSummary patrol={item} />
         <PatrolContext
           patrol={item}
-          onOpenEmployee={canOpenAdministration ? () => router.push({ pathname: '/users/[id]', params: { id: item.employee.id } }) : undefined}
-          onOpenShop={canOpenAdministration ? () => router.push({ pathname: '/shops/[id]', params: { id: item.shop.id } }) : undefined}
+          onOpenEmployee={isAdmin ? () => router.push({ pathname: '/users/[id]', params: { id: item.employee.id } }) : undefined}
+          onOpenShop={isAdmin ? () => router.push({ pathname: '/shops/[id]', params: { id: item.shop.id } }) : undefined}
         />
         <PatrolTimeline patrol={item} />
         {item.cancellationReason ? <MessageCard icon="close-circle-outline" title="Причина отмены" text={item.cancellationReason} tone="danger" /> : null}
@@ -69,7 +69,7 @@ export function ControlPatrolDetailsScreen(): React.ReactElement {
         <IncidentsSection patrol={item} onOpen={(incidentId) => router.navigate({ pathname: '/incident/[id]', params: { id: incidentId } })} />
         <ReportsSection patrol={item} onOpen={(reportId) => router.navigate({ pathname: '/control-reports/[id]', params: { id: reportId } })} />
         {item.timingProfile ? <TimingSection patrol={item} /> : null}
-        <TechnicalEvents patrol={item} />
+        {isAdmin ? <TechnicalEvents patrol={item} /> : null}
       </ScrollView>
     </Screen>
   );

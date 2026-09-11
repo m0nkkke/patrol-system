@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, spacing } from '@/theme';
 
 import { AppText } from './AppText';
@@ -22,8 +23,10 @@ export function MenuItem({
   subtitle,
   onPress,
 }: MenuItemProps): React.ReactElement {
+  const guardedOnPress = useGuardedPress(onPress);
+
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.container} onPress={guardedOnPress} activeOpacity={0.7}>
       <View style={[styles.iconBox, { backgroundColor: iconBackground }]}>
         <Ionicons name={icon} size={22} color={iconColor} />
       </View>

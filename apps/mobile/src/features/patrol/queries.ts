@@ -118,6 +118,7 @@ export function useAvailableSchedules(shopId: string | null) {
     queryKey: [...AVAILABLE_SCHEDULES_KEY, shopId],
     queryFn: () => getAvailableSchedules(shopId as string),
     enabled: shopId !== null,
+    refetchInterval: 30_000,
   });
 }
 

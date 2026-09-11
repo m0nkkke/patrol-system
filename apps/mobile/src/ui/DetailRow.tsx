@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, spacing } from '@/theme';
 
 import { AppText } from './AppText';
@@ -29,6 +30,8 @@ export function DetailRow({
   label,
   value,
 }: DetailRowProps): React.ReactElement {
+  const guardedOnAction = useGuardedPress(onAction);
+
   return (
     <View style={[styles.row, first && styles.first]}>
       <View style={styles.leading}>
@@ -52,7 +55,7 @@ export function DetailRow({
           accessibilityRole="button"
           activeOpacity={0.7}
           hitSlop={8}
-          onPress={onAction}
+          onPress={guardedOnAction}
           style={styles.action}
         >
           <Ionicons name={actionIcon} size={21} color={colors.primary} />

@@ -13,6 +13,7 @@ import {
 import { describeError } from '@/api/error-messages';
 import { useDeleteShop, useShop } from '@/features/route-setup/queries';
 import { routeStatusLabel, routeStatusTone } from '@/features/route-setup/route-status';
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, radius, screenInsets, spacing } from '@/theme';
 import {
   AppText,
@@ -36,6 +37,9 @@ export default function ShopDetailScreen(): React.ReactElement {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const { data: shop, isPending, isError, error, refetch } = useShop(id);
   const deleteMutation = useDeleteShop(id);
+  const openEdit = useGuardedPress(() =>
+    router.push({ pathname: '/shops/edit/[id]', params: { id } }),
+  );
 
   if (isPending) {
     return <AsyncStateScreen loading onBack={() => router.back()} />;
@@ -155,7 +159,7 @@ export default function ShopDetailScreen(): React.ReactElement {
           </View>
           <TouchableOpacity
             style={styles.editAction}
-            onPress={() => router.push({ pathname: '/shops/edit/[id]', params: { id: shop.id } })}
+            onPress={openEdit}
             accessibilityRole="button"
             accessibilityLabel="Редактировать магазин"
             hitSlop={8}

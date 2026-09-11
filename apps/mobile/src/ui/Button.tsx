@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { useGuardedPress } from '@/lib/use-guarded-press';
 import { colors, layout, radius, spacing, typography } from '@/theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerOutline' | 'ghost';
@@ -37,6 +38,7 @@ export function Button({
 }: ButtonProps): React.ReactElement {
   const isDisabled = disabled || loading;
   const contentColor = contentColorFor(variant);
+  const guardedOnPress = useGuardedPress(onPress);
 
   return (
     <TouchableOpacity
@@ -44,7 +46,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityState={{ busy: loading, disabled: isDisabled }}
       style={[styles.base, styles[variant], isDisabled && styles.disabled]}
-      onPress={onPress}
+      onPress={guardedOnPress}
       disabled={isDisabled}
       activeOpacity={0.85}
     >
